@@ -23,7 +23,7 @@ Lay down the monorepo, local services, database schema and shared contracts. Thi
 - All dependencies named in section 3 are declared up front, so later lanes rarely touch the lockfile.
 - Packages expose subpath exports (`"./*": "./src/*.ts"`) instead of barrel files, so no lane has to edit a shared `index.ts`.
 - `.env.example` matches section 18 minus `PROVIDER_REP_FORWARD_NUMBER`, which the demo does not use, with `VOICE_PROVIDER=retell` and the Twilio vars marked optional. `.gitignore` covers `.env`, `data/bills/` and `data/seed/`, and `data/parsed/` stays committed.
-- A test proves an import of the Agent SDK, Playwright or nodemailer outside `packages/platform` fails lint. `scripts/` seed and e2e code is exempt for Playwright (see the decisions in `docs/plan/schedule.md`).
+- A test proves an import of the Agent SDK, Playwright or nodemailer outside `packages/platform` fails lint. Playwright is exempt only in `scripts/`, `packages/db/src/seed/` and `apps/portal/e2e/` (see the decisions in `docs/plan/schedule.md`).
 - `docs/fleet/PLAYBOOK.md` TODOs are filled in with the real commands and conventions.
 
 **Likely files:**

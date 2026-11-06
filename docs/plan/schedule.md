@@ -94,7 +94,7 @@ Gaps in `project.md` and what this plan does about them. `project.md` itself is 
 7. **`audit:local` runs from cached parsed JSON committed with the seed.** The real PG&E sample parse is a separate script that needs a key.
 8. **BayTel gets a line inventory page.** The `unusedLines` rule needs call counts, and section 9 lists no source for them.
 9. **Live voice is a must-have and is off the cut list.** Sim is the automatic fallback, labeled on screen. The human is solo, so the rep is always the second AI agent. To use free credits, a Retell outbound agent calls a free inbound Vapi number, replacing the section 11 Twilio IVR. `ALLOWED_CALL_NUMBERS` holds only the Vapi number.
-10. **Seed and test scripts may import Playwright directly.** PDF generation and portal e2e are build and test tools, so they are exempt from the section 5 import rule. Runtime browser use still goes through `Browser`.
+10. **Seed and test scripts may import Playwright directly.** PDF generation and portal e2e are build and test tools, so `scripts/`, `packages/db/src/seed/` and `apps/portal/e2e/` are exempt from the section 5 import rule. Runtime browser use still goes through `Browser`.
 11. **Saturday approval is an email and a YES text.** naïve outbound SMS is not available, so the Approver emails Linda and she replies YES by text to the naïve number. M10 tests the inbound SMS wake, because the naïve docs disagree on it, and uses the dashboard tap if it fails. Local mode keeps the simulated phone panel.
 12. **The disclosure line is inserted by code, not spoken from a prompt.** This way a model cannot skip or reword it.
 13. **Bills are parsed ahead of time.** The stage run reuses cached results, the audit log shows them as cached, and the run stays inside `RUN_BUDGET_USD`.
