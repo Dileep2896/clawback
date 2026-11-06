@@ -1,0 +1,15 @@
+{
+  "name": "@bill-fighter/webhooks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@bill-fighter/agents": "workspace:*",
+    "@bill-fighter/platform": "workspace:*",
+    "@bill-fighter/shared": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

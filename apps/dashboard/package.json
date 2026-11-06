@@ -1,0 +1,22 @@
+{
+  "name": "@bill-fighter/dashboard",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000"
+  },
+  "dependencies": {
+    "@bill-fighter/db": "workspace:*",
+    "@bill-fighter/shared": "workspace:*",
+    "next": "^16.4.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.4"
+  }
+}

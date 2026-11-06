@@ -1,0 +1,29 @@
+# Fixed name: every worktree shares this one stack, so lanes never fight over ports.
+name: clawback
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bill
+      POSTGRES_PASSWORD: bill
+      POSTGRES_DB: billfighter
+    ports:
+      # 5433 on the host: the build machine runs a native Postgres on 5432.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bill -d billfighter"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
+volumes:
+  postgres-data:

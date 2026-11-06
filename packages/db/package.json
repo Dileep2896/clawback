@@ -1,0 +1,23 @@
+{
+  "name": "@bill-fighter/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@bill-fighter/core": "workspace:*",
+    "@bill-fighter/shared": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1",
+    "playwright": "^1.65.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11"
+  }
+}

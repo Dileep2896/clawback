@@ -1,0 +1,14 @@
+{
+  "name": "@bill-fighter/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@bill-fighter/shared": "workspace:*",
+    "pdfjs-dist": "^6.5.438",
+    "zod": "^4.6.7"
+  }
+}

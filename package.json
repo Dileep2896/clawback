@@ -1,0 +1,50 @@
+{
+  "name": "clawback",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^22.12.0",
+      "onFail": "download"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "pnpm --filter @bill-fighter/db migrate",
+    "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
+    "audit:local": "tsx --env-file-if-exists=.env scripts/audit-local.ts",
+    "check-platform": "tsx --env-file-if-exists=.env scripts/check-platform.ts",
+    "demo:start": "tsx --env-file-if-exists=.env scripts/demo-start.ts",
+    "demo:reset": "tsx --env-file-if-exists=.env scripts/demo-reset.ts",
+    "demo:replay": "tsx --env-file-if-exists=.env scripts/replay.ts",
+    "run:local": "tsx --env-file-if-exists=.env scripts/run-local.ts",
+    "parse:sample": "tsx --env-file-if-exists=.env scripts/parse-sample.ts",
+    "dev:dashboard": "pnpm --filter @bill-fighter/dashboard dev",
+    "dev:portal": "pnpm --filter @bill-fighter/portal dev"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "eslint": "^10.14.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "@bill-fighter/agents": "workspace:*",
+    "@bill-fighter/core": "workspace:*",
+    "@bill-fighter/db": "workspace:*",
+    "@bill-fighter/platform": "workspace:*",
+    "@bill-fighter/shared": "workspace:*",
+    "@bill-fighter/voice": "workspace:*",
+    "@bill-fighter/webhooks": "workspace:*",
+    "playwright": "^1.65.0"
+  }
+}
