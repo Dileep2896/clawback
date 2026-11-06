@@ -55,7 +55,7 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 
 ### `tools-file-approve`
 
-**Goal:** Filer and Approver tools: `draft_letter`, `attach_evidence`, `submit_claim`, `change_rate_plan`, `request_approval`, `send_sms`. The Filer runs `submit_claim` and `change_rate_plan` after approval. Letters are PDFs where Claude writes the wording and every number is filled in from the finding.
+**Goal:** Filer, Approver and CEO tools: `draft_letter`, `attach_evidence`, `submit_claim`, `change_rate_plan`, `request_approval`, `send_sms`, `board_update`, `send_email`. The Filer runs `submit_claim` and `change_rate_plan` after approval. Letters are PDFs where Claude writes the wording and every number is filled in from the finding. The CEO's summary email works the same way, with every number filled in from findings and the ledger.
 
 **Estimate:** 1.5 hours
 
@@ -65,10 +65,14 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 - `request_approval` creates exactly one `approvals` row listing all action ids, and calling it again in the same run reuses that row.
 - The request goes to Linda by email in naïve mode and to the simulated phone panel in local mode, through the `Mail` and `Sms` interfaces.
 - `submit_claim` and `change_rate_plan` are gated, and only change status on our own tables.
+- `board_update` creates a card and moves it through `todo`, `doing`, `done` and `blocked` through the `Board` interface, and the change shows in `board_cards` with the run id and agent.
+- `send_email` sends through the `Mail` interface, the message appears in Mailpit in local mode, and a recipient outside `ALLOWED_EMAIL_DOMAINS` is refused.
+- A test proves the numbers in the summary email equal the findings and ledger values.
 
 **Likely files:**
 - `packages/agents/src/tools/filer.ts`
 - `packages/agents/src/tools/approver.ts`
+- `packages/agents/src/tools/ceo.ts`
 - `packages/agents/src/letters/`
 
 **depends on:** agent-roster, platform-db-adapters, platform-io-adapters
@@ -105,6 +109,7 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 **Acceptance checks:**
 - Two runs in a row reach one pending approval with no human input.
 - No gated tool ran, and every tool call is in `audit_log`, with board cards moving per agent.
+- The CEO made those card moves with `board_update`, and no summary email has gone out while the approval is pending.
 - Time to approval and cost per run with cached parsing are reported, against the 2 minute mark in the demo script. Cost stays inside `RUN_BUDGET_USD`.
 
 **Likely files:**

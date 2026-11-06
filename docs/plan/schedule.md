@@ -101,6 +101,7 @@ Gaps in `project.md` and what this plan does about them. `project.md` itself is 
 14. **The refund shows as "claimed" and we invoice now.** The invoice has a line saying the refund part is due only when it is granted.
 15. **B-6 uses whatever the engine computes.** The two Oakland stores get a lunch-heavy load. If savings still do not exceed 2%, the finding is dropped from the pitch.
 16. **The name is Bill Fighter in the product and on stage.** Clawback stays as the repo name.
+17. **The CEO's tools are built in `tools-file-approve`.** That lane already depends on the `Board` and `Mail` adapters, so `board_update` and `send_email` need no new lane. The summary email's numbers are filled in from findings and the ledger, like the letters.
 
 ## Top risks
 

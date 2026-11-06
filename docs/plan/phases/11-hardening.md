@@ -73,6 +73,7 @@ Make the demo repeatable and give it a way to survive failure on stage: reset, r
 
 **Acceptance checks:**
 - Three full runs in a row from `demo-reset` on `VOICE_MODE=sim`, each ending on "Human actions: 1".
+- Each of those runs ends with exactly one CEO summary email to the owner in Mailpit, and its numbers match the ledger.
 - One full run with a real call passes, and live calls so far total about 5 full tests or fewer, leaving enough credit on both accounts for the stage run.
 - Each run's time and cost is written down against the 2 to 4 minute limit, and cost stays inside `RUN_BUDGET_USD`.
 - A human confirms the screen is clear on a 1080p projector.
