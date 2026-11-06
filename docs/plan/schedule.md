@@ -4,10 +4,11 @@ Companion to `docs/plan/phases/`. The plan is M0 to M9 on `PLATFORM=local` today
 
 ## Timing
 
-- **Builder hours:** 34.5 across 37 lanes, against the 29.5 in section 17. The extra hours come from splitting work and from gaps this plan fills.
-- **Wall clock on 3 slots:** about 13 hours if nothing slips. This excludes review, merge and waiting on keys, so plan on more.
+- **Builder hours:** 37.5 across 40 lanes, against the 29.5 in section 17. The extra hours come from splitting work and from gaps this plan fills.
+- **Wall clock on 3 slots:** about 14 hours if nothing slips. This excludes review, merge and waiting on keys, so plan on more.
 - **Longest chain:** `repo-skeleton` > `shared-contracts` > `tariff-data` > `seed-generator` > `bill-pdfs` > `seed-loader` > `portal-shell` > `portal-downloads` > `tools-collect-audit` > `agents-e2e` > `demo-reset` > `rehearsal`. More builders would not shorten this chain.
-- **Not scheduled:** `voice-live` (optional) and all of phase 12 (held for Saturday).
+- **Not scheduled:** phase 12, held for Saturday.
+- **Hold:** no builders start until the human approves these phases.
 
 ## Who runs when
 
@@ -25,33 +26,36 @@ Hours are from the moment `repo-skeleton` starts. A lane starts once its depende
 | 2.0 | 3.5 | 3 | `platform-agent-runtime` | M1 |
 | 2.5 | 4.0 | 1 | `seed-generator` | M2 |
 | 2.5 | 3.5 | 2 | `platform-io-adapters` | M1 |
-| 3.5 | 4.5 | 2 | `agent-roster` | M5 |
-| 3.5 | 4.0 | 3 | `platform-db-adapters` | M1 |
+| 3.5 | 5.5 | 2 | `voice-sim` | M6 |
+| 3.5 | 4.5 | 3 | `agent-roster` | M5 |
 | 4.0 | 5.0 | 1 | `bill-pdfs` | M2 |
-| 4.0 | 5.0 | 3 | `rules-billing` | rest of M3 |
-| 4.5 | 5.5 | 2 | `rules-rates-lines` | rest of M3 |
+| 4.5 | 5.5 | 3 | `rules-billing` | rest of M3 |
 | 5.0 | 5.5 | 1 | `seed-loader` | M2 |
-| 5.0 | 6.5 | 3 | `bill-parser` | rest of M3 |
-| 5.5 | 6.5 | 1 | `portal-shell` | M4 |
-| 5.5 | 6.0 | 2 | `audit-local-cli` | rest of M3 |
-| 6.0 | 8.0 | 2 | `voice-sim` | M6 |
-| 6.5 | 7.5 | 1 | `portal-downloads` | M4 |
-| 6.5 | 8.0 | 3 | `tools-file-approve` | M5 |
+| 5.5 | 7.0 | 1 | `bill-parser` | rest of M3 |
+| 5.5 | 6.5 | 2 | `portal-shell` | M4 |
+| 5.5 | 6.5 | 3 | `rules-rates-lines` | rest of M3 |
+| 6.5 | 7.5 | 2 | `portal-downloads` | M4 |
+| 6.5 | 7.0 | 3 | `platform-db-adapters` | M1 |
+| 7.0 | 7.5 | 1 | `audit-local-cli` | rest of M3 |
+| 7.0 | 7.5 | 3 | `voice-live-spike` | M6 |
 | 7.5 | 9.0 | 1 | `tools-collect-audit` | M5 |
-| 8.0 | 9.0 | 2 | `run-trigger` | M5 |
-| 8.0 | 9.0 | 3 | `dashboard-shell` | M8 |
-| 9.0 | 10.0 | 1 | `agents-e2e` | M5 |
-| 9.0 | 10.0 | 2 | `call-provider-tool` | M6 |
-| 9.0 | 9.5 | 3 | `finance-ledger` | M7 |
-| 9.5 | 10.5 | 3 | `panels-work` | M8 |
-| 10.0 | 11.0 | 1 | `panels-action` | M8 |
-| 10.0 | 11.0 | 2 | `panels-money` | M8 |
-| 10.5 | 11.0 | 3 | `finance-invoice` | M7 |
-| 11.0 | 11.5 | 1 | `monitor-check` | M7 |
-| 11.0 | 11.5 | 2 | `demo-reset` | M9 |
-| 11.0 | 11.5 | 3 | `demo-replay` | M9 |
-| 11.5 | 12.0 | 1 | `run-resilience` | M9 |
-| 12.0 | 13.0 | 1 | `rehearsal` | M9 |
+| 7.5 | 9.0 | 2 | `tools-file-approve` | M5 |
+| 7.5 | 8.5 | 3 | `call-provider-tool` | M6 |
+| 8.5 | 9.5 | 3 | `voice-live-line` | M6 |
+| 9.0 | 10.0 | 1 | `run-trigger` | M5 |
+| 9.0 | 10.0 | 2 | `dashboard-shell` | M8 |
+| 9.5 | 11.0 | 3 | `voice-live-caller` | M6 |
+| 10.0 | 11.0 | 1 | `agents-e2e` | M5 |
+| 10.0 | 10.5 | 2 | `finance-ledger` | M7 |
+| 10.5 | 11.5 | 2 | `panels-work` | M8 |
+| 11.0 | 12.0 | 1 | `panels-action` | M8 |
+| 11.0 | 12.0 | 3 | `panels-money` | M8 |
+| 11.5 | 12.0 | 2 | `finance-invoice` | M7 |
+| 12.0 | 12.5 | 1 | `monitor-check` | M7 |
+| 12.0 | 12.5 | 2 | `demo-reset` | M9 |
+| 12.0 | 12.5 | 3 | `demo-replay` | M9 |
+| 12.5 | 13.0 | 1 | `run-resilience` | M9 |
+| 13.0 | 14.0 | 1 | `rehearsal` | M9 |
 
 ## How lanes avoid editing the same files
 
@@ -69,33 +73,40 @@ Hours are from the moment `repo-skeleton` starts. A lane starts once its depende
 | Anthropic API key with credit | `ANTHROPIC_API_KEY` | M1 | `platform-agent-runtime` | Yes, this blocks the agent and parser lanes |
 | OpenEI key (free) | `OPENEI_API_KEY` | M3 work, moved ahead of M2 | `tariff-data` | Yes, this blocks seed data unless fallback tariffs are used |
 | Stripe test account | `STRIPE_SECRET_KEY` (`sk_test_` only) | M7 | `finance-invoice` | Yes |
-| Twilio account and two numbers | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PROVIDER_NUMBER`, `TWILIO_CALLER_NUMBER` | M6 | `voice-live` | Only for live voice |
-| Retell or Vapi key | `RETELL_API_KEY` or `VAPI_API_KEY` | M6 | `voice-live` | Only for live voice |
-| Teammate phone number | `PROVIDER_REP_FORWARD_NUMBER`, `ALLOWED_CALL_NUMBERS` | M6 | `voice-live` | Only for live voice |
+| Retell account with KYC done and a card on file ($10 free credit, number costs $2 a month and can take up to 2 minutes to provision) | `VOICE_PROVIDER=retell`, `RETELL_API_KEY` | M6 | `voice-live-spike` | Yes, live voice is a must-have |
+| Vapi account ($5 free credit, one free inbound number) | `VAPI_API_KEY`, `ALLOWED_CALL_NUMBERS` (the Vapi number only) | M6 | `voice-live-spike` | Yes, live voice is a must-have |
 | naïve account, identity and card | `NAIVE_API_KEY`, `NAIVE_COMPANY_ID`, `NAIVE_IDENTITY_ID`, `NAIVE_CARD_ID` | M10 | `naive-recon` | Saturday |
 | Custom domain with DNS access | none | M10 | `naive-recon` | Saturday |
 | Public URL or tunnel for portal and webhook | `ALLOWED_PORTAL_ORIGINS` | M10 | `naive-public-endpoints` | Saturday, likely |
 
-`VAULT_KEY` is generated locally and needs no account. Everything else in section 18 has a working default.
+`VAULT_KEY` is generated locally and needs no account. `PROVIDER_REP_FORWARD_NUMBER` is not used, because the human is solo and the rep is an AI agent. The Twilio vars are optional, because the demo does not use Twilio. Everything else in section 18 has a working default.
 
-## Technical decisions to check
+## Settled decisions
 
-Gaps in `project.md` that this plan settled. `project.md` itself is unchanged. Say so if any of these are wrong.
+Gaps in `project.md` and what this plan does about them. `project.md` itself is unchanged, so these take precedence over it. Items 2 to 7, 9, 11 and 13 to 16 were settled by the orchestrator or the human. The others are planner calls, so say so if any are wrong.
 
 1. **Tariff work comes before seed data.** Section 17 has M2 first, but bills are priced by the calculator and the Oakland load is tuned against it.
-2. **Fremont #1 gets 16 months of bills.** Section 7 says 12 months for every account, but a 14 month refund and a visible meter swap cannot be proven from 12.
-3. **The decoy adds a 37th account.** Section 7 counts 36 accounts but also needs Oakland #3 gas. Delivery is modeled at `pacific_power` with a third party supply line on the bill, so the schema enum does not change. Bills total 448 (432, plus 12 gas, plus 4 extra for Fremont #1). Cutting gas accounts removes this and the decoy.
-4. **BayConnect is a third portal brand.** Section 9 names two portals, but the promo finding needs BayConnect bills. It reuses the same app and routes through a brand config.
-5. **BayTel gets a line inventory page.** The `unusedLines` rule needs call counts, and section 9 lists no source for them.
-6. **Gated tools with no owner get one.** Section 10 lists `submit_claim`, `change_rate_plan` and `cancel_service` but gives them to no agent. They go to the Filer and only change status on our own tables.
-7. **The parser gets its LLM injected.** Section 4 says core makes no network calls, while section 8 has the parser calling Claude. A new `Llm` interface in `packages/platform` resolves this.
-8. **`audit:local` reads generated fixtures.** It must run with every service down, so it cannot need Postgres or Claude.
-9. **Seed and test scripts may import Playwright directly.** PDF generation and portal e2e are build and test tools, so they are exempt from the section 5 import rule. Runtime browser use still goes through `Browser`.
-10. **The disclosure line is inserted by code, not spoken from a prompt.** This way a model cannot skip or reword it.
+2. **Fremont #1 gets 16 months of bills and intervals.** That is 2 before the swap and 14 after, because the refund and the jump cannot be proven from 12. All other accounts stay at 12, and the Collector downloads every bill the portal offers.
+3. **The decoy adds a 37th account.** Oakland #3 gets one gas account with 12 bills at a fictional third party gas supplier, using one added `provider` value. Totals are 37 accounts and 448 bills (432, plus 12 gas, plus 4 extra for Fremont #1). If gas is cut, that drops to 36 accounts and 436 bills.
+4. **BayConnect is a third portal brand from config, not extra pages.** It goes with "second portal" in the cut order. The gas supplier is one more config entry, so every bill can still be downloaded (planner call).
+5. **Gated tools have owners.** The Filer holds `submit_claim` and `change_rate_plan` and runs them after approval. The Negotiator holds `cancel_service` and records cancellations from the call outcome.
+6. **Core stays pure.** It holds the parser schema, validation and audit rules, and takes LLM extraction as an injected function. The Claude call lives outside core, through a new `Llm` interface in `packages/platform`.
+7. **`audit:local` runs from cached parsed JSON committed with the seed.** The real PG&E sample parse is a separate script that needs a key.
+8. **BayTel gets a line inventory page.** The `unusedLines` rule needs call counts, and section 9 lists no source for them.
+9. **Live voice is a must-have and is off the cut list.** Sim is the automatic fallback, labeled on screen. The human is solo, so the rep is always the second AI agent. To use free credits, a Retell outbound agent calls a free inbound Vapi number, replacing the section 11 Twilio IVR. `ALLOWED_CALL_NUMBERS` holds only the Vapi number.
+10. **Seed and test scripts may import Playwright directly.** PDF generation and portal e2e are build and test tools, so they are exempt from the section 5 import rule. Runtime browser use still goes through `Browser`.
+11. **Saturday approval is an email and a YES text.** naïve outbound SMS is not available, so the Approver emails Linda and she replies YES by text to the naïve number. M10 tests the inbound SMS wake, because the naïve docs disagree on it, and uses the dashboard tap if it fails. Local mode keeps the simulated phone panel.
+12. **The disclosure line is inserted by code, not spoken from a prompt.** This way a model cannot skip or reword it.
+13. **Bills are parsed ahead of time.** The stage run reuses cached results, the audit log shows them as cached, and the run stays inside `RUN_BUDGET_USD`.
+14. **The refund shows as "claimed" and we invoice now.** The invoice has a line saying the refund part is due only when it is granted.
+15. **B-6 uses whatever the engine computes.** The two Oakland stores get a lunch-heavy load. If savings still do not exceed 2%, the finding is dropped from the pitch.
+16. **The name is Bill Fighter in the product and on stage.** Clawback stays as the repo name.
 
 ## Top risks
 
 - **`platform-agent-runtime`:** everything in M5 sits on subagents, in-process tools and `canUseTool` working together. It runs early so a problem surfaces early.
-- **Demo time and cost:** 448 bills and nine agents may not fit a 2 to 4 minute slot or `RUN_BUDGET_USD=5`. `bill-parser` and `agents-e2e` measure this, and the on-stage answer is a product question.
-- **B-6 savings:** B-6 may not come out 3 to 5% cheaper with a dinner-heavy restaurant load. `seed-generator` reports this rather than forcing a number.
+- **Demo time and cost:** even with cached parsing, nine agents may not fit a 2 to 4 minute slot or `RUN_BUDGET_USD=5`. `agents-e2e` and `rehearsal` measure this.
+- **B-6 savings:** B-6 may not come out 3 to 5% cheaper even with a lunch-heavy load. If so, the finding drops out of the pitch.
+- **Live voice:** three points are unverified: Retell dialing the Vapi free number, the Vapi assistant reacting to tones, and Retell transcript and recording retrieval. `voice-live-spike` tests them with one call, and a failure goes to the orchestrator with no provider switch.
+- **Call credits:** $10 on Retell and $5 on Vapi are small, and each live call spends on both. Rehearsals use sim, and live calls are limited to the spike, about 5 full tests and the stage run.
 - **naïve on Saturday:** see the notes in phase 12, especially single-tap approval and outbound SMS.

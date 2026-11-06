@@ -22,7 +22,7 @@ Lay down the monorepo, local services, database schema and shared contracts. Thi
 - Root `package.json` already declares every script later lanes need (`db:migrate`, `seed`, `audit:local`, `check-platform`, `demo:start`, `demo:reset`, `demo:replay`, `run:local`).
 - All dependencies named in section 3 are declared up front, so later lanes rarely touch the lockfile.
 - Packages expose subpath exports (`"./*": "./src/*.ts"`) instead of barrel files, so no lane has to edit a shared `index.ts`.
-- `.env.example` matches section 18, and `.gitignore` covers `.env`, `data/bills/`, `data/seed/` and `data/parse-cache/`.
+- `.env.example` matches section 18 minus `PROVIDER_REP_FORWARD_NUMBER`, which the demo does not use, with `VOICE_PROVIDER=retell` and the Twilio vars marked optional. `.gitignore` covers `.env`, `data/bills/` and `data/seed/`, and `data/parsed/` stays committed.
 - A test proves an import of the Agent SDK, Playwright or nodemailer outside `packages/platform` fails lint. `scripts/` seed and e2e code is exempt for Playwright (see the decisions in `docs/plan/schedule.md`).
 - `docs/fleet/PLAYBOOK.md` TODOs are filled in with the real commands and conventions.
 
@@ -43,7 +43,7 @@ Lay down the monorepo, local services, database schema and shared contracts. Thi
 
 ### `db-schema`
 
-**Goal:** Drizzle schema and first migration for every table in section 6, including `approvals`, `board_cards`, `sms_messages`, `calls.mode`, `runs.platform`, `runs.cost_usd` and ledger `card_spend`.
+**Goal:** Drizzle schema and first migration for every table in section 6, including `approvals`, `board_cards`, `sms_messages`, `calls.mode`, `runs.platform`, `runs.cost_usd`, ledger `card_spend`, and one added `provider` value for a fictional third party gas supplier.
 
 **Estimate:** 0.5 hours
 
@@ -59,7 +59,7 @@ Lay down the monorepo, local services, database schema and shared contracts. Thi
 
 **depends on:** repo-skeleton
 
-**parallel with:** shared-contracts, platform-interfaces, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, agent-roster
+**parallel with:** shared-contracts, platform-interfaces, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, agent-roster, voice-live-spike, voice-live-line
 
 ### `shared-contracts`
 

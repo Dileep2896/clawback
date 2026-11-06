@@ -12,7 +12,7 @@ One projector screen, reading only from Postgres so it works in both platform mo
 
 ### `dashboard-shell`
 
-**Goal:** Next.js app with the one-screen grid, live updates (SSE or short polling), header (customer, platform badge, run status, run cost, "Human actions: N", "Demo data" label), dark theme option, a stub file per panel, and a script that inserts a sample run.
+**Goal:** Next.js app with the one-screen grid, live updates (SSE or short polling), header (the Bill Fighter name, customer, platform badge, run status, run cost, "Human actions: N", "Demo data" label), dark theme option, a stub file per panel, and a script that inserts a sample run.
 
 **Estimate:** 1 hour
 
@@ -31,7 +31,7 @@ One projector screen, reading only from Postgres so it works in both platform mo
 
 **depends on:** db-schema
 
-**parallel with:** shared-contracts, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, agent-roster, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, demo-reset, run-resilience
+**parallel with:** shared-contracts, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, agent-roster, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, demo-reset, run-resilience
 
 ### `panels-work`
 
@@ -52,11 +52,11 @@ One projector screen, reading only from Postgres so it works in both platform mo
 
 **depends on:** dashboard-shell
 
-**parallel with:** shared-contracts, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, agent-roster, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, panels-action, panels-money, demo-reset, run-resilience
+**parallel with:** shared-contracts, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, agent-roster, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, panels-action, panels-money, demo-reset, run-resilience
 
 ### `panels-action`
 
-**Goal:** Approval panel with one Approve button, simulated phone panel with the SMS thread, and call panel with live transcript, timer, highlighted disclosure and browser speech.
+**Goal:** Approval panel with one Approve button, which is the backup approval path in both platform modes, simulated phone panel for local mode with the SMS thread, and call panel with live transcript, timer, highlighted disclosure and browser speech.
 
 **Estimate:** 1 hour
 
@@ -64,7 +64,8 @@ One projector screen, reading only from Postgres so it works in both platform mo
 - One Approve releases the whole bundle, and a double click records one approval.
 - A "YES" in the simulated phone does the same, and the approver is recorded.
 - The disclosure line is visibly highlighted and spoken first.
-- The call panel shows "sim" or "live", and the transcript still works if browser speech fails.
+- Approve works with SMS unavailable, proven by a test.
+- The call panel shows "sim" or "live", labels a fallback from live, and the transcript still works if browser speech fails.
 
 **Likely files:**
 - `apps/dashboard/components/panels/approval.tsx`
@@ -75,7 +76,7 @@ One projector screen, reading only from Postgres so it works in both platform mo
 
 **depends on:** dashboard-shell
 
-**parallel with:** shared-contracts, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, agent-roster, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, panels-work, panels-money, demo-reset, run-resilience
+**parallel with:** shared-contracts, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, agent-roster, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, panels-work, panels-money, demo-reset, run-resilience
 
 ### `panels-money`
 
@@ -85,6 +86,7 @@ One projector screen, reading only from Postgres so it works in both platform mo
 
 **Acceptance checks:**
 - Ledger totals equal the sum of ledger rows, with no math done in the page beyond that sum.
+- The refund is labeled "claimed".
 - The audit log shows agent, tool, time and cost, and does not lag with thousands of rows.
 - Vault values never show in the log.
 
@@ -94,4 +96,4 @@ One projector screen, reading only from Postgres so it works in both platform mo
 
 **depends on:** dashboard-shell
 
-**parallel with:** shared-contracts, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, agent-roster, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, panels-work, panels-action, demo-reset, run-resilience
+**parallel with:** shared-contracts, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, agent-roster, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, panels-work, panels-action, demo-reset, run-resilience

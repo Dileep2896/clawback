@@ -27,20 +27,20 @@ Generate Golden Gate Noodle Co. deterministically from a fixed seed: load profil
 
 **depends on:** shared-contracts
 
-**parallel with:** db-schema, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, tariff-data, tariff-calculator, agent-roster, tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** db-schema, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, tariff-data, tariff-calculator, agent-roster, tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
 
 ### `seed-generator`
 
-**Goal:** Generate the section 7 customer and plant all problems as deterministic fixtures in `data/seed/`, priced by the calculator. Fremont #1 gets 16 months of electric bills and intervals (2 before the meter swap, 14 after), because the $12,600 refund cannot be proven from 12.
+**Goal:** Generate the section 7 customer and plant all problems as deterministic fixtures in `data/seed/`, priced by the calculator. Fremont #1 gets 16 months of electric bills and intervals (2 before the meter swap, 14 after), because the $12,600 refund and the jump at the swap cannot be proven from 12. All other accounts stay at 12.
 
 **Estimate:** 1.5 hours
 
 **Acceptance checks:**
 - Fremont #1: a new meter number and a multiplier change from 1 to 2 at the swap, billed kWh exactly 2.0 x interval kWh for 14 months.
-- Oakland #1 and #2 are on B-10 with about 40 kW max demand, and the calculator shows B-6 3 to 5% cheaper. Report the tuned profile if it stops looking like a restaurant.
+- Oakland #1 and #2 are on B-10 with about 40 kW max demand and a lunch-heavy load, aiming for B-6 3 to 5% cheaper. Whatever the calculator shows is what gets used, and no number is ever forced.
 - Nine POTS lines across six stores: seven with zero calls, two alarm lines with low use, $60 each.
 - Three BayConnect accounts jump from $95 to $185 inside the 12 month window on the same plan code, with no usage change.
-- Oakland #3 has one gas account with a third party supply line on the bill.
+- Oakland #3 has one gas account with 12 bills at the fictional third party gas supplier. If gas is cut per section 17, totals drop to 36 accounts and 436 bills.
 - Annual spend is about $300,000, within 10%.
 - A test confirms no fixture contains a precomputed finding or savings figure.
 
@@ -50,7 +50,7 @@ Generate Golden Gate Noodle Co. deterministically from a fixed seed: load profil
 
 **depends on:** tariff-data, tariff-calculator, load-profile
 
-**parallel with:** db-schema, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, agent-roster, tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** db-schema, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, agent-roster, tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
 
 ### `bill-pdfs`
 
@@ -70,7 +70,7 @@ Generate Golden Gate Noodle Co. deterministically from a fixed seed: load profil
 
 **depends on:** seed-generator
 
-**parallel with:** db-schema, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, rules-billing, rules-rates-lines, audit-local-cli, agent-roster, tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** db-schema, platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, rules-billing, rules-rates-lines, agent-roster, tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
 
 ### `seed-loader`
 
@@ -89,4 +89,4 @@ Generate Golden Gate Noodle Co. deterministically from a fixed seed: load profil
 
 **depends on:** db-schema, bill-pdfs
 
-**parallel with:** platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, agent-roster, tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, agent-roster, tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money

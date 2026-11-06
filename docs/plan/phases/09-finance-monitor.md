@@ -2,7 +2,7 @@ status: draft
 
 # Phase 09: Finance and monitor (M7)
 
-Record what the run achieved, invoice our share in Stripe test mode, and schedule next month. Fee math lives in `packages/core`. What the ledger counts as won depends on the human's answer to the open product question about invoicing before a refund is granted, so check with the orchestrator before starting `finance-ledger`.
+Record what the run achieved, invoice our share in Stripe test mode, and schedule next month. Fee math lives in `packages/core`. By the human's decision, the refund shows as "claimed" and we invoice now, with a line saying the refund part is due only when it is granted.
 
 **Phase check:** The ledger shows refunds, savings, fee and customer keeps, and a Stripe test invoice exists.
 
@@ -18,6 +18,7 @@ Record what the run achieved, invoice our share in Stripe test mode, and schedul
 
 **Acceptance checks:**
 - A test computes the fee to the cent, using `savings_share_pct`.
+- The refund is recorded as claimed, not won.
 - Items the rep refused on the call are not counted as won.
 - Running the tool twice for one finding does not double count.
 
@@ -27,7 +28,7 @@ Record what the run achieved, invoice our share in Stripe test mode, and schedul
 
 **depends on:** agent-roster, platform-db-adapters
 
-**parallel with:** platform-io-adapters, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live, monitor-check, dashboard-shell, panels-work, panels-action, panels-money, demo-reset, demo-replay
+**parallel with:** platform-io-adapters, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, monitor-check, dashboard-shell, panels-work, panels-action, panels-money, demo-reset, demo-replay
 
 ### `finance-invoice`
 
@@ -38,6 +39,7 @@ Record what the run achieved, invoice our share in Stripe test mode, and schedul
 **Acceptance checks:**
 - Startup refuses any key that does not begin with `sk_test_`, proven by a test.
 - The invoice amount equals the core fee to the cent, and appears in the Stripe test dashboard.
+- The invoice has a line saying the refund part is due only when the refund is granted.
 - A retry does not create a second invoice, using an idempotency key.
 - Both tools are blocked without an approved bundle.
 
@@ -46,7 +48,7 @@ Record what the run achieved, invoice our share in Stripe test mode, and schedul
 
 **depends on:** finance-ledger
 
-**parallel with:** platform-io-adapters, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live, monitor-check, dashboard-shell, panels-work, panels-action, panels-money, demo-reset, demo-replay
+**parallel with:** platform-io-adapters, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, monitor-check, dashboard-shell, panels-work, panels-action, panels-money, demo-reset, demo-replay
 
 ### `monitor-check`
 
@@ -64,4 +66,4 @@ Record what the run achieved, invoice our share in Stripe test mode, and schedul
 
 **depends on:** agent-roster, platform-io-adapters
 
-**parallel with:** platform-db-adapters, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, dashboard-shell, panels-work, panels-action, panels-money, demo-reset, demo-replay
+**parallel with:** platform-db-adapters, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, tools-collect-audit, tools-file-approve, run-trigger, agents-e2e, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, dashboard-shell, panels-work, panels-action, panels-money, demo-reset, demo-replay

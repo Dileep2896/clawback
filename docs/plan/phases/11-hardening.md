@@ -26,7 +26,7 @@ Make the demo repeatable and give it a way to survive failure on stage: reset, r
 
 **depends on:** agents-e2e
 
-**parallel with:** voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money, demo-replay, run-resilience
+**parallel with:** voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money, demo-replay, run-resilience
 
 ### `demo-replay`
 
@@ -45,25 +45,25 @@ Make the demo repeatable and give it a way to survive failure on stage: reset, r
 
 **depends on:** agents-e2e, panels-work, panels-action, panels-money
 
-**parallel with:** voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, demo-reset, run-resilience
+**parallel with:** voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, demo-reset, run-resilience
 
 ### `run-resilience`
 
-**Goal:** Retries and clear errors for the failures most likely on stage: model timeouts, portal timeouts, Stripe errors, budget overrun.
+**Goal:** Retries and clear errors for the failures most likely on stage: model timeouts, portal timeouts, Stripe errors, live call failures, budget overrun.
 
 **Estimate:** 0.5 hours
 
 **Acceptance checks:**
-- A forced failure in each of those four retries or stops with a clear message on the dashboard.
+- A forced failure in each of those five retries or stops with a clear message on the dashboard, and these tests spend no live call credits.
 - A retry never repeats a gated action or asks for a second approval.
 - Going over budget stops the run cleanly, without silently losing rows.
 
 **Likely files:**
 - `packages/agents/src/retry.ts`
 
-**depends on:** agents-e2e, call-provider-tool, finance-invoice, monitor-check
+**depends on:** agents-e2e, voice-live-caller, finance-invoice, monitor-check
 
-**parallel with:** voice-live, dashboard-shell, panels-work, panels-action, panels-money, demo-reset, demo-replay
+**parallel with:** dashboard-shell, panels-work, panels-action, panels-money, demo-reset, demo-replay
 
 ### `rehearsal`
 
@@ -72,8 +72,9 @@ Make the demo repeatable and give it a way to survive failure on stage: reset, r
 **Estimate:** 1 hour
 
 **Acceptance checks:**
-- Three full runs in a row from `demo-reset`, each ending on "Human actions: 1".
-- Each run's time and cost is written down against the 2 to 4 minute limit.
+- Three full runs in a row from `demo-reset` on `VOICE_MODE=sim`, each ending on "Human actions: 1".
+- One full run with a real call passes, and live calls so far total about 5 full tests or fewer, leaving enough credit on both accounts for the stage run.
+- Each run's time and cost is written down against the 2 to 4 minute limit, and cost stays inside `RUN_BUDGET_USD`.
 - A human confirms the screen is clear on a 1080p projector.
 - A backup video of a full run exists outside the repo.
 - A search finds no real provider contact, no live Stripe key and no committed `.env`.
@@ -83,4 +84,4 @@ Make the demo repeatable and give it a way to survive failure on stage: reset, r
 
 **depends on:** demo-reset, demo-replay, run-resilience
 
-**parallel with:** voice-live
+**parallel with:** none

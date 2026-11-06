@@ -2,7 +2,7 @@ status: draft
 
 # Phase 06: Replica portals (M4)
 
-Build clearly fictional provider portals for the Collector to work through. Section 9 names two brands, but the promo finding needs BayConnect bills, so one parametrized app serves three brand configs.
+Build clearly fictional provider portals for the Collector to work through. Section 9 names two brands, but every bill must be downloadable, so one app serves BayConnect as a third brand from config, not extra pages, and the fictional gas supplier as one more config entry. BayConnect goes with "second portal" in the cut order.
 
 **Phase check:** A Playwright script logs in and downloads every bill.
 
@@ -12,7 +12,7 @@ Build clearly fictional provider portals for the Collector to work through. Sect
 
 ### `portal-shell`
 
-**Goal:** Next.js portal on port 3001 with brand config (Pacific Power Business, BayTel Business, BayConnect), demo banner, login, account list with location picker and pagination, and one session-expiry modal.
+**Goal:** Next.js portal on port 3001 with brand config (Pacific Power Business, BayTel Business, BayConnect, the fictional gas supplier), demo banner, login, account list with location picker and pagination, and one session-expiry modal.
 
 **Estimate:** 1 hour
 
@@ -33,7 +33,7 @@ Build clearly fictional provider portals for the Collector to work through. Sect
 
 **depends on:** seed-loader
 
-**parallel with:** platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, agent-roster, tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, agent-roster, tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
 
 ### `portal-downloads`
 
@@ -54,4 +54,4 @@ Build clearly fictional provider portals for the Collector to work through. Sect
 
 **depends on:** portal-shell
 
-**parallel with:** platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, agent-roster, tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** platform-interfaces, platform-db-adapters, platform-io-adapters, platform-agent-runtime, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, agent-roster, tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money

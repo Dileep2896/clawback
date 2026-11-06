@@ -28,7 +28,7 @@ Define the section 5 interfaces and build all the local adapters, so business lo
 
 **depends on:** shared-contracts
 
-**parallel with:** db-schema, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** db-schema, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, rules-billing, rules-rates-lines, portal-shell, portal-downloads, voice-live-spike, voice-live-line, dashboard-shell, panels-work, panels-action, panels-money
 
 ### `platform-db-adapters`
 
@@ -51,7 +51,7 @@ Define the section 5 interfaces and build all the local adapters, so business lo
 
 **depends on:** db-schema, platform-interfaces
 
-**parallel with:** platform-io-adapters, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, agent-roster, run-trigger, voice-sim, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** platform-io-adapters, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, agent-roster, run-trigger, voice-sim, voice-live-spike, voice-live-line, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
 
 ### `platform-io-adapters`
 
@@ -75,7 +75,7 @@ Define the section 5 interfaces and build all the local adapters, so business lo
 
 **depends on:** db-schema, platform-interfaces
 
-**parallel with:** platform-db-adapters, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, agent-roster, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** platform-db-adapters, platform-agent-runtime, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, agent-roster, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, dashboard-shell, panels-work, panels-action, panels-money
 
 ### `platform-agent-runtime`
 
@@ -96,4 +96,4 @@ Define the section 5 interfaces and build all the local adapters, so business lo
 
 **depends on:** platform-interfaces
 
-**parallel with:** db-schema, platform-db-adapters, platform-io-adapters, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** db-schema, platform-db-adapters, platform-io-adapters, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, rules-billing, rules-rates-lines, portal-shell, portal-downloads, voice-live-spike, voice-live-line, dashboard-shell, panels-work, panels-action, panels-money

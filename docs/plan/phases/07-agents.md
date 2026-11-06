@@ -17,7 +17,7 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 **Estimate:** 1 hour
 
 **Acceptance checks:**
-- A test proves each agent only gets the tools in section 10.
+- A test proves each agent only gets the tools in section 10, plus `submit_claim` and `change_rate_plan` for the Filer and `cancel_service` for the Negotiator.
 - Prompts tell agents never to compute money and to call core tools instead.
 - Every tool call passes through a wrapper that writes `audit_log` and rejects non-allowlisted targets before the platform sees them.
 
@@ -29,7 +29,7 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 
 **depends on:** platform-agent-runtime
 
-**parallel with:** db-schema, platform-db-adapters, platform-io-adapters, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, voice-sim, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** db-schema, platform-db-adapters, platform-io-adapters, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, voice-sim, voice-live-spike, voice-live-line, dashboard-shell, panels-work, panels-action, panels-money
 
 ### `tools-collect-audit`
 
@@ -38,8 +38,10 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 **Estimate:** 1.5 hours
 
 **Acceptance checks:**
+- The Collector downloads every bill the portal offers, not a fixed 12, including all 16 for Fremont #1.
 - The Collector gets its password by vault name, and the value never appears in `audit_log` or agent context.
 - `download_bills` and `parse_bill` accept batches, and a full customer run takes a handful of tool calls.
+- `parse_bill` reuses cached results on the stage run, and `audit_log` shows them as cached.
 - Findings written to the database carry bill and line ids, and each amount equals the core output exactly.
 
 **Likely files:**
@@ -49,11 +51,11 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 
 **depends on:** agent-roster, platform-db-adapters, platform-io-adapters, bill-parser, audit-local-cli, portal-downloads
 
-**parallel with:** tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** tools-file-approve, run-trigger, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
 
 ### `tools-file-approve`
 
-**Goal:** Filer and Approver tools: `draft_letter`, `attach_evidence`, `submit_claim`, `change_rate_plan`, `cancel_service`, `request_approval`, `send_sms`. Letters are PDFs where Claude writes the wording and every number is filled in from the finding.
+**Goal:** Filer and Approver tools: `draft_letter`, `attach_evidence`, `submit_claim`, `change_rate_plan`, `request_approval`, `send_sms`. The Filer runs `submit_claim` and `change_rate_plan` after approval. Letters are PDFs where Claude writes the wording and every number is filled in from the finding.
 
 **Estimate:** 1.5 hours
 
@@ -61,7 +63,8 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 - Rule 17.1 claim, Rule 12 request and cancellation letters render as PDFs with evidence attached.
 - A test proves letter numbers equal finding numbers, and that alarm lines never appear in a cancellation.
 - `request_approval` creates exactly one `approvals` row listing all action ids, and calling it again in the same run reuses that row.
-- `submit_claim`, `change_rate_plan` and `cancel_service` are gated, and only change status on our own tables.
+- The request goes to Linda by email in naïve mode and to the simulated phone panel in local mode, through the `Mail` and `Sms` interfaces.
+- `submit_claim` and `change_rate_plan` are gated, and only change status on our own tables.
 
 **Likely files:**
 - `packages/agents/src/tools/filer.ts`
@@ -70,7 +73,7 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 
 **depends on:** agent-roster, platform-db-adapters, platform-io-adapters
 
-**parallel with:** tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, tools-collect-audit, run-trigger, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, tools-collect-audit, run-trigger, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
 
 ### `run-trigger`
 
@@ -91,7 +94,7 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 
 **depends on:** agent-roster, platform-io-adapters
 
-**parallel with:** platform-db-adapters, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, tools-collect-audit, tools-file-approve, voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** platform-db-adapters, tariff-data, tariff-calculator, load-profile, seed-generator, bill-pdfs, seed-loader, bill-parser, rules-billing, rules-rates-lines, audit-local-cli, portal-shell, portal-downloads, tools-collect-audit, tools-file-approve, voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
 
 ### `agents-e2e`
 
@@ -102,7 +105,7 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 **Acceptance checks:**
 - Two runs in a row reach one pending approval with no human input.
 - No gated tool ran, and every tool call is in `audit_log`, with board cards moving per agent.
-- Time to approval and cost per run are reported, against the 2 minute mark in the demo script and `RUN_BUDGET_USD=5`.
+- Time to approval and cost per run with cached parsing are reported, against the 2 minute mark in the demo script. Cost stays inside `RUN_BUDGET_USD`.
 
 **Likely files:**
 - `packages/agents/test/e2e.test.ts`
@@ -110,4 +113,4 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 
 **depends on:** tools-collect-audit, tools-file-approve, run-trigger
 
-**parallel with:** voice-sim, call-provider-tool, voice-live, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
+**parallel with:** voice-sim, call-provider-tool, voice-live-spike, voice-live-line, voice-live-caller, finance-ledger, finance-invoice, monitor-check, dashboard-shell, panels-work, panels-action, panels-money
