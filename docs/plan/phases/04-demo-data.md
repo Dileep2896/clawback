@@ -1,4 +1,4 @@
-status: draft
+status: approved
 
 # Phase 04: Demo data and seed (M2)
 

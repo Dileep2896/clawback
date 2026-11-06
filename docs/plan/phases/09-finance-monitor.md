@@ -1,4 +1,4 @@
-status: draft
+status: approved
 
 # Phase 09: Finance and monitor (M7)
 

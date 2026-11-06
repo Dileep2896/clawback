@@ -1,4 +1,4 @@
-status: draft
+status: approved
 
 # Phase 02: Platform layer, local (M1)
 

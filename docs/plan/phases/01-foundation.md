@@ -1,4 +1,4 @@
-status: draft
+status: approved
 
 # Phase 01: Foundation (M0)
 

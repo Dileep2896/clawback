@@ -1,4 +1,4 @@
-status: draft
+status: approved
 
 # Phase 05: Parser and audit rules (rest of M3)
 

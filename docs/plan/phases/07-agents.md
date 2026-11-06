@@ -1,4 +1,4 @@
-status: draft
+status: approved
 
 # Phase 07: Agents on the Claude Agent SDK (M5)
 

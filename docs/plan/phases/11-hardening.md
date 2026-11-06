@@ -1,4 +1,4 @@
-status: draft
+status: approved
 
 # Phase 11: Hardening and rehearsal (M9)
 

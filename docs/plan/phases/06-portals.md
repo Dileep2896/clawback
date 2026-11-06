@@ -1,4 +1,4 @@
-status: draft
+status: approved
 
 # Phase 06: Replica portals (M4)
 

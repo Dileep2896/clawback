@@ -1,4 +1,4 @@
-status: draft
+status: approved
 
 # Phase 10: Dashboard (M8)
 

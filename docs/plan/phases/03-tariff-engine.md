@@ -1,4 +1,4 @@
-status: draft
+status: approved
 
 # Phase 03: Tariff engine (first part of M3, moved ahead of M2)
 

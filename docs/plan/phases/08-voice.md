@@ -1,4 +1,4 @@
-status: draft
+status: approved
 
 # Phase 08: Voice (M6)
 

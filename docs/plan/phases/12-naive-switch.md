@@ -1,4 +1,4 @@
-status: draft
+status: approved
 
 # Phase 12: Switch to naïve (M10)
 
