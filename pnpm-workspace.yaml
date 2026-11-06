@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - services/*
+  - packages/*
+
+# A wrong Node must fail loudly at install, for dependencies as well as the project.
+engineStrict: true
+
+allowBuilds:
+  esbuild: true

@@ -1,0 +1,24 @@
+{
+  "name": "@bill-fighter/platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.318",
+    "@anthropic-ai/sdk": "^1.6.0",
+    "@bill-fighter/db": "workspace:*",
+    "@bill-fighter/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "node-cron": "^4.6.0",
+    "nodemailer": "^10.3.1",
+    "playwright": "^1.65.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^8.0.2"
+  }
+}
