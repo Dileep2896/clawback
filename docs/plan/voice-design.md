@@ -33,7 +33,7 @@ The fallback for point 2 (speak the menu and advance once the caller has acted) 
 - Retell: first utterance is role `agent` and an exact match for `DISCLOSURE_LINE`, spoken from 0.19 s to 5.87 s.
 - Vapi, transcribing the audio separately: "Hi. This is an AI assistant calling on behalf of Golden Gate Noodle Company. This call is being recorded." The only difference is the period after "Hi", which is punctuation chosen by the speech-to-text.
 - The Retell transcript may reflect its own text rather than the audio, so the Vapi transcript is the independent check.
-- Human listen to the first seconds of the recording: **pending**.
+- Human listen to the recording, 2026-11-06: **the disclosure sounds right.** The human did not report on whether the menu played once or twice, so that stays unresolved (see below).
 
 ## Transcripts
 
