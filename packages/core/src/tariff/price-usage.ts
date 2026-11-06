@@ -21,6 +21,8 @@ export type PricedBill = {
     period: string;
     kind: "tou" | "flat";
     maxKw: number;
+    // Billing days this charge covers. Fewer than the whole bill when it spans a season change.
+    days: number;
     cents: number;
     tiers: { kw: number; usdPerKw: number; cents: number }[];
   }[];
@@ -57,13 +59,13 @@ export function roundCents(usd: number): number {
 }
 
 // Tier limits are cumulative: each tier prices the quantity between the last limit and its own.
-function priceTiers(quantity: number, tiers: { upTo: number | null; rate: number }[]) {
+function priceTiers(quantity: number, tiers: { upTo: number | null; rate: number }[], share = 1) {
   const priced: { quantity: number; rate: number; cents: number }[] = [];
   let below = 0;
   for (const { upTo, rate } of tiers) {
     const inTier = Math.min(quantity, upTo ?? Infinity) - below;
     if (inTier <= 0) break;
-    priced.push({ quantity: inTier, rate, cents: roundCents(inTier * rate) });
+    priced.push({ quantity: inTier, rate, cents: roundCents(inTier * rate * share) });
     below += inTier;
   }
   return priced;
@@ -94,8 +96,7 @@ export function priceUsage(intervals: Interval[], tariff: Tariff, period: Billin
     const { date, month, hour, weekend } = pacificTime(instant);
     if (date < period.start || date > period.end) continue;
 
-    // shortcut: holidays price as ordinary days because Tariff has no holiday data, add it to Tariff
-    // if a current tariff sheet treats holidays differently.
+    // No holiday calendar: all four PG&E sheets apply TOU periods every day, including holidays.
     const energyGrid = weekend ? tariff.energyWeekendSchedule : tariff.energyWeekdaySchedule;
     const energyIndex = energyGrid[month]![hour]!;
     kwhByPeriod.set(energyIndex, (kwhByPeriod.get(energyIndex) ?? 0) + kwh);
@@ -124,33 +125,50 @@ export function priceUsage(intervals: Interval[], tariff: Tariff, period: Billin
     ];
   });
 
-  // shortcut: a demand period is charged in full even if the bill only touches it for part of the
-  // period, add proration if bills ever straddle a season (seed bills are calendar months).
+  // PG&E prorates a bill spanning June 1 or October 1 by days in each season. Seasons are the months
+  // a demand period's grid uses it, so a year-round period covers every day and stays at full charge.
+  const billMonths = Array.from({ length: days }, (_, i) => new Date(startMs + i * MS_PER_DAY).getUTCMonth());
   const priceDemand = (
     periods: Tariff["demandPeriods"],
     maxes: Map<number, number>,
     kind: "tou" | "flat",
+    usedInMonth: (index: number, month: number) => boolean,
   ): PricedBill["demand"] =>
     periods.flatMap(({ name, tiers }, index) => {
       const kw = maxes.get(index);
       if (kw === undefined) return [];
+      const coveredDays = billMonths.filter((month) => usedInMonth(index, month)).length;
       const priced = priceTiers(
         kw,
         tiers.map((t) => ({ upTo: t.upToKw, rate: t.usdPerKw })),
+        coveredDays / days,
       );
       return [
         {
           period: name,
           kind,
           maxKw: kw,
+          days: coveredDays,
           cents: sumCents(priced),
           tiers: priced.map((t) => ({ kw: t.quantity, usdPerKw: t.rate, cents: t.cents })),
         },
       ];
     });
   const demand = [
-    ...priceDemand(tariff.demandPeriods, touMaxKw, "tou"),
-    ...priceDemand(tariff.flatDemandPeriods, flatMaxKw, "flat"),
+    ...priceDemand(
+      tariff.demandPeriods,
+      touMaxKw,
+      "tou",
+      (index, month) =>
+        !!tariff.demandWeekdaySchedule?.[month]?.includes(index) ||
+        !!tariff.demandWeekendSchedule?.[month]?.includes(index),
+    ),
+    ...priceDemand(
+      tariff.flatDemandPeriods,
+      flatMaxKw,
+      "flat",
+      (index, month) => tariff.flatDemandMonths?.[month] === index,
+    ),
   ];
 
   const fixed = tariff.fixedCharges.map(({ name, usd, per }) => ({

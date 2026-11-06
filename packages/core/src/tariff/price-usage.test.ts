@@ -157,18 +157,19 @@ describe("priceUsage hand-computed bills", () => {
       { period: "peak", kwh: 202, cents: 8105, tiers: [{ kwh: 202, usdPerKwh: 0.40123, cents: 8105 }] },
     ]);
     expect(bill.demand).toEqual([
-      { period: "off-peak", kind: "tou", maxKw: 12, cents: 1320, tiers: [{ kw: 12, usdPerKw: 1.1, cents: 1320 }] },
+      { period: "off-peak", kind: "tou", maxKw: 12, days: 28, cents: 1320, tiers: [{ kw: 12, usdPerKw: 1.1, cents: 1320 }] },
       {
         period: "peak",
         kind: "tou",
         maxKw: 10,
+        days: 28,
         cents: 11000,
         tiers: [
           { kw: 5, usdPerKw: 10, cents: 5000 },
           { kw: 5, usdPerKw: 12, cents: 6000 },
         ],
       },
-      { period: "max", kind: "flat", maxKw: 12, cents: 3900, tiers: [{ kw: 12, usdPerKw: 3.25, cents: 3900 }] },
+      { period: "max", kind: "flat", maxKw: 12, days: 28, cents: 3900, tiers: [{ kw: 12, usdPerKw: 3.25, cents: 3900 }] },
     ]);
     expect(bill.fixed).toEqual([
       { name: "Customer", cents: 13776 },
@@ -304,6 +305,103 @@ describe("priceUsage demand", () => {
     expect(bill.demand).toEqual([]);
     expect(bill.demandCents).toBe(0);
     expect(bill.maxKw).toBe(400);
+  });
+});
+
+describe("priceUsage across a season change", () => {
+  // Summer is June to September. Winter demand is $10/kW and summer demand is $20/kW.
+  const SEASON = (month: number) => (month >= 5 && month <= 8 ? 1 : 0);
+  const seasonal = {
+    energyWeekdaySchedule: grid(SEASON),
+    energyWeekendSchedule: grid(SEASON),
+    energyPeriods: [
+      { name: "winter", tiers: [{ upToKwh: null, usdPerKwh: 0.2 }] },
+      { name: "summer", tiers: [{ upToKwh: null, usdPerKwh: 0.3 }] },
+    ],
+    demandWeekdaySchedule: grid(SEASON),
+    demandWeekendSchedule: grid(SEASON),
+    demandPeriods: [
+      { name: "winter", tiers: [{ upToKw: null, usdPerKw: 10 }] },
+      { name: "summer", tiers: [{ upToKw: null, usdPerKw: 20 }] },
+    ],
+    fixedCharges: [
+      { name: "Daily", usd: 1, per: "day" },
+      { name: "Monthly", usd: 7, per: "month" },
+    ],
+  };
+
+  it("prorates seasonal demand by days across June 1, and leaves year-round demand whole", () => {
+    // May 16 to Jun 15 is 31 days: 16 in winter and 15 in summer.
+    // Energy 2.5 x 0.20 + 5 x 0.30 = 2.00
+    // Winter demand 10 kW x 10 x 16/31 = 51.6129 -> 51.61
+    // Summer demand 20 kW x 20 x 15/31 = 193.5484 -> 193.55
+    // Year-round demand 20 kW x 3 = 60.00, the whole bill's max with no proration
+    // Fixed 31 x 1 + 7 = 38.00
+    // Total 2.00 + 305.16 + 38.00 = 345.16
+    const bill = priceUsage(
+      [
+        { ts: "2026-05-20T12:00:00-07:00", kwh: 2.5 },
+        { ts: "2026-06-10T12:00:00-07:00", kwh: 5 },
+      ],
+      tariff({
+        ...seasonal,
+        flatDemandMonths: Array(12).fill(0),
+        flatDemandPeriods: [{ name: "max", tiers: [{ upToKw: null, usdPerKw: 3 }] }],
+      }),
+      { start: "2026-05-16", end: "2026-06-15" },
+    );
+    expect(bill.demand.map((d) => [d.period, d.maxKw, d.days, d.cents])).toEqual([
+      ["winter", 10, 16, 5161],
+      ["summer", 20, 15, 19355],
+      ["max", 20, 31, 6000],
+    ]);
+    expect(bill.energyCents).toBe(200);
+    expect(bill.demandCents).toBe(30516);
+    expect(bill.fixed).toEqual([
+      { name: "Daily", cents: 3100 },
+      { name: "Monthly", cents: 700 },
+    ]);
+    expect(bill.totalCents).toBe(34516);
+  });
+
+  it("splits at October 1, with each side of midnight in its own season", () => {
+    // Sep 16 to Oct 15 is 30 days: 15 in each season.
+    // Energy 5 x 0.30 + 2.5 x 0.20 = 2.00
+    // Summer demand 20 kW x 20 x 15/30 = 200.00. Winter demand 10 kW x 10 x 15/30 = 50.00.
+    // Fixed 30 x 1 + 7 = 37.00. Total 289.00.
+    const bill = priceUsage(
+      [
+        { ts: "2026-09-30T23:45:00-07:00", kwh: 5 },
+        { ts: "2026-10-01T00:00:00-07:00", kwh: 2.5 },
+      ],
+      tariff(seasonal),
+      { start: "2026-09-16", end: "2026-10-15" },
+    );
+    expect(bill.demand.map((d) => [d.period, d.maxKw, d.days, d.cents])).toEqual([
+      ["winter", 10, 15, 5000],
+      ["summer", 20, 15, 20000],
+    ]);
+    expect(bill.energy.map((e) => [e.period, e.kwh])).toEqual([
+      ["winter", 2.5],
+      ["summer", 5],
+    ]);
+    expect(bill.totalCents).toBe(28900);
+  });
+
+  it("does not prorate a bill that crosses a month but stays in one season", () => {
+    const bill = priceUsage([{ ts: "2026-01-20T12:00:00-08:00", kwh: 2.5 }], tariff(seasonal), {
+      start: "2026-01-15",
+      end: "2026-02-14",
+    });
+    expect(bill.demand.map((d) => [d.period, d.days, d.cents])).toEqual([["winter", 31, 10000]]);
+  });
+
+  it("charges no demand for a season with no usage on the bill", () => {
+    const bill = priceUsage([{ ts: "2026-05-20T12:00:00-07:00", kwh: 2.5 }], tariff(seasonal), {
+      start: "2026-05-16",
+      end: "2026-06-15",
+    });
+    expect(bill.demand.map((d) => d.period)).toEqual(["winter"]);
   });
 });
 

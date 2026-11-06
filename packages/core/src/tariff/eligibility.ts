@@ -9,8 +9,9 @@ const UNDER_KW: readonly (readonly [RateSchedule, number])[] = [
   ["B-19", 1000],
 ];
 
-// shortcut: takes a single 12 month max, so a "for N consecutive months" limit cannot be expressed,
-// upgrade to monthly maxes if the current tariff sheets turn out to require it.
+// shortcut: the PG&E sheets use a 3 consecutive month test, this uses a single 12 month max, which is
+// the safe direction (it can under-offer after a lone spike but never offers a schedule the sheet
+// refuses), upgrade to monthly maxes if a real account is wrongly held back.
 export function eligibleSchedules(maxKw: number): RateSchedule[] {
   return UNDER_KW.filter(([, limit]) => maxKw < limit).map(([schedule]) => schedule);
 }
