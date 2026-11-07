@@ -12,6 +12,7 @@
     "@bill-fighter/platform": "workspace:*",
     "@bill-fighter/shared": "workspace:*",
     "@bill-fighter/voice": "workspace:*",
+    "drizzle-orm": "^0.45.4",
     "stripe": "^23.1.0",
     "zod": "^4.6.7"
   }
