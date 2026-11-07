@@ -198,6 +198,7 @@ export const ledger = pgTable(
     kind: ledgerKind("kind").notNull(),
     amountCents: integer("amount_cents").notNull(),
     externalId: text("external_id"),
+    description: text("description"),
     createdAt: createdAt(),
   },
   (t) => [unique().on(t.findingId, t.kind)],
