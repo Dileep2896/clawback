@@ -77,9 +77,10 @@ Stat figures are at least 48 px so the room can read them from the back. Sentenc
 
 Added by `landing-redesign`, 2026-11-07. The landing is the one page allowed a darker voice than the app; it still uses the wordmark, the money green, both fonts and the app's own surfaces.
 
-- **Idea: an audited statement.** The hero is a page of the demo customer's bills with each wrong amount struck through in crimson, the corrected amount in green serif beside it, an auditor's note under it, and the refund at the foot. Real product imagery, not icons.
+- **Idea: agents at work** (`landing-live`, 2026-11-07, replacing the audited statement). The hero is full height and dark, and plays an 18 s loop of the recorded demo run (`components/landing/live-run.tsx`): five agent rows light up in the run's order, the Fremont meter evidence flashes, the BayTel call lines type out, and the refund rolls up to $12,606.06 in a register column on the right. The headline "Your bills are wrong. Agents fix them." and "Start my audit" sit under it.
+- **Live rows** are set in the system monospace (`font-mono`), agent names in Atkinson 600; status is a small drawn SVG plus a word (working, on the call, found, done), never colour alone. No emoji.
 - **Two dark ink bands** (hero, market) alternate with the sage paper (the run, the result). The bands stay dark in both themes.
-- **Narrative structure:** hero statement → "One audit of one noodle shop" (four stages in a row under heavy 4 px ink rules, each with the static screen the run produced: kWh table, finding, call transcript, approval and ledger row) → the market → what the owner stands to keep (a statement total under a heavy rule) → footer with the demo-data line.
+- **Narrative structure:** live run → "Follow one overcharge, start to finish" (four stages in a row under heavy 4 px ink rules, each with the static screen the run produced: kWh table, finding, call transcript, approval and ledger row) → the market → what the owner stands to keep (a statement total under a heavy rule) → footer with the demo-data line.
 - **Width:** up to 1320 px, wider than app pages, so the four stages sit in one row at 1920.
 - **Values are the recorded demo run's** (`data/replay/run.jsonl`); market figures are the landing-tam estimates with their source note.
 
@@ -90,12 +91,13 @@ Added by `landing-redesign`, 2026-11-07. The landing is the one page allowed a d
 | `band-faded` | `#c3d1c9` | `#c3d1c9` | Secondary text on the band |
 | `band-line` | `#2c3e35` | `#24352d` | Rules on the band, hover fill for band buttons |
 | `band-money` | `#8be6b9` | `#8be6b9` | Money figures, primary button and focus ring on the band |
+| `band-alert` | `#ffbdd0` | `#ffbdd0` | "Found" and overbilled figures on the band; pale so it passes the lit-room check |
 
 The band text pairs are in `lib/contrast.test.ts`, lit-room check included. On the band, `.band :focus-visible` switches the ring to `band-money`.
 
 ## Motion
 
-Only motion that shows a change: the meter drums rolling, a board card arriving, and on the landing the auditor's strike drawing through each wrong amount once on load. All are off under `prefers-reduced-motion` (the strike is then already drawn). No entrance animations on product pages.
+Only motion that shows a change: the meter drums rolling, a board card arriving, and on the landing the recorded run playing back. All are off under `prefers-reduced-motion` (the landing then shows the finished run, still). The landing playback pauses off-screen and has a Pause button (WCAG 2.2.2), and never changes the hero's size while it plays. No entrance animations on product pages.
 
 ## Copy
 
