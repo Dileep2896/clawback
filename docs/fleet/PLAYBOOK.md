@@ -28,7 +28,7 @@ House rules every agent reads before working. Edit freely.
 - Nothing may require `ANTHROPIC_API_KEY`. Local mode runs Claude through the local Claude Code login.
 
 ## Shared files
-- `repo-skeleton` owns root `package.json`, `.env.example` and `.gitignore`. Other lanes do not edit them. Change your own workspace's `package.json` instead.
+- `repo-skeleton` has shipped, so root `package.json`, `.env.example` and `.gitignore` have no owner. Any lane may make a small addition there when its task needs one. Prefer your own workspace's `package.json`. Allowlist values in `.env.example` change only on the human's word.
 - If you must add a dependency, use `pnpm --filter <package> add <dep>`. Resolve lockfile conflicts by re-running `pnpm install`, never by hand.
 - A dependency with a build script fails install with `ERR_PNPM_IGNORED_BUILDS` until it is added to `allowBuilds` in `pnpm-workspace.yaml`.
 - TypeScript stays on 6.0 until `typescript-eslint` supports a newer version.
