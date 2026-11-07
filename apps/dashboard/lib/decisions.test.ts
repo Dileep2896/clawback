@@ -1,10 +1,12 @@
-import { approvals, actions, customers, runs, smsMessages } from "@bill-fighter/db/schema";
+import { approvals, actions, boardCards, customers, runs, smsMessages } from "@bill-fighter/db/schema";
 import type { Db } from "@bill-fighter/db/client";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
+import { RUN_CARD_AGENT } from "@bill-fighter/shared/run-card";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { approveRun, isYes, receiveSms, respond, sameOrigin } from "./decisions.ts";
+import { isStopped, runProblems, STOPPED_TEXT } from "./run-state.ts";
 import { liveSnapshot } from "./snapshot.ts";
 
 const ACTION_IDS = ["a-claim", "a-call", "a-invoice"];
@@ -70,6 +72,42 @@ describe("approveRun", () => {
       await db.update(approvals).set({ status: "denied", channel: "naive", approvedBy: "Owner" }).where(eq(approvals.runId, "r1"));
       await approveRun(db, "r1");
       expect((await bundle(db)).status).toBe("denied");
+    });
+  });
+});
+
+describe("a run that has stopped", () => {
+  it.each(["error", "over_budget"])("refuses the button and SMS after %s, with a clear message, and counts no human action", async (status) => {
+    await withTestDb("panels_action_stopped", async (db) => {
+      await seedBundle(db);
+      await askOwner(db);
+      await db.update(runs).set({ status }).where(eq(runs.id, "r1"));
+
+      const reply = await respond(new Request("http://localhost:3000/api/approve", { method: "POST", body: "{}", headers: { host: "localhost:3000" } }), z.object({}), () => approveRun(db, "r1"));
+      expect(reply.status).toBe(409);
+      expect(await reply.json()).toEqual({ error: STOPPED_TEXT });
+      await expect(receiveSms(db, { runId: "r1", body: "YES" })).rejects.toThrow(STOPPED_TEXT);
+
+      expect((await bundle(db)).status).toBe("pending");
+      expect(await db.$count(smsMessages, eq(smsMessages.direction, "inbound"))).toBe(0);
+      expect((await liveSnapshot(db)).humanActions).toBe(0);
+    });
+  });
+
+  it("still lets a run that is going, or that finished, answer as before", () => {
+    expect(isStopped("running")).toBe(false);
+    expect(isStopped("success")).toBe(false);
+    expect(isStopped(undefined)).toBe(false);
+  });
+
+  it("shows only what the run reported in the header, not a card an agent blocked", async () => {
+    await withTestDb("panels_action_problems", async (db) => {
+      await seedBundle(db);
+      await db.insert(boardCards).values([
+        { runId: "r1", agent: RUN_CARD_AGENT, title: "Stopped because the model did not answer in time.", status: "blocked" },
+        { runId: "r1", agent: "filer", title: "File the claim", status: "blocked" },
+      ]);
+      expect(runProblems((await liveSnapshot(db)).boardCards)).toEqual(["Stopped because the model did not answer in time."]);
     });
   });
 });
