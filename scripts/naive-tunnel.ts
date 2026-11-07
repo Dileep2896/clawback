@@ -2,14 +2,21 @@
 // Opens a cloudflared quick tunnel to the naïve MCP tool server on NAIVE_MCP_PORT (8790) and nothing else.
 // With a command, runs it with NAIVE_MCP_PUBLIC_URL set and closes the tunnel when it ends.
 // Without one, writes .env.tunnel and holds the tunnel until Ctrl-C. See docs/plan/naive-endpoints.md.
+// Test seams (scripts/naive-tunnel.test.ts): NAIVE_TUNNEL_CLOUDFLARED, NAIVE_TUNNEL_CHECK_URL, NAIVE_TUNNEL_READY_MS.
 import { type ChildProcess, spawn } from "node:child_process";
 import { Resolver } from "node:dns/promises";
 import { rmSync, writeFileSync } from "node:fs";
+import { get as httpGet } from "node:http";
+import { get as httpsGet } from "node:https";
+import type { LookupFunction } from "node:net";
 import { fileURLToPath } from "node:url";
 
-const ENV_FILE = fileURLToPath(new URL("../.env.tunnel", import.meta.url));
+const ENV_FILE = ".env.tunnel"; // in the working directory; pnpm runs scripts from the repo root
 const START_TIMEOUT_MS = 30_000;
-const READY_TIMEOUT_MS = 60_000;
+const READY_TIMEOUT_MS = Number(process.env.NAIVE_TUNNEL_READY_MS) || 60_000;
+const KILL_GRACE_MS = 5_000;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** The quick tunnel's public URL from cloudflared's log, or undefined. api.trycloudflare.com is the signup API, not ours. */
 export function tunnelUrl(log: string): string | undefined {
@@ -43,24 +50,65 @@ function waitForUrl(tunnel: ChildProcess): Promise<string> {
 }
 
 /**
- * Waits until the tunnel's name resolves on a public resolver, which is what naïve uses.
+ * Resolves names on a public resolver, which is what naïve uses.
  * Asking the OS resolver this early caches a miss on macOS for minutes, so it is never asked here.
  */
-async function waitUntilResolvable(url: string) {
-  const resolver = new Resolver({ timeout: 3000 });
-  resolver.setServers(["1.1.1.1", "8.8.8.8"]);
-  const host = new URL(url).hostname;
+const resolver = new Resolver({ timeout: 3000 });
+resolver.setServers(["1.1.1.1", "8.8.8.8"]);
+const publicLookup: LookupFunction = (host, options, callback) => {
+  resolver.resolve4(host).then(
+    (addresses) => (options.all ? callback(null, addresses.map((address) => ({ address, family: 4 }))) : callback(null, addresses[0]!, 4)),
+    (error: NodeJS.ErrnoException) => callback(error, "", 4),
+  );
+};
+
+function answers(url: string): Promise<void> {
+  const get = url.startsWith("https:") ? httpsGet : httpGet;
+  return new Promise((resolve, reject) => {
+    const request = get(url, { lookup: publicLookup, timeout: 5000 }, (response) => {
+      response.resume();
+      resolve();
+    });
+    request.once("timeout", () => request.destroy(new Error("timed out")));
+    request.once("error", reject);
+  });
+}
+
+/** Waits until the public URL resolves and answers HTTP through the edge. Any status counts: the local server may not be up yet. */
+async function waitUntilAnswers(url: string) {
   const deadline = Date.now() + READY_TIMEOUT_MS;
   let last = "";
   while (Date.now() < deadline) {
     try {
-      if ((await resolver.resolve4(host)).length > 0) return;
+      return await answers(url);
     } catch (error) {
       last = (error as NodeJS.ErrnoException).code ?? String(error);
     }
-    await new Promise((r) => setTimeout(r, 1000));
+    await sleep(1000);
   }
-  throw new Error(`${host} did not resolve in ${READY_TIMEOUT_MS / 1000}s (last: ${last})`);
+  throw new Error(`${url} did not answer HTTP in ${READY_TIMEOUT_MS / 1000}s (last: ${last})`);
+}
+
+/** Signals a process group; false once the group is gone. */
+function signalGroup(pid: number, signal: NodeJS.Signals | 0): boolean {
+  try {
+    process.kill(-pid, signal);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Stops a detached process and everything it started: SIGTERM to its group, SIGKILL if any of it is left after the grace period. */
+async function stopTree(proc: ChildProcess | undefined) {
+  const pid = proc?.pid;
+  if (!pid || !signalGroup(pid, "SIGTERM")) return;
+  const deadline = Date.now() + KILL_GRACE_MS;
+  while (Date.now() < deadline) {
+    await sleep(100);
+    if (!signalGroup(pid, 0)) return;
+  }
+  signalGroup(pid, "SIGKILL");
 }
 
 async function main() {
@@ -68,27 +116,32 @@ async function main() {
   const args = process.argv.slice(2);
   const command = args[0] === "--" ? args.slice(1) : args;
 
-  const tunnel = spawn("cloudflared", ["tunnel", "--no-autoupdate", "--url", `http://127.0.0.1:${port}`], { stdio: ["ignore", "pipe", "pipe"] });
+  // Both run in their own process group so shutdown can reach their whole tree. We forward Ctrl-C ourselves.
+  const tunnel = spawn(process.env.NAIVE_TUNNEL_CLOUDFLARED ?? "cloudflared", ["tunnel", "--no-autoupdate", "--url", `http://127.0.0.1:${port}`], {
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
   let child: ChildProcess | undefined;
   let closing = false;
-  const close = (code: number) => {
+  const close = async (code: number) => {
     if (closing) return;
     closing = true;
     rmSync(ENV_FILE, { force: true });
-    tunnel.kill();
-    child?.kill();
+    await Promise.all([stopTree(child), stopTree(tunnel)]);
     process.exit(code);
   };
-  process.on("SIGINT", () => close(130));
-  process.on("SIGTERM", () => close(143));
+  process.on("SIGINT", () => void close(130));
+  process.on("SIGTERM", () => void close(143));
 
   try {
     const url = await waitForUrl(tunnel);
     tunnel.on("exit", (code) => {
+      if (closing) return;
       console.error(`cloudflared exited (${code}); the tunnel is gone.`);
-      close(1);
+      void close(1);
     });
-    await waitUntilResolvable(url);
+    await waitUntilAnswers(process.env.NAIVE_TUNNEL_CHECK_URL ?? url);
+    if (closing) return;
     writeFileSync(ENV_FILE, `NAIVE_MCP_PUBLIC_URL=${url}\n`);
     console.info(`Tunnel up: ${url} -> http://127.0.0.1:${port}\nNAIVE_MCP_PUBLIC_URL written to .env.tunnel`);
 
@@ -96,15 +149,16 @@ async function main() {
       console.info("Holding the tunnel. Ctrl-C closes it.");
       return;
     }
-    child = spawn(command[0]!, command.slice(1), { stdio: "inherit", env: { ...process.env, NAIVE_MCP_PUBLIC_URL: url } });
+    // shortcut: a detached command is not in the terminal's foreground group, so it cannot read the terminal; fine for servers.
+    child = spawn(command[0]!, command.slice(1), { stdio: "inherit", detached: true, env: { ...process.env, NAIVE_MCP_PUBLIC_URL: url } });
     child.once("error", (error) => {
       console.error(`cannot run ${command[0]}: ${error.message}`);
-      close(1);
+      void close(1);
     });
-    child.once("exit", (code, signal) => close(code ?? (signal ? 1 : 0)));
+    child.once("exit", (code, signal) => void close(code ?? (signal ? 1 : 0)));
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
-    close(1);
+    await close(1);
   }
 }
 

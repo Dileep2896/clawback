@@ -28,8 +28,9 @@ PLATFORM=naive pnpm naive:tunnel -- pnpm dev:webhooks
 What the script does (`scripts/naive-tunnel.ts`):
 1. Starts `cloudflared tunnel --no-autoupdate --url http://127.0.0.1:<NAIVE_MCP_PORT>` (a free quick tunnel with no Cloudflare account; it needs `brew install cloudflared`).
 2. Takes the `https://<name>.trycloudflare.com` URL from cloudflared's log, and waits until cloudflared reports a registered edge connection (30 s limit).
-3. Waits until the name resolves on public DNS (1.1.1.1, then 8.8.8.8; 60 s limit). It does **not** ask the OS resolver: on macOS a lookup made before the record exists caches the miss for minutes, which broke the first test.
+3. Waits until the public URL answers HTTP through the edge (any status counts; 60 s limit), resolving the name on public DNS (1.1.1.1, then 8.8.8.8). It does **not** ask the OS resolver: on macOS a lookup made before the record exists caches the miss for minutes, which broke the first test. The command starts only after this.
 4. If cloudflared dies mid-run, the script stops the command and exits 1, because the run cannot work without the tunnel.
+5. Shutdown (command exit, tunnel loss, Ctrl-C, SIGTERM) stops cloudflared and the command's **whole process tree**: both run in their own process group, which gets SIGTERM, then SIGKILL if anything is left after 5 s. The script waits for that before it exits. Because the command is in its own group it cannot read from the terminal; fine for servers like `dev:webhooks`. If the script itself is SIGKILLed, nothing cleans up (known limit).
 
 The URL changes every time the script starts. The runtime reads it at run start, so restart the run's process (the command after `--`) with a fresh tunnel. Never paste a URL from an old tunnel.
 
@@ -38,6 +39,7 @@ The URL changes every time the script starts. The runtime reads it at run start,
 Against a local echo server on 8790:
 - `pnpm naive:tunnel -- sh -c '... curl "$NAIVE_MCP_PUBLIC_URL/mcp/test"; exit 7'` printed `echo GET /mcp/test` through the public URL. The script exited 7, cloudflared was gone and `.env.tunnel` was removed. Ready in about 7 s.
 - Hold mode: `.env.tunnel` was written, `curl $NAIVE_MCP_PUBLIC_URL/hold` answered, and SIGINT exited 130 with cloudflared stopped and the file removed.
-- `scripts/naive-tunnel.test.ts` covers reading the URL out of cloudflared's log.
+- Again after the fix round: the HTTP readiness check passed through the real edge, the command got a 502 from the edge (nothing on the port), its exit 3 was passed on, cloudflared stopped and `.env.tunnel` was removed.
+- `scripts/naive-tunnel.test.ts` runs the real script against a fake cloudflared and a local HTTP server (no network): reading the URL from the log, the command's env and exit code, readiness timeout (command never runs), cloudflared dying before a URL, the tunnel dying mid-run (the command's background worker is killed too), hold mode writing `.env.tunnel` and cleaning up on SIGINT, and a tree that ignores SIGTERM being force-killed.
 
 **Not tested here:** a naïve agent calling the tool server through the tunnel. That is `naive-runtime-adapter`'s probe and `naive-rehearsal`.
