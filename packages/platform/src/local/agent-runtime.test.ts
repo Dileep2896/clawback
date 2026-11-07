@@ -22,7 +22,14 @@ const SPEC: RunSpec = {
   tools: [def("call_provider")],
 };
 
-const INIT = { type: "system", subtype: "init", apiKeySource: "none", tools: ["mcp__platform__call_provider"], agents: [] };
+const INIT = {
+  type: "system",
+  subtype: "init",
+  apiKeySource: "none",
+  tools: ["mcp__platform__call_provider"],
+  agents: [],
+  mcp_servers: [{ name: "platform", status: "connected" }],
+};
 const result = (cost: number, extra: object = {}) => ({
   type: "result",
   subtype: "success",
@@ -41,7 +48,7 @@ type SetupOptions = {
   login?: () => Promise<void>;
 };
 
-function setup(messages: unknown[], { capUsd = 5, totalUsd = 0, thenThrow = "", gate = {}, during, login = async () => {} }: SetupOptions = {}) {
+function setup(messages: unknown[], { capUsd = 5, totalUsd = 0, thenThrow, gate = {}, during, login = async () => {} }: SetupOptions = {}) {
   const added: number[] = [];
   const captured: { options?: Options } = {};
   const budget: Budget = {
@@ -56,7 +63,7 @@ function setup(messages: unknown[], { capUsd = 5, totalUsd = 0, thenThrow = "", 
     captured.options = options;
     await during?.(options);
     yield* messages as SDKMessage[];
-    if (thenThrow) throw new Error(thenThrow);
+    if (thenThrow !== undefined) throw new Error(thenThrow);
   };
   const runtime = createAgentRuntime(async () => ({ gate: gate as ApprovalGate, budget, query, login }));
   return { added, captured, runtime };
@@ -373,5 +380,79 @@ describe("run", () => {
     const thrown = setup([INIT], { thenThrow: "boom" });
     expect((await collect(thrown.runtime.run(SPEC))).last.status).toBe("error");
     expect((await collect(setup([INIT]).runtime.run(SPEC))).last.status).toBe("error");
+  });
+});
+
+describe("the final status", () => {
+  const status = async (messages: unknown[], options?: SetupOptions) =>
+    (await collect(setup(messages, options).runtime.run(SPEC))).last.status;
+  const assistant = (error?: string) => ({ type: "assistant", parent_tool_use_id: null, error, message: { content: [] } });
+  const auth = (error?: string) => ({ type: "auth_status", isAuthenticating: false, output: [], error });
+  const task = (taskStatus: string) => ({ type: "system", subtype: "task_notification", status: taskStatus, summary: "" });
+
+  it("is success for a validated init followed by a clean result", async () => {
+    expect(await status([INIT, assistant(), auth(), task("completed"), result(0)])).toBe("success");
+  });
+
+  it("is error when an exception with an empty message follows a success, and still says so", async () => {
+    const { last, text } = await collect(setup([INIT, result(0)], { thenThrow: "" }).runtime.run(SPEC));
+    expect(last.status).toBe("error");
+    expect(text).toContain("Run failed: the run reported an error with no message");
+  });
+
+  it("is error when no init was seen, so the login and isolation checks never ran", async () => {
+    const { last, text } = await collect(setup([result(0)]).runtime.run(SPEC));
+    expect(last.status).toBe("error");
+    expect(text).toContain("no init");
+  });
+
+  it("does not count an init that failed its checks, whatever follows", async () => {
+    expect(await status([{ ...INIT, apiKeySource: "apiKeyHelper" }, INIT, result(0)])).toBe("error");
+  });
+
+  it.each(["authentication_failed", "billing_error", "account_on_hold", "server_error", "unknown", ""])(
+    "is error for an assistant error %j, before or after the result",
+    async (error) => {
+      expect(await status([INIT, assistant(error), result(0)])).toBe("error");
+      expect(await status([INIT, result(0), assistant(error), result(0)])).toBe("error");
+    },
+  );
+
+  it.each(["token expired", ""])("is error for an auth_status error %j, before or after the result", async (error) => {
+    expect(await status([INIT, auth(error), result(0)])).toBe("error");
+    expect(await status([INIT, result(0), auth(error)])).toBe("error");
+  });
+
+  it("keeps an earlier failure when a later result succeeds", async () => {
+    expect(await status([INIT, result(0, { is_error: true, result: "" }), result(0)])).toBe("error");
+    expect(await status([INIT, result(0, { subtype: "error_during_execution", errors: [] }), result(0)])).toBe("error");
+  });
+
+  it("is error when a turn starts after a success and never finishes", async () => {
+    expect(await status([INIT, result(0), INIT])).toBe("error");
+    expect(await status([INIT, result(0), assistant()])).toBe("error");
+  });
+
+  it.each(["failed", "stopped"])("is error when a subagent task ends %s and the main agent still succeeds", async (taskStatus) => {
+    expect(await status([INIT, task(taskStatus), result(0)])).toBe("error");
+  });
+
+  it("is error when the model refuses with no fallback, and not when it retries on one", async () => {
+    const refusal = { type: "system", subtype: "model_refusal_no_fallback", content: "" };
+    expect(await status([INIT, refusal, result(0)])).toBe("error");
+    expect(await status([INIT, { type: "system", subtype: "model_refusal_fallback" }, result(0)])).toBe("success");
+  });
+
+  it("is error when a success result says the turn stopped early", async () => {
+    expect(await status([INIT, result(0, { terminal_reason: "aborted_tools" })])).toBe("error");
+    expect(await status([INIT, result(0, { terminal_reason: "completed" })])).toBe("success");
+  });
+
+  it("is error when the run's own tool server failed to connect", async () => {
+    expect(await status([{ ...INIT, mcp_servers: [{ name: "platform", status: "failed" }] }, result(0)])).toBe("error");
+  });
+
+  it("stays over_budget when a failure also happened", async () => {
+    expect(await status([INIT, auth("token expired"), result(6)])).toBe("over_budget");
   });
 });

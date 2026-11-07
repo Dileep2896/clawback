@@ -132,8 +132,16 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
 
   let costUsd = 0;
   let over = false;
-  let sawSuccess = false;
-  let failure: string | undefined;
+  let sawValidInit = false;
+  // Cleared when another turn starts, so a turn that never finishes cannot borrow an earlier result.
+  let lastTurnSucceeded = false;
+  // A flag, because a failure can arrive with an empty message.
+  let failed = false;
+  let reason = "";
+  const fail = (text: string) => {
+    failed = true;
+    reason ||= text;
+  };
 
   try {
     const { gate, budget, query = sdkQuery as Query, login = checkLogin } = await deps();
@@ -189,11 +197,22 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
           // Checked on every init: the connectors first appeared in a later one.
           assertLogin(message);
           assertIsolated(message, allowedInit);
+          sawValidInit = true;
+          lastTurnSucceeded = false;
+          if (message.mcp_servers.some((server) => server.status === "failed")) fail("A tool server failed to connect");
         } else if (message.type === "rate_limit_event" && message.rate_limit_info.status === "rejected") {
           const { resetsAt } = message.rate_limit_info;
-          failure = `Claude plan rate limit reached${resetsAt ? `, resets ${new Date(resetsAt * 1000).toISOString()}` : ""}`;
+          fail(`Claude plan rate limit reached${resetsAt ? `, resets ${new Date(resetsAt * 1000).toISOString()}` : ""}`);
+        } else if (message.type === "auth_status") {
+          if (message.error !== undefined) fail(message.error);
+        } else if (message.type === "system" && message.subtype === "task_notification") {
+          // The main agent can still end cleanly after its subagent died.
+          if (message.status !== "completed") fail(`A subagent task ${message.status}: ${message.summary}`);
+        } else if (message.type === "system" && message.subtype === "model_refusal_no_fallback") {
+          fail("The model refused the request");
         } else if (message.type === "assistant") {
-          if (message.error === "rate_limit") failure ??= "Claude plan rate limit reached";
+          lastTurnSucceeded = false;
+          if (message.error !== undefined) fail(message.error === "rate_limit" ? "Claude plan rate limit reached" : message.error);
           const agent = agentOf(message);
           for (const block of message.message.content) {
             if (block.type === "text") {
@@ -227,24 +246,28 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
           if (message.subtype === "error_max_budget_usd") over = true;
           else if (message.is_error || message.subtype !== "success") {
             const detail = message.subtype === "success" ? message.result : message.errors.join("; ");
-            failure ??= detail || message.subtype;
-          } else sawSuccess = true;
+            fail(detail || message.subtype);
+          } else if (message.terminal_reason && message.terminal_reason !== "completed") {
+            fail(`The run stopped early: ${message.terminal_reason}`);
+          } else lastTurnSucceeded = true;
           if (over) break;
         }
       }
     }
   } catch (error) {
-    failure ??= errorText(error);
+    fail(errorText(error));
   } finally {
     abortController.abort();
   }
 
   yield* pending.splice(0);
-  if (!over && !failure && !sawSuccess) failure = "The run ended with no result";
+  // Success needs proof: without a valid init, the login and isolation checks never passed for this run.
+  if (!sawValidInit) fail("Refusing to report success: the run gave no init, so the login was not checked");
+  if (!lastTurnSucceeded) fail("The run ended with no result");
   if (over) yield { type: "text", agent: main, text: "Stopped: estimated cost reached RUN_BUDGET_USD." };
-  else if (failure) yield { type: "text", agent: main, text: `Run failed: ${failure}` };
+  else if (failed) yield { type: "text", agent: main, text: `Run failed: ${reason || "the run reported an error with no message"}` };
   yield { type: "text", agent: main, text: `Estimated cost: $${costUsd.toFixed(4)} (an SDK estimate, not a bill).` };
-  yield { type: "result", status: over ? "over_budget" : failure ? "error" : "success", costUsd };
+  yield { type: "result", status: over ? "over_budget" : failed ? "error" : "success", costUsd };
 }
 
 export default createAgentRuntime(async () => {
