@@ -25,6 +25,7 @@ import { type AgentTool, wrapTool } from "../src/tool-wrapper.ts";
 import { createAuditorTools } from "../src/tools/auditor.ts";
 import { createCollectorTools } from "../src/tools/collector.ts";
 import { createIntakeTools } from "../src/tools/intake.ts";
+import { withEnv } from "./with-env.ts";
 
 const databaseName = new URL(databaseUrl()).pathname.slice(1);
 assert.notEqual(databaseName, "billfighter", "this check clears findings, so give it its own DATABASE_URL");
@@ -94,10 +95,9 @@ try {
   assert.deepEqual(customer.providers, [...providers].sort());
 
   // The allowlist stops a portal tool before any browser opens.
-  const portalUrl = process.env.PORTAL_URL;
-  process.env.PORTAL_URL = "https://www.pge.com";
-  await assert.rejects(tools.get("portal_login")!.handler({ providers: ["baycurrent"] }, { runId: secondRun, agent: "collector" }), /not on the allowlist/);
-  process.env.PORTAL_URL = portalUrl;
+  await withEnv("PORTAL_URL", "https://www.pge.com", () =>
+    assert.rejects(tools.get("portal_login")!.handler({ providers: ["baycurrent"] }, { runId: secondRun, agent: "collector" }), /not on the allowlist/),
+  );
 
   // Collector. A success here means the real portal's verifyLogin accepted what fillSecret typed.
   const login = await call<{ loggedIn: { provider: Provider; vaultEntries: string[] }[]; failed: unknown[] }>("portal_login", { providers });
