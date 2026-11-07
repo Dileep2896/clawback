@@ -1,19 +1,24 @@
 import assert from "node:assert/strict";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { Db } from "@bill-fighter/db/client";
+import { actions } from "@bill-fighter/db/schema";
+import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { z } from "zod";
 import type { ApprovalGate, Budget, RunEvent, RunSpec, ToolDef } from "../types.ts";
 import adapter, { createAgentRuntime, type Query } from "./agent-runtime.ts";
+import { createApprovalGate } from "./approval-gate.ts";
+import { createBudget } from "./budget.ts";
 import { loginOptions } from "./claude-login.ts";
 import { withFakeCredentials } from "./fake-credentials.ts";
 
 const FAKE_KEY = "sk-ant-api03-not-a-real-key";
 
-/** Real runs on the Claude Code login. The gate and budget are in memory, because their adapters are in another lane. */
+/** Real runs on the Claude Code login, with the real gate and budget on a test database of their own. */
 export default async function check() {
   assert.equal(typeof adapter.run, "function");
   await withFakeCredentials(async () => {
-    await gatedSubagentRun();
+    await withTestDb("check_agent_runtime", gatedSubagentRun);
     await failsClosedWhenAKeyGetsThrough();
     await noAccountConnectorConnects();
   });
@@ -68,29 +73,34 @@ function spec(tools: ToolDef[]): RunSpec {
   };
 }
 
-async function gatedSubagentRun() {
+async function gatedSubagentRun(db: Db) {
   const handled: { actionId: string; agent: string; at: number }[] = [];
   const gateEntered: Record<string, number> = {};
   const released: Record<string, number> = {};
-  const added: number[] = [];
   const inits: { apiKeySource: string; tools: string[]; agents?: string[] }[] = [];
 
-  const gate = {
-    async waitForRelease(actionId: string) {
+  const runId = spec([]).runId;
+  await seedRun(db, runId);
+  await db.insert(actions).values(["a1", "a2"].map((id) => ({ id, kind: "call" as const, status: "queued" })));
+  const realGate = createApprovalGate(db);
+  await realGate.createBundle({ runId, actionIds: ["a1"], summary: "check" });
+  let decided: Promise<unknown> = Promise.resolve();
+  // The real gate, timed. The owner approves a second after the first call starts waiting, so a1 really has to wait.
+  const gate: ApprovalGate = {
+    ...realGate,
+    async waitForRelease(actionId, signal) {
       gateEntered[actionId] = Date.now();
-      await sleep(1000);
+      if (actionId === "a1") {
+        decided = sleep(1000).then(() =>
+          realGate.decide({ runId, status: "approved", channel: "dashboard", approvedBy: "check" }),
+        );
+      }
+      const release = await realGate.waitForRelease(actionId, signal);
       released[actionId] = Date.now();
-      return actionId === "a1";
-    },
-    isReleased: async (actionId: string) => actionId === "a1" && actionId in released,
-  } as unknown as ApprovalGate;
-  const budget: Budget = {
-    status: async () => ({ totalUsd: 0, capUsd: 5, over: false }),
-    add: async (_runId, costUsd) => {
-      added.push(costUsd);
-      return { totalUsd: costUsd, capUsd: 5, over: false };
+      return release;
     },
   };
+  const budget = createBudget(db);
   const { query: realQuery } = await import("@anthropic-ai/claude-agent-sdk");
   const tap: Query = async function* (params) {
     for await (const message of realQuery(params)) {
@@ -135,8 +145,13 @@ async function gatedSubagentRun() {
   assert.ok(denied?.type === "denied" && denied.tool === "call_provider" && denied.agent === "caller", trace);
 
   assert.ok(result.costUsd > 0, "an estimated cost must be read from the result");
-  assert.equal(added.reduce((sum, cost) => sum + cost, 0), result.costUsd, "Budget must get the estimate once");
+  // runs.cost_usd keeps 6 decimals, and the SDK's estimate has more.
+  const { totalUsd } = await budget.status(runId);
+  assert.ok(Math.abs(totalUsd - result.costUsd) < 1e-5, `Budget must get the estimate once: ${totalUsd} vs ${result.costUsd}`);
   assert.ok(trace.includes("an SDK estimate, not a bill"), "the cost must be labelled an estimate");
+
+  await decided;
+  assert.equal((await realGate.get(runId))?.status, "approved");
 }
 
 async function failsClosedWhenAKeyGetsThrough() {
