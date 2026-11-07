@@ -139,6 +139,9 @@ All checked with stubbed tests only. No call, chat rehearsal or `provision` was 
 - **`check.ts` needs real proof of a tone.** A keypad entry must have both timestamps, present and equal.
 - **`provision.ts` only detaches this lane's assistant.** Cleanup reads the number first and leaves it alone if anything else holds it. If that read fails, nothing is detached and the error says `CHECK BY HAND`.
 - **`check.ts` needs the full disclosure first.** The caller's speech before the menu must start with `DISCLOSURE_LINE`, ignoring case and punctuation. A missing, partial or late disclosure fails.
+- **`check.ts` orders a call by timestamps, not log position.** Every user and bot message needs a valid `time` and `endTime`, or the check reports it. The disclosure must end before the menu starts, the key press must come after the menu ends, and the rep's first line after it must be the greeting. Nothing but the closing line may follow the closing line.
+- **`check.ts` takes exact values.** A keypad entry must match `User's Keypad Entry: <digits>` in full, and only the value `2` reaches the rep. The disclosure must end on a word boundary. Off-script text in any alphabet is flagged. A `tool_calls` entry naming no tool fails.
+- **The prompt takes exact values.** The menu is left only on a message that is exactly `User's Keypad Entry: 2`, so `22` and `23` stay in the menu. A read-back ticket must have exactly the letters and digits `BT48213` in order. The rehearsal turns cover both, but rehearsal is NOT RUN.
 
 ### What the spike's data showed, with no new call
 
@@ -154,7 +157,9 @@ All checked with stubbed tests only. No call, chat rehearsal or `provision` was 
 - **Detaching leaves other routes on the number.** A fallback, squad or workflow route stays until cleared by hand, so a call could still follow it. The error names it.
 - **A successful attach replaces whatever held the number, and a later failure does not restore it.** Cleanup detaches our assistant and leaves the number with none, so the previous assistant must be re-attached by hand.
 - **The disclosure check allows no word differences.** A mis-heard word on a real call shows as a problem in `readback`, and needs a human to compare it with the recording. The spike's one Vapi transcript passes, but one sample doesn't show how often this happens.
-- **The updated `provision.ts` has not run against Vapi at all.** The assistant on the number is unchanged, because these fixes change no assistant config.
+- **The updated `provision.ts` has not run against Vapi at all.**
+- **`baytel-line` on Vapi still has the old prompt, which accepts any keypad message starting with `2`.** The prompt fix changes assistant config, and `provision` was not run, by the human's rule. Run `provision` before the first `voice-live-caller` full test, or that test runs the old prompt.
+- **The timestamp rules have only fixture data behind them.** They assume Vapi's `time` and `endTime` share one clock across speech, keypad and bot messages, and that a bot message's `endTime` is when it stopped. Vapi's log already doubled the spike's menu text, so a real call may flag a good call, for example "the key was pressed before the menu finished". Compare any such problem with the recording, and adjust the rule if the log is wrong.
 - **`gpt-6-luna` may ignore temperature.** Vapi accepted and returned the setting, which doesn't show the model honors it.
 - **Rep replies are not verified against the request.** The rep agrees to whatever line it is asked about, so the caller side must keep alarm lines out.
 
