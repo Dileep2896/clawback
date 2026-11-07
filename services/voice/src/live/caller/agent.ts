@@ -4,8 +4,6 @@ import { WORDS } from "../../sim/negotiator.ts";
 
 export const AGENT_NAME = "baytel-caller";
 export const CALLER_NUMBER = "+16506493210";
-// Filled in from `cli.ts provision`. While empty, the engine refuses to dial.
-export const CALLER_AGENT_ID = "" as string;
 export const MAX_CALL_MS = 300_000;
 
 const PROMPT = `You are an AI on a recorded phone call to BayTel Business on behalf of Golden Gate Noodle Company. You follow these steps in order and say only the quoted words, character for character. Never add, rephrase or ask for anything else. Say one step per turn, then wait for the reply.

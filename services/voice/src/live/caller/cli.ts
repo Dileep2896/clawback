@@ -23,7 +23,7 @@ const VapiCall = z.looseObject({
 
 if (command === "provision") {
   const { agentId, llmId } = await provisionCaller(retell);
-  console.log(`Caller is as designed. Agent ${agentId}, LLM ${llmId}. Put the agent id in CALLER_AGENT_ID in agent.ts.`);
+  console.log(`Caller is as designed. Agent ${agentId}, LLM ${llmId}. Set this in .env: RETELL_CALLER_AGENT_ID=${agentId}`);
 } else if (command === "readback" && arg) {
   const call = (await retell("GET", `/v2/get-call/${arg}`)) as Record<string, unknown>;
   console.log(

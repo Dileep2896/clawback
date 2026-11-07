@@ -6,7 +6,7 @@ import { withTestDb } from "@bill-fighter/db/test-db";
 import { allowlistFromEnv } from "@bill-fighter/shared/allowlist";
 import { negotiatorTools } from "@bill-fighter/agents/tools/negotiator";
 import { wrapTool } from "@bill-fighter/agents/tool-wrapper";
-import { runLiveCall } from "@bill-fighter/voice/live/caller/engine";
+import { liveRowProblems, runLiveCall } from "@bill-fighter/voice/live/caller/engine";
 import { SEED_PLAN, seedCallData } from "@bill-fighter/voice/sim/fixture";
 import type { TranscriptRow } from "@bill-fighter/voice/transcript";
 
@@ -42,7 +42,8 @@ await withTestDb("voice_live_test", async (db) => {
   }
 
   // Printed before the throwaway database goes, because this is the only record of the saved row.
-  for (const call of await db.select().from(calls)) {
+  const saved = await db.select().from(calls);
+  for (const call of saved) {
     const { transcriptJson, ...rest } = call;
     console.log(rest);
     for (const row of (transcriptJson ?? []) as TranscriptRow[]) console.log(`${row.at.slice(11, 19)} ${row.role}${row.kind === "speech" ? "" : ` [${row.kind}]`}: ${row.content}`);
@@ -50,5 +51,12 @@ await withTestDb("voice_live_test", async (db) => {
   if (failure) {
     console.error("CALL FAILED:", failure);
     process.exitCode = 1;
+  }
+  const problems = liveRowProblems(saved.find((call) => call.mode === "live"), SEED_PLAN);
+  if (problems.length) {
+    console.error(`TEST FAILED:\n${problems.join("\n")}`);
+    process.exitCode = 1;
+  } else {
+    console.log("TEST PASSED: all seven lines, three promo accounts, the ticket and a recording URL are saved.");
   }
 });

@@ -35,6 +35,26 @@ describe("retellClient", () => {
     await expect(retellClient("key", ALLOWED, fetchStub)("POST", "/v2/stop-call/c")).resolves.toBeNull();
   });
 
+  it("gives every request a timeout signal", async () => {
+    const fetchStub = vi.fn<typeof fetch>().mockImplementation(async () => Response.json({}));
+    const client = retellClient("key", ALLOWED, fetchStub);
+    await client("POST", "/v2/create-phone-call", { to_number: LINE_NUMBER });
+    await client("GET", "/v2/get-call/c");
+    await client("PATCH", "/update-agent/a", {});
+    for (const [, init] of fetchStub.mock.calls) expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("gives up on a request that never answers, and aborts it", async () => {
+    const fetchStub = vi.fn<typeof fetch>(() => new Promise(() => {}));
+    await expect(retellClient("key", ALLOWED, fetchStub)("GET", "/v2/get-call/c", undefined, 10)).rejects.toThrow("no answer in 10 ms");
+    expect(fetchStub.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  });
+
+  it("gives up on a response whose body never finishes", async () => {
+    const fetchStub = vi.fn<typeof fetch>().mockResolvedValue(new Response(new ReadableStream()));
+    await expect(retellClient("key", ALLOWED, fetchStub)("GET", "/v2/get-call/c", undefined, 10)).rejects.toThrow("no answer in 10 ms");
+  });
+
   it("keeps the key out of error messages", async () => {
     const fetchStub = vi.fn<typeof fetch>().mockResolvedValue(new Response("nope", { status: 401 }));
     const error = await retellClient("secret-key", ALLOWED, fetchStub)("GET", "/v2/get-call/c").catch((e: Error) => e.message);

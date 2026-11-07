@@ -9,7 +9,7 @@ import { ALARM_LINES, SEED_PLAN, seedCallData } from "../../sim/fixture.ts";
 import type { TranscriptRow } from "../../transcript.ts";
 import { LINE_NUMBER } from "../line/script.ts";
 import { CALLER_NUMBER } from "./agent.ts";
-import { runLiveCall } from "./engine.ts";
+import { liveRowProblems, runLiveCall } from "./engine.ts";
 import { endedCall, END_MS, fullCallItems, RECORDING_URL, RETELL_ID, said, START_MS, stubRetell } from "./fixture.ts";
 
 const ACTION = "call-action";
@@ -128,6 +128,123 @@ describe("a good call", () => {
   });
 });
 
+describe("the agent id", () => {
+  test("is read from the env when the call is placed", async (db) => {
+    vi.stubEnv("RETELL_CALLER_AGENT_ID", "agent-from-env");
+    const stub = stubRetell([await goodCall(db)]);
+    await run(db, stub, { agentId: undefined });
+    expect(stub.dials()[0]!.body).toMatchObject({ override_agent_id: "agent-from-env" });
+  });
+});
+
+describe("the deadline", () => {
+  const DEADLINE_MS = 200;
+  // Room for the database writes either side of the wait, and well short of any stalled request.
+  const LIMIT_MS = DEADLINE_MS + 300;
+
+  // Never answers, and ignores the abort too, as the worst case of a stalled connection.
+  function stalling(stub: ReturnType<typeof stubRetell>, stalls: (path: string) => boolean) {
+    const signals: AbortSignal[] = [];
+    let dialedAt = 0;
+    const fetchImpl: typeof fetch = (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/v2/create-phone-call") dialedAt = Date.now();
+      if (!stalls(path)) return stub.fetchImpl(input, init);
+      signals.push(init!.signal!);
+      return new Promise(() => {});
+    };
+    return { fetchImpl, signals, elapsed: () => Date.now() - dialedAt };
+  }
+
+  test("holds against a stalled poll, and the call is still stopped and charged", async (db) => {
+    const stub = stubRetell([]);
+    const stall = stalling(stub, (path) => path.startsWith("/v2/get-call/"));
+    let elapsed = Infinity;
+    await expect(run(db, stall, { deadlineMs: DEADLINE_MS, onCost: () => (elapsed = stall.elapsed()) })).rejects.toThrow("did not end in time");
+    expect(elapsed).toBeLessThan(LIMIT_MS);
+    expect(stall.signals.length).toBeGreaterThan(0);
+    expect(stall.signals.every((signal) => signal.aborted)).toBe(true);
+    expect(stub.requests.at(-1)).toMatchObject({ method: "POST", path: `/v2/stop-call/${RETELL_ID}` });
+    const { call, rows } = await onlyRow(db);
+    expect(call.endedAt).toBeInstanceOf(Date);
+    expect(rows.at(-1)!.content).toContain("did not end in time");
+  });
+
+  test("holds against a stalled stop, and the row is still closed and the fallback reached", async (db) => {
+    const onCost = vi.fn();
+    const stall = stalling(stubRetell([{ call_status: "ongoing" }]), (path) => path.startsWith("/v2/stop-call/"));
+    let elapsed = Infinity;
+    await expect(
+      run(db, stall, {
+        deadlineMs: DEADLINE_MS,
+        onCost: (usd) => {
+          elapsed = stall.elapsed();
+          onCost(usd);
+        },
+      }),
+    ).rejects.toThrow("did not end in time");
+    expect(elapsed).toBeLessThan(LIMIT_MS);
+    expect(stall.signals).toHaveLength(1);
+    expect(stall.signals[0]!.aborted).toBe(true);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining(`Stopping Retell call ${RETELL_ID} failed`));
+    expect(onCost).toHaveBeenCalledOnce();
+    expect((await onlyRow(db)).call.endedAt).toBeInstanceOf(Date);
+  });
+
+  test("holds against a stalled read while settling, and keeps what the call had", async (db) => {
+    const stub = stubRetell([await goodCall(db, { recording_url: undefined })]);
+    let reads = 0;
+    const stall = stalling(stub, (path) => path.startsWith("/v2/get-call/") && ++reads > 2);
+    let elapsed = Infinity;
+    await run(db, stall, { deadlineMs: DEADLINE_MS, settleMs: 60_000, onCost: () => (elapsed = stall.elapsed()) });
+    expect(elapsed).toBeLessThan(LIMIT_MS);
+    expect((await onlyRow(db)).call.recordingUrl).toBeNull();
+  });
+
+  test("holds with a poll gap longer than the deadline", async (db) => {
+    const stub = stubRetell([]);
+    const stall = stalling(stub, () => false);
+    let elapsed = Infinity;
+    await expect(run(db, stall, { deadlineMs: DEADLINE_MS, pollMs: 60_000, onCost: () => (elapsed = stall.elapsed()) })).rejects.toThrow("did not end in time");
+    expect(elapsed).toBeLessThan(LIMIT_MS);
+  });
+});
+
+describe("liveRowProblems", () => {
+  const lines = SEED_PLAN.cancelLines.map(lineKey);
+  const good = { mode: "live", recordingUrl: RECORDING_URL, outcomeJson: { cancelled_lines: lines, credits: SEED_PLAN.promoAccounts, ticket: "BT-48213" } };
+  const outcome = good.outcomeJson;
+
+  it("checks seven lines and three accounts", () => {
+    expect(lines).toHaveLength(7);
+    expect(SEED_PLAN.promoAccounts).toHaveLength(3);
+  });
+
+  test("passes a full call saved the way call_provider saves it", async (db) => {
+    await run(db, stubRetell([await goodCall(db)]));
+    const { call, rows } = await onlyRow(db);
+    expect(liveRowProblems({ ...call, outcomeJson: extractOutcome(rows) }, SEED_PLAN)).toEqual([]);
+  });
+
+  it("fails a disclosure and ticket with nothing confirmed, which the engine accepts", () => {
+    const problems = liveRowProblems({ ...good, outcomeJson: { cancelled_lines: [], credits: [], ticket: "BT-48213" } }, SEED_PLAN);
+    expect(problems).toHaveLength(10);
+  });
+
+  it.each([
+    ["no row", undefined, "no live row"],
+    ["a sim row", { ...good, mode: "sim" }, "no live row"],
+    ["no saved outcome", { ...good, outcomeJson: null }, "no saved outcome"],
+    ["one line short", { ...good, outcomeJson: { ...outcome, cancelled_lines: lines.slice(1) } }, `line ${lines[0]}`],
+    ["one account short", { ...good, outcomeJson: { ...outcome, credits: SEED_PLAN.promoAccounts.slice(1) } }, `promo account ${SEED_PLAN.promoAccounts[0]}`],
+    ["no ticket", { ...good, outcomeJson: { ...outcome, ticket: null } }, "the ticket is null"],
+    ["a misheard ticket", { ...good, outcomeJson: { ...outcome, ticket: "BT-48214" } }, "the ticket is BT-48214"],
+    ["no recording", { ...good, recordingUrl: null }, "no recording URL"],
+  ])("fails %s", (_, row, expected) => {
+    expect(liveRowProblems(row, SEED_PLAN)).toEqual([expect.stringContaining(expected)]);
+  });
+});
+
 describe("cost", () => {
   test("goes to the budget once, as Retell's figure plus the Vapi estimate, and is logged", async (db) => {
     const onCost = vi.fn();
@@ -177,7 +294,8 @@ describe("never dials", () => {
   refused("with an alarm line in the plan", {}, "alarm line", { plan: { ...SEED_PLAN, cancelLines: [ALARM_LINES[0]!] } });
   refused("with a line not on file", {}, "not on file", { plan: { ...SEED_PLAN, cancelLines: ["+15550009999"] } });
 
-  test("the default agent id is what the real wiring uses, and it refuses until provision fills it", async (db) => {
+  test("with no agent id in the env, which is what the real wiring reads", async (db) => {
+    vi.stubEnv("RETELL_CALLER_AGENT_ID", "");
     const stub = stubRetell([]);
     await expect(runLiveCall({ db, actionId: ACTION, plan: SEED_PLAN, onCost: () => {}, fetchImpl: stub.fetchImpl })).rejects.toThrow("not provisioned");
     expect(stub.requests).toEqual([]);

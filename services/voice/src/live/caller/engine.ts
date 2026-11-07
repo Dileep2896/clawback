@@ -4,13 +4,13 @@ import { allowlistFromEnv } from "@bill-fighter/shared/allowlist";
 import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { extractOutcome } from "../../outcome.ts";
-import { type CallPlan, checkPlan } from "../../sim/engine.ts";
+import { type CallOutcome, extractOutcome } from "../../outcome.ts";
+import { type CallPlan, checkPlan, lineKey } from "../../sim/engine.ts";
 import { appendRow, closeCall, transcriptRow, type TranscriptRow } from "../../transcript.ts";
-import { LINE_NUMBER } from "../line/script.ts";
-import { CALLER_AGENT_ID, CALLER_NUMBER, callVariables, MAX_CALL_MS } from "./agent.ts";
+import { LINE_NUMBER, TICKET_NUMBER } from "../line/script.ts";
+import { CALLER_NUMBER, callVariables, MAX_CALL_MS } from "./agent.ts";
 import { RetellItem, retellToRows } from "./normalize.ts";
-import { type Retell, retellClient } from "./retell.ts";
+import { REQUEST_TIMEOUT_MS, type Retell, retellClient } from "./retell.ts";
 
 // From the spike's billed lines (voice-design.md).
 const RETELL_USD_PER_MIN = 0.0882;
@@ -36,13 +36,17 @@ const secondsOf = (call: RetellCall) => (call.start_timestamp && call.end_timest
 const isSettled = (call: RetellCall) => Boolean(call.transcript_with_tool_calls && call.recording_url && call.call_cost);
 
 async function waitForEnd(retell: Retell, retellId: string, timing: { pollMs: number; deadlineMs: number; settleMs: number }) {
-  const read = async () => RetellCall.parse(await retell("GET", `/v2/get-call/${retellId}`));
   const deadline = Date.now() + timing.deadlineMs;
-  while (Date.now() < deadline) {
-    await pause(timing.pollMs);
+  // Polling stops early enough that the stop request also finishes inside the deadline.
+  const pollUntil = deadline - Math.min(REQUEST_TIMEOUT_MS, timing.deadlineMs / 2);
+  const left = (until: number) => Math.max(until - Date.now(), 0);
+  const limitBy = (until: number) => Math.min(REQUEST_TIMEOUT_MS, left(until));
+  const read = async (until: number) => RetellCall.parse(await retell("GET", `/v2/get-call/${retellId}`, undefined, limitBy(until)));
+  while (left(pollUntil) > 0) {
+    await pause(Math.min(timing.pollMs, left(pollUntil)));
     let call: RetellCall;
     try {
-      call = await read();
+      call = await read(pollUntil);
     } catch (error) {
       // The call is running and being paid for either way, so one bad read must not end the wait.
       console.warn(`Reading Retell call ${retellId} failed: ${textOf(error)}`);
@@ -53,14 +57,14 @@ async function waitForEnd(retell: Retell, retellId: string, timing: { pollMs: nu
       continue;
     }
     // The docs do not say when the cost and recording arrive, so wait a little for them.
-    const settleBy = Date.now() + timing.settleMs;
-    while (!isSettled(call) && Date.now() < settleBy) {
-      await pause(timing.pollMs);
-      call = await read().catch(() => call);
+    const settleBy = Math.min(Date.now() + timing.settleMs, deadline);
+    while (!isSettled(call) && left(settleBy) > 0) {
+      await pause(Math.min(timing.pollMs, left(settleBy)));
+      call = await read(settleBy).catch(() => call);
     }
     return call;
   }
-  await retell("POST", `/v2/stop-call/${retellId}`).catch((error) => console.warn(`Stopping Retell call ${retellId} failed: ${textOf(error)}`));
+  await retell("POST", `/v2/stop-call/${retellId}`, undefined, limitBy(deadline)).catch((error) => console.warn(`Stopping Retell call ${retellId} failed: ${textOf(error)}`));
   return null;
 }
 
@@ -87,6 +91,19 @@ function problemWith(call: RetellCall, rows: TranscriptRow[]): string | null {
   return null;
 }
 
+/** What stops a saved row passing the live acceptance test. The engine accepts a call with a disclosure and a ticket, and this asks for everything in the plan as well. */
+export function liveRowProblems(row: { mode: string; recordingUrl: string | null; outcomeJson: unknown } | undefined, plan: CallPlan): string[] {
+  if (row?.mode !== "live") return ["no live row was saved"];
+  const outcome = row.outcomeJson as CallOutcome | null;
+  if (!outcome) return ["the live row has no saved outcome"];
+  return [
+    ...plan.cancelLines.map(lineKey).filter((line) => !outcome.cancelled_lines.includes(line)).map((line) => `line ${line} is not in the outcome`),
+    ...plan.promoAccounts.filter((account) => !outcome.credits.includes(account)).map((account) => `promo account ${account} is not in the outcome`),
+    ...(outcome.ticket === TICKET_NUMBER ? [] : [`the ticket is ${outcome.ticket}, not ${TICKET_NUMBER}`]),
+    ...(row.recordingUrl ? [] : ["the live row has no recording URL"]),
+  ];
+}
+
 /**
  * One real call to the line, and its saved transcript. Throws on any failure, which makes call_provider fall back to sim, labelled.
  * Dials at most once per action, ever: the row goes in before the dial, so a retry or a crash cannot pay for a second call.
@@ -102,7 +119,7 @@ export async function runLiveCall(input: {
   deadlineMs?: number;
   settleMs?: number;
 }): Promise<{ callId: string }> {
-  const { db, actionId, plan, onCost, fetchImpl = fetch, agentId = CALLER_AGENT_ID, pollMs = 5000, deadlineMs = MAX_CALL_MS + 60_000, settleMs = 30_000 } = input;
+  const { db, actionId, plan, onCost, fetchImpl = fetch, agentId = process.env.RETELL_CALLER_AGENT_ID, pollMs = 5000, deadlineMs = MAX_CALL_MS + 60_000, settleMs = 30_000 } = input;
 
   const allowlist = allowlistFromEnv();
   if (allowlist.callNumbers.length !== 1 || allowlist.callNumbers[0] !== LINE_NUMBER) throw new Error(`ALLOWED_CALL_NUMBERS must hold only ${LINE_NUMBER}`);
@@ -110,7 +127,7 @@ export async function runLiveCall(input: {
   if (provider !== "retell") throw new Error(`VOICE_PROVIDER is "${provider ?? ""}", and only retell is built`);
   const apiKey = process.env.RETELL_API_KEY;
   if (!apiKey) throw new Error("RETELL_API_KEY is not set");
-  if (!agentId) throw new Error("The Retell caller is not provisioned");
+  if (!agentId) throw new Error("RETELL_CALLER_AGENT_ID is not set, so the Retell caller is not provisioned");
 
   const { planned } = await checkPlan(db, plan);
 
