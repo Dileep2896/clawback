@@ -6,7 +6,7 @@ Parse bills and run every audit rule. `packages/core` holds the schema, validati
 
 **Phase check:** `pnpm audit:local` prints the four findings near section 7 amounts, with no supplier switch advice. Separately, `scripts/parse-sample.ts` parses the real sample bill using a key.
 
-**Needs from the human:** `ANTHROPIC_API_KEY` for `bill-parser`.
+**Needs from the human:** a Claude Code login for `bill-parser`.
 
 ## Tasks
 

@@ -64,7 +64,7 @@ One non-human event starts everything, and exactly one human action happens on s
 - **PDFs:** generate synthetic bills with Playwright HTML to PDF; extract text with `pdfjs-dist` or `pdf-parse`.
 - **Scheduling:** `node-cron` locally; naïve jobs or schedules in naïve mode.
 
-Claude usage is the only paid piece in local mode. Use `ANTHROPIC_API_KEY` (bare or SDK mode reads this) and keep a per-run cost cap.
+Claude usage is the only metered piece in local mode. It runs on the Claude Code login with no `ANTHROPIC_API_KEY`, and keeps a per-run cost cap on estimated cost.
 
 ---
 
@@ -318,6 +318,7 @@ VOICE_MODE=sim                 # sim | live
 RUN_BUDGET_USD=5
 
 # claude (agent runtime, local mode and LLM calls)
+# Optional and unused in local mode: Claude runs through the local Claude Code login.
 ANTHROPIC_API_KEY=
 CLAUDE_MODEL=sonnet
 

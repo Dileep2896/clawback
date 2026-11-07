@@ -6,7 +6,7 @@ Wire the CEO and member agents to tools and the approval gate, so one email star
 
 **Phase check:** `demo-start` runs everything with no human input and stops at one pending approval.
 
-**Needs from the human:** `ANTHROPIC_API_KEY`.
+**Needs from the human:** a Claude Code login.
 
 ## Tasks
 

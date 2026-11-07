@@ -70,7 +70,7 @@ Hours are from the moment `repo-skeleton` starts. A lane starts once its depende
 | Item | Env var | First needed | Lane | Required? |
 |---|---|---|---|---|
 | Docker, Node 20+, pnpm | none | M0 | `repo-skeleton` | Yes |
-| Anthropic API key with credit | `ANTHROPIC_API_KEY` | M1 | `platform-agent-runtime` | Yes, this blocks the agent and parser lanes |
+| Claude Code login (no API key in local mode) | none | M1 | `platform-agent-runtime` | Yes, this blocks the agent and parser lanes |
 | OpenEI key (free) | `OPENEI_API_KEY` | M3 work, moved ahead of M2 | `tariff-data` | Yes, this blocks seed data unless fallback tariffs are used |
 | Stripe test account | `STRIPE_SECRET_KEY` (`sk_test_` only) | M7 | `finance-invoice` | Yes |
 | Retell account with KYC done and a card on file ($10 free credit, number costs $2 a month and can take up to 2 minutes to provision) | `VOICE_PROVIDER=retell`, `RETELL_API_KEY` | M6 | `voice-live-spike` | Yes, live voice is a must-have |

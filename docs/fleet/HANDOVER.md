@@ -14,6 +14,7 @@ Picked up 2026-11-06
 - For run-trigger: wrap runtime.run() in auditDenied from tool-wrapper.ts; create the run row before tools run, because audit_log.run_id is a foreign key.
 - For finance-invoice: refuse a non-test Stripe key at call or run start, never at import, because one throwing tool file breaks the whole tool scan.
 - For agents-e2e: a gated call parks in waitForRelease while approval is pending; check this against "stops at one pending approval". fillSecret is first exercised by the collector tools.
+- Sim call measured 163 s, about three times the 50 s the demo script gives it, and about 16% of a $5 run budget. Not batched. Live call stays the primary; decide at rehearsal between speeding up the sim display, batching, or replay.
 - Portal login needs `pnpm seed:portal` once on main, with VAULT_KEY set, before the first full run.
 
 ## Waiting on the human

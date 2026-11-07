@@ -6,7 +6,7 @@ Define the section 5 interfaces and build all the local adapters, so business lo
 
 **Phase check:** `scripts/check-platform.ts` calls each interface once and every local check passes.
 
-**Needs from the human:** `ANTHROPIC_API_KEY` for `platform-agent-runtime`. `VAULT_KEY` is generated locally and needs no account.
+**Needs from the human:** a Claude Code login for `platform-agent-runtime`. `VAULT_KEY` is generated locally and needs no account.
 
 ## Tasks
 
