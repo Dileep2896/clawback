@@ -69,7 +69,8 @@ describe("handleInbound", () => {
       expect(reply.body.duplicate).toBe(false);
 
       const row = await finished(db, reply.body.runId as string);
-      expect(row).toMatchObject({ customerId: "noodle", trigger: "email", platform: "local", dedupeKey: "msg-1", status: "success" });
+      // The stub model does none of the plan, so planGaps marks the run incomplete. Its row is what this test is about.
+      expect(row).toMatchObject({ customerId: "noodle", trigger: "email", platform: "local", dedupeKey: "msg-1", status: "incomplete" });
       expect(run).toHaveBeenCalledOnce();
       // parse_inbound_email takes the whole email, so the model must be given every field.
       const prompt = run.mock.calls[0]![0].prompt;
@@ -150,7 +151,8 @@ describe("handleInbound", () => {
       });
       const reply = await handleInbound(email(), deps);
       const row = await finished(db, reply.body.runId as string);
-      expect(row.status).toBe("success");
+      // Finished, not failed: incomplete only because the stub does none of the plan.
+      expect(row.status).toBe("incomplete");
       const audited = await db.select().from(auditLog).where(eq(auditLog.runId, row.id));
       expect(audited.map(({ agent, tool }) => ({ agent, tool }))).toEqual([{ agent: "intake", tool: "get_customer" }]);
     });

@@ -2,6 +2,7 @@ import type { Db } from "@bill-fighter/db/client";
 import { runs } from "@bill-fighter/db/schema";
 import type { AgentRuntime, Audit, InboundEmail, RunEvent } from "@bill-fighter/platform/types";
 import { eq, inArray } from "drizzle-orm";
+import { planGaps } from "./plan-check.ts";
 import { INTERRUPTED, reportStop, stopMessage } from "./retry.ts";
 import { buildRunSpec } from "./roster.ts";
 import { stripeTestKey } from "./stripe-key.ts";
@@ -59,6 +60,20 @@ export async function executeRun({
   } catch (error) {
     status = "error";
     console.error(`Run ${runId} failed:`, error);
+  }
+  // The SDK's success only means the model stopped talking, so the database says whether the plan finished.
+  if (status === "success") {
+    try {
+      const gaps = await planGaps(db, runId);
+      if (gaps.length > 0) {
+        status = "incomplete";
+        reason = gaps.join(" ");
+        for (const gap of gaps) onEvent?.({ type: "text", agent: "run", text: `Plan not finished: ${gap}` });
+      }
+    } catch (error) {
+      status = "error";
+      console.error(`Run ${runId}: could not check whether its plan finished:`, error);
+    }
   }
   active.delete(runId);
   const save = (async () => {
