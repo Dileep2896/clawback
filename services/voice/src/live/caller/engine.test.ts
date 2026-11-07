@@ -115,6 +115,26 @@ describe("a good call", () => {
     expect(extractOutcome((await onlyRow(db)).rows).ticket).toBe("BT-48213");
   });
 
+  test("reads the plain transcript if the tool one is empty", async (db) => {
+    const call = await goodCall(db);
+    const stub = stubRetell([{ ...call, transcript_with_tool_calls: [], transcript_object: call.transcript_with_tool_calls }]);
+    await run(db, stub, { settleMs: 2000 });
+    expect(extractOutcome((await onlyRow(db)).rows).ticket).toBe("BT-48213");
+  });
+
+  test("keeps waiting while the ended call's transcript is empty", async (db) => {
+    const good = await goodCall(db);
+    const stub = stubRetell([{ ...good, transcript_with_tool_calls: [] }, good]);
+    await expect(run(db, stub, { settleMs: 2000 })).resolves.toHaveProperty("callId");
+    expect(extractOutcome((await onlyRow(db)).rows).ticket).toBe("BT-48213");
+    expect(stub.requests.filter((request) => request.path === `/v2/get-call/${RETELL_ID}`)).toHaveLength(3);
+  });
+
+  test("fails the call if the transcript is still empty when the wait runs out", async (db) => {
+    const stub = stubRetell([await goodCall(db, { transcript_with_tool_calls: [] })]);
+    await expect(run(db, stub, { settleMs: 20 })).rejects.toThrow("did not open with the disclosure");
+  });
+
   test("waits for a late recording and cost after the call ends", async (db) => {
     const good = await goodCall(db);
     const onCost = vi.fn();

@@ -33,7 +33,9 @@ const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const textOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const secondsOf = (call: RetellCall) => (call.start_timestamp && call.end_timestamp ? (call.end_timestamp - call.start_timestamp) / 1000 : 0);
 
-const isSettled = (call: RetellCall) => Boolean(call.transcript_with_tool_calls && call.recording_url && call.call_cost);
+// Retell can answer with an empty list before the transcript is ready, so empty counts as not there yet.
+const transcriptOf = (call: RetellCall) => (call.transcript_with_tool_calls?.length ? call.transcript_with_tool_calls : (call.transcript_object ?? []));
+const isSettled = (call: RetellCall) => Boolean(transcriptOf(call).length && call.recording_url && call.call_cost);
 
 async function waitForEnd(retell: Retell, retellId: string, timing: { pollMs: number; deadlineMs: number; settleMs: number }) {
   const deadline = Date.now() + timing.deadlineMs;
@@ -174,7 +176,7 @@ export async function runLiveCall(input: {
 
     const startMs = call.start_timestamp ?? Date.now();
     // Normalised here, so extractOutcome reads a live call the same way as a sim one.
-    const rows = retellToRows(call.transcript_with_tool_calls ?? call.transcript_object ?? [], startMs);
+    const rows = retellToRows(transcriptOf(call), startMs);
     const ended = transcriptRow("system", "status", `Retell call ${retellId} ended: ${call.disconnection_reason ?? call.call_status}.`);
     await db
       .update(calls)
