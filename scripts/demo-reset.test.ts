@@ -24,6 +24,7 @@ import {
   scheduledChecks,
   smsMessages,
   usageIntervals,
+  users,
 } from "@bill-fighter/db/schema";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { createAudit } from "@bill-fighter/platform/local/audit";
@@ -338,6 +339,40 @@ describe("demoReset", () => {
       });
       expect(await runRowCounts(db)).toEqual(ONE_OF_EACH);
       expect((await db.$client.query("select * from later_table")).rows).toHaveLength(1);
+    }));
+
+  it("keeps every sign-up and its uploads when the reset fails, at any step", () =>
+    withFullDb(async (db, runsDir) => {
+      const signup = "signup-customer";
+      await db.insert(customers).values({ id: signup, name: "Mission Dumplings", contactName: "Sam", contactEmail: "sam@example.com", contactPhone: "" });
+      await db.insert(users).values({ name: "Sam", company: "Mission Dumplings", email: "sam@example.com", passwordHash: "x:y", customerId: signup, createdCustomer: true });
+      await db.insert(locations).values({ id: "signup-loc", customerId: signup, name: "10 Valencia St", address: "10 Valencia St", city: "San Francisco" });
+      await db.insert(accounts).values({ id: "signup-acct", locationId: "signup-loc", provider: "baycurrent", accountNumber: "BE-9001", serviceType: "electric" });
+      await db.insert(bills).values({ id: "signup-bill", accountId: "signup-acct", periodStart: "2026-09-01", periodEnd: "2026-09-30", totalCents: 2000 });
+      const uploadsDir = mkdtempSync(join(root, "uploads-"));
+      mkdirSync(join(uploadsDir, signup));
+      const signupRows = async () => [(await db.select().from(users)).length, (await db.select().from(customers)).length, (await db.select().from(bills)).length];
+      const kept = await signupRows();
+
+      // Mailpit down, the seed changing mid-reset, and a run id that cannot name a folder all fail after the sign-ups were found.
+      await expect(demoReset({ ...(await options(db, "http://127.0.0.1:1", runsDir)), uploadsDir })).rejects.toThrow(/Cannot reach Mailpit/);
+      await db.$client.query("create function lose_a_phone_line() returns trigger language plpgsql as $$ begin delete from phone_lines; return null; end $$");
+      await db.$client.query("create trigger lose_a_phone_line before truncate on sms_messages execute function lose_a_phone_line()");
+      await withMailpit(200, async (api) => {
+        await expect(demoReset({ ...(await options(db, api, runsDir)), uploadsDir })).rejects.toThrow(/The seed changed during the reset/);
+      });
+      await db.$client.query("drop trigger lose_a_phone_line on sms_messages");
+      await db.insert(runs).values({ id: "../escape", customerId: CUSTOMER, platform: "local", trigger: "email", status: "done" });
+      await withMailpit(200, async (api) => {
+        await expect(demoReset({ ...(await options(db, api, runsDir)), uploadsDir })).rejects.toThrow(/cannot name a folder/);
+      });
+      expect(await signupRows()).toEqual(kept);
+      expect(existsSync(join(uploadsDir, signup))).toBe(true);
+
+      await db.$client.query("delete from runs where id = '../escape'");
+      await withMailpit(200, async (api) => expect(await demoReset({ ...(await options(db, api, runsDir)), uploadsDir })).toMatchObject({ signups: 1 }));
+      expect(await signupRows()).toEqual([0, kept[1]! - 1, kept[2]! - 1]);
+      expect(existsSync(join(uploadsDir, signup))).toBe(false);
     }));
 
   it("rolls the tables back if the seed changes during the reset", () =>
