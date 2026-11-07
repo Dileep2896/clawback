@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "pnpm --filter @bill-fighter/db migrate",
     "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
+    "seed:portal": "tsx --env-file-if-exists=.env scripts/seed-portal-credentials.ts",
     "audit:local": "tsx --env-file-if-exists=.env scripts/audit-local.ts",
     "check-platform": "tsx --env-file-if-exists=.env scripts/check-platform.ts",
     "demo:start": "tsx --env-file-if-exists=.env scripts/demo-start.ts",
