@@ -9,6 +9,7 @@ import { z } from "zod";
 import { cancellableLines, customerOfRun } from "../findings.ts";
 import { amountsIn, assertNoOwnNumbers } from "../letters/numbers.ts";
 import { defineTool } from "../tool-wrapper.ts";
+import { letterActionId } from "./filer.ts";
 
 type Deps = {
   db: Db;
@@ -84,18 +85,18 @@ export function approverTools({
           // No amount: finance-invoice computes the fee.
           created.push({ id: `invoice-${runId}`, findingId: null, kind: "invoice", payloadJson: { customerId: customer.id }, status: "proposed" });
         }
-        if (created.length > 0) await db.insert(actions).values(created).onConflictDoNothing({ target: actions.id });
 
         // A run gets one approval, so a letter the model forgot to list could never be filed.
-        const letters = await db.select({ id: actions.id }).from(actions).where(like(actions.id, `letter-${runId}-%`));
+        // The LIKE only narrows: run "run" also matches run "run-2", so the exact id decides.
+        const letters = (await db.select({ id: actions.id, findingId: actions.findingId }).from(actions).where(like(actions.id, `letter-${runId}-%`)))
+          .filter((letter) => letter.findingId && letter.id === letterActionId(runId, letter.findingId));
+        const own = [...created.map((action) => action.id!), ...letters.map((letter) => letter.id)];
+        const foreign = actionIds.filter((id) => !own.includes(id));
+        if (foreign.length > 0) throw new Error(`Run ${runId}: not actions of this run: ${foreign.join(", ")}`);
+
+        if (created.length > 0) await db.insert(actions).values(created).onConflictDoNothing({ target: actions.id });
         const figures = `Refund to claim: ${dollars(totals.refundCents)}. Yearly savings: ${dollars(totals.annualSavingsCents)}.`;
-        return view(
-          await approvals.createBundle({
-            runId,
-            actionIds: [...actionIds, ...created.map((action) => action.id!), ...letters.map((letter) => letter.id)],
-            summary: `${summary}\n\n${figures}`,
-          }),
-        );
+        return view(await approvals.createBundle({ runId, actionIds: own, summary: `${summary}\n\n${figures}` }));
       },
     }),
 

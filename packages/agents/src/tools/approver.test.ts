@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALARM_NUMBER, FAX_NUMBER, run as runTool, seedFindings } from "../test-fixtures.ts";
 import { wrapTool } from "../tool-wrapper.ts";
 import { approverTools } from "./approver.ts";
+import { letterActionId } from "./filer.ts";
 
 const RUN = "run";
 const SUMMARY = "Please approve the claim, the rate changes and the cancellations.";
@@ -107,17 +108,38 @@ describe("request_approval", () => {
     expect(JSON.stringify(invoice!.payloadJson)).not.toMatch(/\d{3}|amount|cents/i);
   });
 
-  test("the bundle holds the model's ids, and a letter the model forgot", async (db) => {
-    await seedFindings(db, RUN);
+  test("the bundle holds the model's ids, and a letter the model forgot, but no other run's letter", async (db) => {
+    const { id } = await seedFindings(db, RUN);
+    const other = await seedFindings(db, `${RUN}-2`);
+    const foreign = letterActionId(`${RUN}-2`, other.id("meter"));
     await db.insert(actions).values([
-      { id: "listed", kind: "letter", status: "proposed" },
-      { id: `letter-${RUN}-forgotten`, kind: "claim", status: "proposed" },
-      { id: "letter-otherrun-x", kind: "claim", status: "proposed" },
+      { id: letterActionId(RUN, id("meter")), findingId: id("meter"), kind: "claim", status: "proposed" },
+      { id: letterActionId(RUN, id("rate")), findingId: id("rate"), kind: "plan_change", status: "proposed" },
+      // This run's id is a prefix of that run's id, so a prefix match would take it.
+      { id: foreign, findingId: other.id("meter"), kind: "claim", status: "proposed" },
     ]);
-    const { actionIds } = await setup(db).request(["listed"]);
-    expect(actionIds).toEqual(expect.arrayContaining(["listed", `letter-${RUN}-forgotten`]));
-    expect(actionIds).not.toContain("letter-otherrun-x");
+    const { request } = setup(db);
+    await expect(request([foreign])).rejects.toThrow(/not actions of this run/);
+    const { actionIds } = await request([letterActionId(RUN, id("meter"))]);
+    expect(actionIds).toEqual(expect.arrayContaining([letterActionId(RUN, id("meter")), letterActionId(RUN, id("rate"))]));
+    expect(actionIds).not.toContain(foreign);
     expect(new Set(actionIds).size).toBe(actionIds.length);
+  });
+
+  test("refuses another run's action, also a denied run's, and writes nothing", async (db) => {
+    await seedFindings(db, RUN);
+    const other = await seedFindings(db, "other");
+    const foreign = letterActionId("other", other.id("meter"));
+    await db.insert(actions).values({ id: foreign, findingId: other.id("meter"), kind: "claim", status: "proposed" });
+    const { request, gate } = setup(db);
+
+    await expect(request([foreign])).rejects.toThrow(/not actions of this run/);
+    await gate.createBundle({ runId: "other", actionIds: [foreign], summary: "s" });
+    await gate.decide({ runId: "other", status: "denied", channel: "dashboard", approvedBy: "Linda" });
+    await expect(request([foreign])).rejects.toThrow(/not actions of this run/);
+
+    expect(await gate.get(RUN)).toBeNull();
+    expect((await db.select().from(actions)).map((action) => action.id)).toEqual([foreign]);
   });
 
   test("a second call reuses the row, also after the decision", async (db) => {
@@ -158,7 +180,7 @@ describe("request_approval", () => {
     await seedFindings(db, RUN);
     const { request } = setup(db);
     await expect(request([], "Save $20,000 a year!")).rejects.toThrow(/\$20,000/);
-    await expect(request(["no-such-action"])).rejects.toThrow(/unknown actions/);
+    await expect(request(["no-such-action"])).rejects.toThrow(/not actions of this run/);
     expect(await db.select().from(approvals)).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pdfText } from "@bill-fighter/core/parser/pdf";
@@ -152,11 +152,41 @@ describe("attach_evidence", () => {
     await expect(call("attach_evidence", { actionIds: [actionId] })).rejects.toThrow(`Bill ${id("bill-b")}`);
   });
 
-  test("refuses another run's letter", async (db) => {
+  test("refuses another run's letter, also when this run's id is a prefix of that run's", async (db) => {
     const { draft, call } = await setup(db);
     await seedFindings(db, "other", dir);
     const { actionId } = await draft("meter");
     await expect(call("attach_evidence", { actionIds: [actionId] }, "other")).rejects.toThrow(/not a letter of this run/);
+
+    const prefixed = `${RUN}-2`;
+    const { id } = await seedFindings(db, prefixed, dir);
+    const longer = letterActionId(prefixed, id("meter"));
+    await db.insert(actions).values({ id: longer, findingId: id("meter"), kind: "claim", status: "proposed", payloadJson: { letterPath: "unused.pdf" } });
+    await expect(call("attach_evidence", { actionIds: [longer] })).rejects.toThrow(/not a letter of this run/);
+  });
+
+  test("the approved PDF cannot change once the action is in a bundle, even when its source evidence does", async (db) => {
+    const { draft, call, gate, id } = await setup(db);
+    const { actionId } = await draft("meter");
+    const [{ evidencePath }] = (await call("attach_evidence", { actionIds: [actionId] })) as [{ evidencePath: string }];
+    const [before] = await db.select().from(actions).where(eq(actions.id, actionId));
+    const pdfBefore = read(evidencePath);
+    await gate.createBundle({ runId: RUN, actionIds: [actionId], summary: "s" });
+
+    const changed = await PDFDocument.create();
+    changed.addPage().drawText("A different bill");
+    writeFileSync(join(dir, `${id("bill-a")}.pdf`), await changed.save());
+    const [finding] = await db.select().from(findings).where(eq(findings.id, id("meter")));
+    const evidence = finding!.evidenceJson as { billIds: string[] };
+    await db.update(findings).set({ evidenceJson: { ...evidence, billIds: [id("bill-a")] } }).where(eq(findings.id, id("meter")));
+
+    await expect(call("attach_evidence", { actionIds: [actionId] })).rejects.toThrow(/can no longer change/);
+    await gate.decide({ runId: RUN, status: "approved", channel: "dashboard", approvedBy: "Linda" });
+    await expect(call("attach_evidence", { actionIds: [actionId] })).rejects.toThrow(/can no longer change/);
+
+    expect(read(evidencePath).equals(pdfBefore)).toBe(true);
+    expect((await db.select().from(actions).where(eq(actions.id, actionId)))[0]!.payloadJson).toEqual(before!.payloadJson);
+    await expect(call("submit_claim", { actionId })).resolves.toMatchObject({ status: "done" });
   });
 });
 
@@ -189,6 +219,28 @@ describe("submit_claim and change_rate_plan", () => {
     await gate.decide({ runId: RUN, status: "denied", channel: "dashboard", approvedBy: "Linda" });
     await expect(call("submit_claim", { actionId })).rejects.toThrow(/not in an approved bundle/);
     expect(await statuses(db, actionId, findingId)).toEqual({ action: "proposed", finding: "proposed" });
+  });
+
+  test("refuse an action approved only for another run, from a run with no bundle or a denied one", async (db) => {
+    const { call, gate, actionId, findingId } = await ready(db, "meter");
+    await seedFindings(db, "other", dir);
+    await gate.createBundle({ runId: RUN, actionIds: [actionId], summary: "s" });
+    await gate.decide({ runId: RUN, status: "approved", channel: "dashboard", approvedBy: "Linda" });
+
+    await expect(call("submit_claim", { actionId }, "other")).rejects.toThrow(/not in an approved bundle/);
+    await gate.createBundle({ runId: "other", actionIds: [actionId], summary: "s" });
+    await gate.decide({ runId: "other", status: "denied", channel: "dashboard", approvedBy: "Linda" });
+    await expect(call("submit_claim", { actionId }, "other")).rejects.toThrow(/not in an approved bundle/);
+    expect(await statuses(db, actionId, findingId)).toEqual({ action: "proposed", finding: "proposed" });
+  });
+
+  test("refuse an action the run's own approved bundle does not hold", async (db) => {
+    const { draft, call, gate, actionId } = await ready(db, "meter");
+    const { actionId: planId } = await draft("rate");
+    await call("attach_evidence", { actionIds: [planId] });
+    await gate.createBundle({ runId: RUN, actionIds: [actionId], summary: "s" });
+    await gate.decide({ runId: RUN, status: "approved", channel: "dashboard", approvedBy: "Linda" });
+    await expect(call("change_rate_plan", { actionId: planId })).rejects.toThrow(/not in an approved bundle/);
   });
 
   test("one approval releases both, changing only status columns, and a repeat changes nothing", async (db) => {

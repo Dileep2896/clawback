@@ -15,7 +15,7 @@ import { defineTool } from "../tool-wrapper.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 
-type Deps = { db: Db; gate: () => Promise<Pick<ApprovalGate, "get" | "isReleased">>; lettersDir: string };
+type Deps = { db: Db; gate: () => Promise<Pick<ApprovalGate, "get">>; lettersDir: string };
 
 type LetterPayload = { letterPath: string; evidencePath?: string };
 
@@ -39,9 +39,12 @@ export function filerTools({
       description,
       inputSchema: z.object({ actionId: z.string().min(1) }),
       targets: () => [],
-      async handler({ actionId }) {
-        // The runtime gates this too, but the plan has every gated tool check, and a naïve "ask" may not check the id.
-        if (!(await (await gate()).isReleased(actionId))) throw new Error(`Action ${actionId} is not in an approved bundle`);
+      async handler({ actionId }, { runId }) {
+        // The runtime gates this too, but its release is global: only this run's own approval may file for it.
+        const approval = await (await gate()).get(runId);
+        if (approval?.status !== "approved" || !approval.actionIds.includes(actionId)) {
+          throw new Error(`Action ${actionId} is not in an approved bundle of run ${runId}`);
+        }
         const [action] = await db.select().from(actions).where(eq(actions.id, actionId));
         if (action?.kind !== kind || !action.findingId) throw new Error(`Action ${actionId} is not a ${kind} action`);
         if (!(action.payloadJson as LetterPayload | null)?.evidencePath) throw new Error(`Action ${actionId} has no evidence attached`);
@@ -120,6 +123,10 @@ export function filerTools({
       inputSchema: z.object({ actionIds: z.array(z.string().min(1)).min(1) }),
       targets: () => [],
       async handler({ actionIds }, { runId }) {
+        // What the owner was asked to approve must stay what gets filed, so check before any file is written.
+        const bundled = (await (await gate()).get(runId))?.actionIds ?? [];
+        const frozen = actionIds.filter((actionId) => bundled.includes(actionId));
+        if (frozen.length > 0) throw new Error(`Run ${runId} has already asked for approval, so the evidence of ${frozen.join(", ")} can no longer change`);
         return Promise.all(
           actionIds.map(async (actionId) => {
             const [row] = await db
@@ -127,7 +134,8 @@ export function filerTools({
               .from(actions)
               .innerJoin(findings, eq(actions.findingId, findings.id))
               .where(eq(actions.id, actionId));
-            if (!row || !actionId.startsWith(`letter-${runId}-`)) throw new Error(`Action ${actionId} is not a letter of this run`);
+            // Exact, not a prefix: run "run" must not rewrite the frozen PDF of run "run-2".
+            if (!row || actionId !== letterActionId(runId, row.finding.id)) throw new Error(`Action ${actionId} is not a letter of this run`);
             const { letterPath } = row.action.payloadJson as LetterPayload;
             const { billIds, billLineIds, phoneLineIds } = FindingEvidence.parse(row.finding.evidenceJson);
             const rows = await db.select().from(bills).where(inArray(bills.id, billIds));
