@@ -166,6 +166,46 @@ Use the `hallmark` skill (anti-generic design) first, then `frontend-design`. St
 
 **parallel with:** naive lanes
 
+### `landing-live`
+
+**Goal:** Third landing attempt. Human, 2026-11-07: "the landing page is still boring AI slop". The human chose the **"Agents at work (live)"** direction: the hero plays a short, real run. Their chosen sketch:
+
+```
+● Collector   downloading 12 bills ...  ✓
+● Auditor     Fremont meter billed 2x   !
+● Negotiator  calling BayTel            ☎
+  "Please cancel line (415) 555-0102"
+  "Yes, that is cancelled."
+● Finance     refund claimed
+       $ 1 2 , 6 0 6 . 0 6  ▲
+  Your bills are wrong. Agents fix them.
+         [ Start my audit ]
+```
+
+Build it as the first screen, full height, dark:
+- A scripted, looping playback (about 15 to 20 s) of the real demo run: agent rows light up in order with real text from the recorded run (`data/replay/`, the audit log, the call transcript), the call lines type out, the refund counter rolls up to $12,606.06, the finding rows flash the overcharge. Every word and number comes from the real run; nothing invented.
+- It must feel like watching software work: monospace or tabular figures for the live rows, a strong display face for the headline, real timing (not all at once), subtle status dots, a progress line. No gradient blobs, no glassmorphism, no icon grids, no emoji (use real glyphs or small drawn SVGs, not ☎ emoji).
+- `prefers-reduced-motion`: show the finished state, no animation. Pause when off-screen. No layout shift.
+- Below the hero keep the rest of today's landing (the "follow one overcharge" strip, the market section, what the owner kept, footer), tightened to match the new hero. Delete anything that reads generic.
+- Pure CSS and small client code; no new animation library unless a few lines cannot do it.
+
+Use the `hallmark` skill and run its audit; fix what it flags. Before calling it done, look at your own screenshots and ask: "Would a design-literate founder think a human designer made this?" If not, iterate.
+
+**Estimate:** 2 hours
+
+**Acceptance checks:**
+- A short screen recording or 4 to 6 frame screenshots of the hero animation at 1920x1080, plus 390x844, in `.fleet-lane/`.
+- Every animated value traces to the recorded run; list the sources in the lane notes.
+- Reduced-motion shows a complete, static hero.
+- `scripts/dashboard-shell-check.ts`, `pnpm test`, lint and typecheck pass. Only landing files change.
+
+**Likely files:**
+- `apps/dashboard/app/page.tsx`, `apps/dashboard/components/landing/`
+
+**depends on:** landing-redesign
+
+**parallel with:** naive lanes
+
 ### `rehearsal-product`
 
 **Goal:** Rehearse the new stage flow in sim mode: `demo:reset`, sign up, connect BayCurrent, start, watch `/agents`, approve, end on the Overview. Time it against the 3 to 4 minute slot, recapture the replay if the screens changed, and update `docs/plan/rehearsal-notes.md`. No live calls; the human decides on a live rehearsal afterwards.
