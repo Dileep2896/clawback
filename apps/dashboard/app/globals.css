@@ -15,6 +15,9 @@
   --register: #17313b;
   --register-text: #f7faf8;
   --stamp: #8e0c3e;
+  /* Chart bars only, never text. Run through the dataviz palette validator against --sheet, including for colour blindness. */
+  --bar-billed: #c2185b;
+  --bar-real: #00889f;
 }
 
 :root[data-theme="dark"] {
@@ -28,6 +31,8 @@
   --register: #e7efec;
   --register-text: #0e1f26;
   --stamp: #ff7ca8;
+  --bar-billed: #e0528a;
+  --bar-real: #2aa5b8;
 }
 
 @theme inline {
@@ -40,6 +45,8 @@
   --color-drum: var(--drum);
   --color-drum-text: var(--drum-text);
   --color-stamp: var(--stamp);
+  --color-bar-billed: var(--bar-billed);
+  --color-bar-real: var(--bar-real);
 }
 
 body {
@@ -82,8 +89,24 @@ body {
   height: 4.5rem;
 }
 
+/* A card arriving in a row starts in the title band's colours, so the room's eye catches the move. */
+@keyframes card-arrive {
+  from {
+    background: var(--drum);
+    color: var(--drum-text);
+  }
+}
+
+.board-card {
+  animation: card-arrive 1200ms ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .drum-strip {
     transition: none;
+  }
+
+  .board-card {
+    animation: none;
   }
 }
