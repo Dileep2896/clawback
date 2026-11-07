@@ -79,6 +79,14 @@ naïve has no bundle confirm. `ApprovalGate` stays **ours**, and naïve's `ask` 
 ### Open items for naive-runtime-adapter
 
 - **Board digest sessions are not covered by the ownership tracking.** When cards finish or block, naïve starts a separate coordinator session with a board digest ([team/board](https://usenaive.ai/docs/team/board.md)). It is neither a root's thread nor a card's `woken_session_id`, so step 3 never records it, and any gated call it makes stays parked. `naive-runtime-adapter` verifies this live and either tracks these sessions (and their descendants) against the run, or turns the board digest off for demo runs.
+  **Resolved (naive-runtime-adapter):** the coordinator's `board` is off, so no digest sessions start. Our `board_cards` are the record and each card is mirrored, unassigned, to the coordinator's naïve board.
+
+### Found live by naive-runtime-adapter (2026-11-07), for naive-rehearsal
+
+- **Confirmed by the probe:** a member's `ask` parks the **member** session (`parent_session_id` = root), and the root shows `awaiting_delegation`. naïve also lists the member's parked call in the root's `pending_actions`, so the adapter answers each `tool_call_id` once. The confirm event's `actor` is our API key; the person is in `approvals`.
+- **Allowed MCP tools still ask after mail text:** `parse_inbound_email` is set to `allow` but was parked as `ask` once the session had read the bill email. The adapter allows a parked tool that is this run's own and ungated, and denies a parked tool that is not this run's own. The tool server still checks gated tools against the approval.
+- **Sonnet's pre-flight quote is above $0.25 a call.** naïve quotes an upper bound before each model call. On `anthropic/claude-sonnet-5.5`, a session budget under $0.25 is refused at `POST /v1/sessions` (402 `budget_exceeded`, nothing charged). The $2 run cap works. A cheap probe needs `NAIVE_MODEL=anthropic/claude-haiku-5.5`.
+- **Run settings:** agents are `clawback-<agent>`, on the newest Sonnet in `GET /v1/models` unless `NAIVE_MODEL` is set. Each run's session budget is min($2, what is left of `RUN_BUDGET_USD`). Each agent has an $8-a-day period cap, so three rehearsal runs and a retry fit. The tool server listens on `NAIVE_MCP_PORT` (8790) behind `NAIVE_MCP_PUBLIC_URL`, with a per-run bearer in the `clawback-mcp` vault that is deleted when the run ends.
 
 ## Blockers and what can't work Saturday (with fallbacks)
 

@@ -11,9 +11,9 @@ export default async function check() {
     const board = createBoard(db, async (card) => {
       mirrored.push(card.status);
     });
-    const card = await board.create({ runId: "run", agent: "check", title: "check" });
+    const card = await board.create({ runId: "run", agent: "clawback-check", title: "check" });
     await board.move(card.id, "done");
-    assert.deepEqual((await board.list("run")).map((row) => row.status), ["done"]);
+    assert.deepEqual((await board.list("run")).map((row) => [row.agent, row.status]), [["check", "done"]]);
     assert.deepEqual(mirrored, ["todo", "done"]);
   });
 }

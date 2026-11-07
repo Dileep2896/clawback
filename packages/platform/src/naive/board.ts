@@ -8,7 +8,8 @@ export function createBoard(db: Db, mirror: typeof mirrorCard = mirrorCard): Boa
   const local = createLocalBoard(db);
   return {
     async create(card) {
-      const row = await local.create(card);
+      // The CEO knows members by their naïve names (clawback-<agent>); the dashboard shows roster names (seen live).
+      const row = await local.create({ ...card, agent: card.agent.replace(/^clawback-/, "") });
       await mirror(row);
       return row;
     },
