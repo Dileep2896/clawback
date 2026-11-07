@@ -1,6 +1,6 @@
 import type { BillFixture } from "@bill-fighter/shared/fixtures";
 import { Finding } from "@bill-fighter/shared/finding";
-import { RateSchedule } from "@bill-fighter/shared/tariff";
+import { RateSchedule, type Tariff } from "@bill-fighter/shared/tariff";
 import { priceUsage, type Interval } from "../tariff/price-usage.ts";
 import { billsOf, dollars, type AuditInput } from "./input.ts";
 
@@ -18,8 +18,8 @@ function monthsBefore(date: string, months: number) {
 }
 
 // shortcut: a gap of exactly half a bill's intervals would look like a doubled bill, so check interval counts if real meter feeds are ever loaded.
-function compare(bill: BillFixture, intervals: Interval[], tariffFor: AuditInput["tariffFor"]) {
-  const metered = priceUsage(intervals, tariffFor(RateSchedule.parse(bill.rateSchedule)), {
+function compare(bill: BillFixture, intervals: Interval[], tariff: Tariff) {
+  const metered = priceUsage(intervals, tariff, {
     start: bill.periodStart,
     end: bill.periodEnd,
   });
@@ -44,8 +44,13 @@ export function meterMultiplierJump(input: AuditInput): Finding[] {
     const intervals = input.intervals[account.id];
     if (!intervals || bills.length === 0) continue;
 
-    // A bill with no intervals to compare proves nothing, so it never joins a run.
-    const rows = bills.map((b) => compare(b, intervals, input.tariffFor)).filter((r) => r.intervalKwh > 0);
+    // A bill with no usable schedule or no intervals to compare proves nothing, so it never joins a run.
+    const rows = bills
+      .flatMap((b) => {
+        const schedule = RateSchedule.safeParse(b.rateSchedule);
+        return schedule.success ? [compare(b, intervals, input.tariffFor(schedule.data))] : [];
+      })
+      .filter((r) => r.intervalKwh > 0);
     const anchor = bills.at(-1)!.periodEnd;
     const claimFrom = monthsBefore(anchor, CLAIM_MONTHS);
     const savingsFrom = monthsBefore(anchor, SAVINGS_MONTHS);

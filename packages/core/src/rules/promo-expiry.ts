@@ -2,11 +2,18 @@ import type { BillFixture } from "@bill-fighter/shared/fixtures";
 import { Finding } from "@bill-fighter/shared/finding";
 import { billsOf, dollars, type AuditInput } from "./input.ts";
 
-const usage = (bill: BillFixture) =>
-  JSON.stringify([bill.lines.map((l) => [l.description, l.quantity, l.unit]), bill.kwhByTouPeriod, bill.maxKw]);
+// Sorted, not a set: the order a bill prints its lines in is not usage, but a repeated line is.
+const unordered = (entries: unknown[]) => entries.map((e) => JSON.stringify(e)).sort();
 
-// Whole numbers, so exactly 30% cannot pass on float noise.
-const upOver30Percent = (from: BillFixture, to: BillFixture) => to.totalCents * 100 > from.totalCents * 130;
+const usage = (bill: BillFixture) =>
+  JSON.stringify([
+    unordered(bill.lines.map((l) => [l.description, l.quantity, l.unit])),
+    unordered(bill.kwhByTouPeriod.map((p) => [p.period, p.kwh])),
+    bill.maxKw,
+  ]);
+
+// Whole numbers, so exactly 30% cannot pass on float noise. A credit or $0 baseline has no percentage to compare.
+const upOver30Percent = (from: BillFixture, to: BillFixture) => from.totalCents > 0 && to.totalCents * 100 > from.totalCents * 130;
 
 export function promoExpiry(input: AuditInput): Finding[] {
   return input.accounts.flatMap((account) => {

@@ -161,6 +161,23 @@ describe("meterMultiplierJump", () => {
     expect(finding!.refundCents).toBe(2 * OVERBILLED_AT_2X);
     expect(finding!.evidence.billIds).not.toContain(bills[3]!.id);
   });
+
+  it.each([null, "E-19"])("leaves a bill with schedule %s out of the claim", (rateSchedule) => {
+    const bills = swapped(3);
+    bills[3] = { ...bills[3]!, rateSchedule };
+    const [finding] = meterMultiplierJump(input(bills));
+    expect(finding!.refundCents).toBe(2 * OVERBILLED_AT_2X);
+    expect(finding!.evidence.billIds).not.toContain(bills[3]!.id);
+  });
+
+  it("still audits other accounts when one has no usable schedule or intervals", () => {
+    const broken = { ...electric, id: "a-broken", rateSchedule: null };
+    const bills = [bill(0, { id: "x", accountId: broken.id, rateSchedule: null }), ...swapped(3)];
+    const findings = meterMultiplierJump(
+      input(bills, { accounts: [broken, electric], intervals: { [broken.id]: [], [ACCOUNT]: intervalsFor(5) } }),
+    );
+    expect(findings.map((f) => f.accountId)).toEqual([ACCOUNT]);
+  });
 });
 
 describe("promoExpiry", () => {
@@ -208,6 +225,39 @@ describe("promoExpiry", () => {
   it("counts two steps up once, from the first price to the latest", () => {
     const findings = promoExpiry(input([flat(0, 10_000), flat(1, 14_000), flat(2, 20_000)]));
     expect(findings.map((f) => f.annualSavingsCents)).toEqual([120_000]);
+  });
+
+  it.each([
+    ["an unchanged credit", -1_000, -1_000],
+    ["a growing credit", -1_000, -1_100],
+    ["a shrinking credit", -1_000, -500],
+    ["a credit turning into a charge", -1_000, 500],
+    ["a rise from $0", 0, 500],
+  ])("ignores %s, which has no positive price to compare", (_, from, to) => {
+    expect(promoExpiry(input([flat(0, from), flat(1, to)]))).toEqual([]);
+  });
+
+  describe("with several lines", () => {
+    const line = (id: string, description: string) =>
+      ({ id, description, quantity: 1, unit: "month", rate: null, amountCents: 0, lineType: "internet" }) as const;
+    const a = line("a", "Internet");
+    const b = line("b", "Static IP");
+
+    it("still finds the rise when the same lines print in another order", () => {
+      expect(promoExpiry(input([flat(0, 9_500, { lines: [a, b] }), flat(1, 18_500, { lines: [b, a] })]))).toHaveLength(1);
+    });
+
+    it("still finds the rise when the same kWh periods print in another order", () => {
+      const peak = { period: "peak", kwh: 10 };
+      const offPeak = { period: "off-peak", kwh: 20 };
+      const bills = [flat(0, 9_500, { kwhByTouPeriod: [peak, offPeak] }), flat(1, 18_500, { kwhByTouPeriod: [offPeak, peak] })];
+      expect(promoExpiry(input(bills))).toHaveLength(1);
+    });
+
+    it("counts a repeated line as usage", () => {
+      expect(promoExpiry(input([flat(0, 9_500, { lines: [a, a, b] }), flat(1, 18_500, { lines: [a, b, b] })]))).toEqual([]);
+      expect(promoExpiry(input([flat(0, 9_500, { lines: [a, b] }), flat(1, 18_500, { lines: [a, a, b] })]))).toEqual([]);
+    });
   });
 });
 
