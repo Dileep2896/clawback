@@ -11,6 +11,16 @@ export async function PortalFrame({ session, children }: { session: Session; chi
     <>
       <div inert={showModal}>
         <BrandBand brand={BRANDS[session.provider]} />
+        <nav aria-label="Portal" className="mx-auto flex max-w-5xl gap-6 px-4 pt-6 sm:px-8">
+          <a href="/accounts" data-testid="nav-accounts" className="underline">
+            Accounts
+          </a>
+          {session.provider === "baytel" && (
+            <a href="/lines" data-testid="nav-lines" className="underline">
+              Phone lines
+            </a>
+          )}
+        </nav>
         <main className="mx-auto max-w-5xl px-4 py-8 sm:px-8">{children}</main>
       </div>
       {showModal && <SessionModal />}
