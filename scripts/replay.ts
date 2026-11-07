@@ -14,6 +14,7 @@ type Pool = Db["$client"];
 type Row = Record<string, unknown>;
 
 // What the dashboard shows, parents first. Every one has a text id.
+// Not scheduled_checks: no panel shows it, and a running scheduler fires any due pending row, which would start a real model run from a replay.
 const TABLES = ["runs", "findings", "actions", "approvals", "calls", "ledger", "board_cards", "audit_log", "sms_messages"];
 // One statement, so each read is one consistent view. Tool inputs and outputs never reach the browser, so they stay out of a committed file.
 const SCAN = TABLES.map((table) => `select '${table}' as tbl, x.id as id, to_jsonb(x)${table === "audit_log" ? " - 'input_json'::text - 'output_json'::text" : ""} as row from ${table} x`).join(" union all ");
@@ -68,6 +69,9 @@ export function recordingProblems(recording: Recording, secrets: string[]) {
   const approved = isRow(final, "approvals").filter(({ status }) => status === "approved").length;
   if (approved !== 1) problems.push(`expected one human action, found ${approved}`);
   if (isRow(final, "ledger").length === 0) problems.push("no ledger rows");
+  // The SDK calls a run a success even when a step could not finish, and a backup must not show that on stage.
+  const blocked = isRow(final, "board_cards").filter(({ status }) => status === "blocked").map(({ title }) => String(title));
+  if (blocked.length > 0) problems.push(`board cards ended blocked: ${blocked.join(", ")}`);
   const calls = isRow(final, "calls");
   if (calls.length === 0) problems.push("no call");
   if (calls.some(({ mode }) => mode !== "sim")) problems.push("a call is not sim");

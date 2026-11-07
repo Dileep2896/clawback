@@ -104,6 +104,7 @@ describe("recordingProblems", () => {
     ["a live call", up(600, "calls", { ...callRow([], null), mode: "live" }), /not sim/],
     ["a sim call that fell back from live", up(600, "calls", callRow([{ role: "system", kind: "fallback", content: "Live call failed" }], null)), /fell back/],
     ["a second run", up(600, "runs", { ...runRow("success"), id: "other" }), /one run/],
+    ["a blocked board card", up(600, "board_cards", { id: "b1", run_id: RUN, agent: "monitor", title: "Schedule next month's check", status: "blocked" }), /ended blocked: Schedule next month's check/],
   ])("refuses %s", (_name, event, problem) => {
     expect(recordingProblems(recordingOf([...GOOD_EVENTS, event]), []).join()).toMatch(problem);
   });
