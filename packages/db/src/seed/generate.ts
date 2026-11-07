@@ -259,7 +259,7 @@ export function generateSeed(): Seed {
     );
 
     seed.accounts.push(
-      account(store, "pacific_power", "electric", "PP", { rateSchedule: store.schedule, meterNumber: store.meter }),
+      account(store, "baycurrent", "electric", "BE", { rateSchedule: store.schedule, meterNumber: store.meter }),
       account(store, "baytel", "telecom", "BT"),
       account(store, "bayconnect", "internet", "BC"),
     );

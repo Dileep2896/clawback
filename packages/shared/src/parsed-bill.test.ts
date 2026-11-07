@@ -3,9 +3,9 @@ import { z } from "zod";
 import { ParsedBill } from "./parsed-bill.ts";
 
 const electric = {
-  accountNumber: "PP-1001",
+  accountNumber: "BE-1001",
   serviceAddress: "1 Market St, Fremont, CA",
-  providerName: "Pacific Power",
+  providerName: "BayCurrent Electric",
   serviceType: "electric",
   meterNumber: "M-2",
   multiplier: 2,

@@ -44,7 +44,7 @@ describe("generateSeed", () => {
       vi.useRealTimers();
     }
     // Changes on a tariff refresh, on purpose: data/parsed/ is then stale and bills need reparsing.
-    expect(createHash("sha256").update(json).digest("hex")).toBe("9e9269a5c9f18c76a48fe4db5619aefe9f532943536e6759325078144addcf19");
+    expect(createHash("sha256").update(json).digest("hex")).toBe("47feb9b66d4a7079f94bac43d3e953e5fb015b90ed396f73b3312e70c4b732c9");
   }, SLOW);
 
   it("creates 12 locations, 37 accounts and 448 bills", () => {

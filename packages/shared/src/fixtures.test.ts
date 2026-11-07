@@ -38,7 +38,7 @@ const bill = {
 
 describe("enums", () => {
   it("use the agreed spellings", () => {
-    expect(Provider.options).toEqual(["pacific_power", "baytel", "bayconnect", "bayhearth"]);
+    expect(Provider.options).toEqual(["baycurrent", "baytel", "bayconnect", "bayhearth"]);
     expect(ServiceType.options).toEqual(["electric", "gas", "telecom", "internet"]);
   });
 

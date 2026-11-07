@@ -8,6 +8,13 @@
       "when": 1794006367169,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794014361201,
+      "tag": "0001_rename_provider_baycurrent",
+      "breakpoints": true
     }
   ]
 }
