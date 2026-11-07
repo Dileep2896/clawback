@@ -67,6 +67,8 @@ export function createParseCache({ dir, llm }: { dir: string; llm?: Pick<Llm, "s
       const pdfSha256 = sha256(pdf);
       const path = join(dir, `${pdfSha256}.${SCHEMA_HASH}.json`);
       const hit = readEntry(path);
+      // Same bytes under another id: returning the entry would give the caller the wrong bill and evidence line ids.
+      if (hit && hit.source !== source) throw new Error(`Parse cache entry ${path} belongs to source ${hit.source}, but source ${source} was requested`);
       if (hit) return { ...hit, cached: true };
       if (!llm) throw new Error(`No cached parse for ${source} (${pdfSha256}). Bills must be parsed ahead of time with scripts/parse-bills.ts.`);
 

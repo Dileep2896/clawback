@@ -67,6 +67,14 @@ describe("createParseCache", () => {
     expect(await createParseCache({ dir }).parse(PDF, "bill-1")).toMatchObject({ cached: true, bill: GOOD });
   });
 
+  it("rejects a hit whose entry belongs to a different source, naming both", async () => {
+    const llm = llmReturning(GOOD);
+    const cache = createParseCache({ dir, llm });
+    await cache.parse(PDF, "bill-1");
+    await expect(cache.parse(PDF, "bill-2")).rejects.toThrow(/bill-1.*bill-2|bill-2.*bill-1/);
+    expect(llm.structured).toHaveBeenCalledOnce();
+  });
+
   it("fails visibly on a miss with no LLM, naming the bill", async () => {
     await expect(createParseCache({ dir }).parse(PDF, "bill-1")).rejects.toThrow(/No cached parse for bill-1/);
   });
