@@ -11,7 +11,7 @@ function Total({ label, testId, big, children }: { label: string; testId: string
   return (
     <div className="flex items-baseline justify-between gap-3">
       <dt className={big ? "font-semibold" : undefined}>{label}</dt>
-      <dd data-testid={testId} className={`text-right font-semibold tabular-nums ${big ? "font-figure text-[2.5rem] leading-tight text-money" : ""}`}>
+      <dd data-testid={testId} className={`text-right font-semibold tabular-nums ${big ? "font-figure text-[3rem] leading-tight text-money" : ""}`}>
         {children}
       </dd>
     </div>
