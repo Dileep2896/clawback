@@ -14,13 +14,14 @@ const LOCAL_HOSTS = ["localhost", "127.0.0.1", "::1", "[::1]"];
 export type ResetOptions = {
   pool: Db["$client"];
   url: string;
-  mailpitApi: string;
+  /** Null leaves mail alone: replay must work with only Postgres up. */
+  mailpitApi: string | null;
   runsDir: string;
   allowNonlocal: boolean;
 };
 
 /** Before any connection, so a refused target is never touched. */
-function checkTarget({ url, mailpitApi, allowNonlocal }: ResetOptions) {
+export function checkTarget({ url, mailpitApi, allowNonlocal }: Pick<ResetOptions, "url" | "mailpitApi" | "allowNonlocal">) {
   const parsed = new URL(url);
   // Ask pg, because ?host=, its repeats and its encodings can all send it somewhere other than the URL's hostname.
   const host = databaseHost(url);
@@ -28,11 +29,11 @@ function checkTarget({ url, mailpitApi, allowNonlocal }: ResetOptions) {
     throw new Error(`Refusing to reset a database on "${host}", which is not local. Set DEMO_RESET_ALLOW_NONLOCAL=1 only if that really is the demo's database.`);
   }
   if (!decodeURIComponent(parsed.pathname.slice(1))) throw new Error("Refusing to reset: DATABASE_URL names no database.");
-  if (!LOCAL_HOSTS.includes(new URL(mailpitApi).hostname)) throw new Error(`Refusing to clear mail at ${mailpitApi}, which is not local Mailpit.`);
+  if (mailpitApi && !LOCAL_HOSTS.includes(new URL(mailpitApi).hostname)) throw new Error(`Refusing to clear mail at ${mailpitApi}, which is not local Mailpit.`);
 }
 
 /** Asks the server, because PGDATABASE or an encoded path can connect pg to a database the URL does not name. */
-async function checkConnected({ pool, url }: ResetOptions) {
+export async function checkConnected({ pool, url }: Pick<ResetOptions, "pool" | "url">) {
   const named = decodeURIComponent(new URL(url).pathname.slice(1));
   let connected: string;
   try {
@@ -92,7 +93,7 @@ export async function demoReset(options: ResetOptions) {
     console.warn(`Clearing runs still marked running: ${running.join(", ")}. If one is alive, its agents will wrap up and can write into the next run, so restart \`pnpm dev:webhooks\`.`);
   }
 
-  await clearMailpit(mailpitApi);
+  if (mailpitApi) await clearMailpit(mailpitApi);
   // shortcut: a folder with no row stays on disk, which is harmless because every run gets a new id. Wiping the parent would delete other lanes' live runs.
   await Promise.all(runRows.map(({ id }) => rm(join(runsDir, id), { recursive: true, force: true })));
   await clearTables(pool, seed);

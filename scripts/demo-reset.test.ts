@@ -166,6 +166,12 @@ describe("demoReset", () => {
       expect(existsSync(join(runsDir, "another-lanes-run"))).toBe(true);
     }));
 
+  it("clears the database with no Mailpit at all when told to leave mail alone", () =>
+    withFullDb(async (db, runsDir) => {
+      await demoReset({ ...(await options(db, "http://unused", runsDir)), mailpitApi: null });
+      expect(await runRowCounts(db)).toEqual(NONE);
+    }));
+
   it("warns about a run still marked running", () =>
     withFullDb(async (db, runsDir) => {
       await withMailpit(200, async (api) => demoReset(await options(db, api, runsDir)));
