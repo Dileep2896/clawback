@@ -6,7 +6,7 @@ import type { Audit } from "@bill-fighter/platform/types";
 import type { Allowlist } from "@bill-fighter/shared/allowlist";
 import { LINE_NUMBER } from "@bill-fighter/voice/live/line/script";
 import { runSimCall } from "@bill-fighter/voice/sim/engine";
-import { SEED_PLAN, seedCallData } from "@bill-fighter/voice/sim/fixture";
+import { SEED_PLAN, seedCallData, seedCallFacts } from "@bill-fighter/voice/sim/fixture";
 import { stubLlm } from "@bill-fighter/voice/sim/stub-llm";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -91,6 +91,7 @@ describe("record_savings", () => {
   test("items the rep refused on a real sim call are not counted, and their confirmed siblings are", async (db) => {
     const call = "call-action";
     await seedCallData(db, call);
+    await seedCallFacts(db, call);
     await db.update(actions).set({ payloadJson: SEED_PLAN }).where(eq(actions.id, call));
     await db.insert(runs).values({ id: RUN, customerId: CUSTOMER.id, platform: "local", trigger: "manual", status: "running" });
 

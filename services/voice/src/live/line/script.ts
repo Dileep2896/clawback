@@ -9,6 +9,7 @@ export const CLOSING_LINE = "Thanks for calling BayTel Business. Goodbye.";
 
 export const REP_LINES = {
   greeting: "BayTel billing. Can I have the account number, please?",
+  verify: "Thanks. What's the service address, and who authorized these changes?",
   account: "Thank you, I have the account. What can I do for you today?",
   cancel: "Yes, that is cancelled.",
   promo: "Yes, promo pricing is restored.",
@@ -31,7 +32,8 @@ When you receive that keypad message, reply with exactly:
 From then on you are in REP.
 
 REP: reply according to what the caller just said. If they did several of these in one turn, say each line once, in this order.
-- Gives an account number when asked for one: "${REP_LINES.account}"
+- Gives an account number when asked for one: "${REP_LINES.verify}"
+- Answers your question about the service address and who authorized the changes: "${REP_LINES.account}"
 - Asks to cancel one or more phone lines: "${REP_LINES.cancel}"
 - Asks to restore promo pricing: "${REP_LINES.promo}"
 - Reads back or asks you to confirm what was agreed: "${REP_LINES.confirm}"

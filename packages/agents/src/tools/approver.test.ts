@@ -14,7 +14,7 @@ import { eq, inArray } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALARM_NUMBER, FAX_NUMBER, run as runTool, seedFindings } from "../test-fixtures.ts";
 import { wrapTool } from "../tool-wrapper.ts";
-import { approverTools } from "./approver.ts";
+import { approverTools, bundleLines } from "./approver.ts";
 import { filerTools, letterActionId } from "./filer.ts";
 
 const RUN = "run";
@@ -99,6 +99,7 @@ describe("request_approval: the call-provider-tool contract", () => {
 
     expect(bundle.actionIds).toEqual(expect.arrayContaining([`call-${RUN}`, `invoice-${RUN}`, ...cancels.map((findingId) => `cancel-${RUN}-${findingId}`)]));
     expect(bundle.actionIds).not.toContain("unrelated-action");
+    expect(bundle.summary).toContain("On the BayTel call we will cancel 7 unused lines and ask to restore 3 promo rates.");
   });
 });
 
@@ -185,6 +186,58 @@ describe("request_approval", () => {
     await expect(request([], "Save $20,000 a year!")).rejects.toThrow(/\$20,000/);
     await expect(request(["no-such-action"])).rejects.toThrow(/not actions of this run/);
     expect(await db.select().from(approvals)).toEqual([]);
+  });
+});
+
+describe("what the owner is told the bundle does", () => {
+  const call = (cancelLines: string[], promoAccounts: string[]) => ({ kind: "call", payloadJson: { accountNumber: "A", cancelLines, promoAccounts } });
+  const bare = (kind: string, count = 1) => Array.from({ length: count }, () => ({ kind, payloadJson: null }));
+
+  it("words a call from its plan's counts, dropping an empty half", () => {
+    const seven = Array.from({ length: 7 }, (_, line) => `line-${line}`);
+    expect(bundleLines([call(seven, ["a", "b", "c"])])).toEqual(["On the BayTel call we will cancel 7 unused lines and ask to restore 3 promo rates."]);
+    expect(bundleLines([call(["l", "m"], ["a", "b"])])).toEqual(["On the BayTel call we will cancel 2 unused lines and ask to restore 2 promo rates."]);
+    expect(bundleLines([call(["l"], [])])).toEqual(["On the BayTel call we will cancel 1 unused line."]);
+    expect(bundleLines([call([], ["a"])])).toEqual(["On the BayTel call we will ask to restore 1 promo rate."]);
+  });
+
+  it("lists every other kind with its count, and says nothing about a kind not in the bundle", () => {
+    expect(bundleLines([...bare("claim"), ...bare("plan_change", 2), ...bare("letter", 3), ...bare("invoice"), ...bare("cancel", 3)])).toEqual([
+      "We will file 1 Rule 17.1 refund claim.",
+      "We will file 2 Rule 12 rate change requests.",
+      "We have drafted 3 cancellation letters for those lines.",
+      "We will invoice you for our fee.",
+    ]);
+    expect(bundleLines([])).toEqual([]);
+  });
+
+  it("refuses a kind it has no wording for, so nothing can be approved unmentioned", () => {
+    expect(() => bundleLines(bare("card_pay"))).toThrow(/no wording for a card_pay action/);
+  });
+
+  test("the summary and the text both carry it, even when the model's text leaves it out", async (db) => {
+    await seedFindings(db, RUN);
+    const { tools, request } = setup(db);
+    const { summary } = await request();
+    const sentence = "On the BayTel call we will cancel 1 unused line and ask to restore 1 promo rate.";
+    expect(summary).toContain(sentence);
+    expect(summary).toContain("We will invoice you for our fee.");
+    // The panel shows the top of the summary, so the code-built lines and figures come before the model's wording.
+    expect(summary.startsWith(sentence)).toBe(true);
+    expect(summary.indexOf("Refund to claim:")).toBeLessThan(summary.indexOf(SUMMARY));
+    expect(summary.endsWith(SUMMARY)).toBe(true);
+
+    await runTool(tools, "send_sms", { body: "Your approval is waiting. Reply YES." }, RUN);
+    const [row] = await db.select().from(smsMessages);
+    expect(row!.body).toBe(`Your approval is waiting. Reply YES.\n\n${sentence}\nWe will invoice you for our fee.`);
+  });
+
+  test("the model's own text is still refused a number of its own", async (db) => {
+    await seedFindings(db, RUN);
+    const { tools, request } = setup(db);
+    await request();
+    await expect(runTool(tools, "send_sms", { body: "Cancel 9 lines. Reply YES." }, RUN)).rejects.toThrow(/may not hold numbers/);
+    expect(await db.select().from(smsMessages)).toEqual([]);
   });
 });
 

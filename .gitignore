@@ -20,5 +20,7 @@ test-results/
 data/bills/
 data/seed/
 data/letters/
+# Written by each run, for diagnosing a failed one.
+data/run-events/
 # PG&E's copyrighted sample, downloaded by pnpm parse:sample. Never committed, nor is its parsed result.
 data/samples/

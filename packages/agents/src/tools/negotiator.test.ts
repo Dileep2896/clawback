@@ -1,5 +1,5 @@
 import type { Db } from "@bill-fighter/db/client";
-import { accounts, actions, calls, findings, phoneLines } from "@bill-fighter/db/schema";
+import { accounts, actions, approvals, boardCards, calls, findings, phoneLines } from "@bill-fighter/db/schema";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { createCanUseTool } from "@bill-fighter/platform/local/agent-runtime";
@@ -11,13 +11,14 @@ import { runLiveCall } from "@bill-fighter/voice/live/caller/engine";
 import { endedCall, fullCallItems, said, stubRetell } from "@bill-fighter/voice/live/caller/fixture";
 import { LINE_NUMBER } from "@bill-fighter/voice/live/line/script";
 import { checkPlan, lineKey, runSimCall } from "@bill-fighter/voice/sim/engine";
-import { ALARM_LINES, SEED_PLAN, seedCallData } from "@bill-fighter/voice/sim/fixture";
+import { ALARM_LINES, SEED_PLAN, seedCallData, seedCallFacts } from "@bill-fighter/voice/sim/fixture";
 import { stubLlm } from "@bill-fighter/voice/sim/stub-llm";
 import type { TranscriptRow } from "@bill-fighter/voice/transcript";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadTools } from "../registry.ts";
 import { wrapTool } from "../tool-wrapper.ts";
+import { letterActionId } from "./filer.ts";
 import { negotiatorTools, type NegotiatorDeps } from "./negotiator.ts";
 
 const CALL = "call-action";
@@ -27,14 +28,18 @@ const LINE = SEED_PLAN.cancelLines[0]!;
 const PROMO = SEED_PLAN.promoAccounts[0]!;
 const STATUS = { totalUsd: 0, capUsd: 5, over: false };
 
-const test = (name: string, fn: (db: Db) => Promise<void>) =>
+const seeded = (name: string, fn: (db: Db) => Promise<void>, approved: boolean) =>
   it(name, () =>
     withTestDb("negotiator_tool", async (db) => {
       await seedCallData(db, CALL);
       await db.update(actions).set({ payloadJson: SEED_PLAN }).where(eq(actions.id, CALL));
+      if (approved) await seedCallFacts(db, CALL);
       await fn(db);
     }),
   );
+const test = (name: string, fn: (db: Db) => Promise<void>) => seeded(name, fn, true);
+// For the gate's own tests, which make their own bundles.
+const unapproved = (name: string, fn: (db: Db) => Promise<void>) => seeded(name, fn, false);
 
 // One finding and one cancel action for a line, the shape tools-file-approve creates.
 async function seedCancel(db: Db, number: string, id: string) {
@@ -119,14 +124,14 @@ describe("approval", () => {
     };
   }
 
-  test("both tools are blocked with no bundle, and without an actionId", async (db) => {
+  unapproved("both tools are blocked with no bundle, and without an actionId", async (db) => {
     const { callTool, cancelTool } = await decisions(db);
     expect(await callTool()).toMatchObject({ behavior: "deny" });
     expect(await cancelTool()).toMatchObject({ behavior: "deny" });
     expect(await callTool({})).toMatchObject({ behavior: "deny" });
   });
 
-  test("a denied bundle blocks both tools", async (db) => {
+  unapproved("a denied bundle blocks both tools", async (db) => {
     await seedRun(db, "run-1");
     const { gate, callTool, cancelTool } = await decisions(db);
     await gate.createBundle({ runId: "run-1", actionIds: [CALL], summary: "s" });
@@ -135,7 +140,7 @@ describe("approval", () => {
     expect(await cancelTool()).toMatchObject({ behavior: "deny" });
   });
 
-  test("one approval releases both tools with no second decision", async (db) => {
+  unapproved("one approval releases both tools with no second decision", async (db) => {
     await seedRun(db, "run-1");
     const { gate, callTool, cancelTool } = await decisions(db);
     await gate.createBundle({ runId: "run-1", actionIds: [CALL], summary: "s" });
@@ -432,6 +437,27 @@ describe("the live engine behind call_provider, on a stubbed Retell", () => {
     expect(stub.dials()).toHaveLength(1);
   });
 
+  test("when the fallback fails too, the dashboard says so, and a retry still never dials again", async (db) => {
+    await seedRun(db, CTX.runId);
+    const stub = stubRetell([], { dialStatus: 500 });
+    const down: Llm = {
+      structured: async () => {
+        throw new DOMException("The model did not answer within 60 s", "TimeoutError");
+      },
+    };
+    const { call } = setup(db, { live: liveWith(db, stub), llm: down });
+    // setup's approved bundle feeds the caller's fact sheet, so only a new approval would be wrong.
+    const approvalsBefore = await db.$count(approvals);
+    await expect(call()).rejects.toThrow("did not answer");
+    await expect(call()).rejects.toThrow("did not answer");
+    expect(stub.dials()).toHaveLength(1);
+    expect(await actionStatus(db, CALL)).not.toBe("done");
+    const cards = await db.select().from(boardCards).where(eq(boardCards.agent, "run"));
+    expect(cards).toMatchObject([{ status: "blocked", title: expect.stringContaining("provider call could not be completed") }]);
+    expect(cards[0]!.title).not.toContain("HTTP 500");
+    expect(await db.$count(approvals)).toBe(approvalsBefore);
+  });
+
   test("user_hangup does not start the fallback", async (db) => {
     const stub = stubRetell([await goodCall(db)]);
     const { call, sim } = setup(db, { live: liveWith(db, stub) });
@@ -449,6 +475,23 @@ describe("cancel_service", () => {
     await expect(cancel(id, callId)).resolves.toEqual({ recorded: LINE });
     expect(await statusOf(db, id)).toBe("won");
     expect(await actionStatus(db, id)).toBe("done");
+  });
+
+  test("closes this run's letter for a confirmed line, and a refused line's letter stays open", async (db) => {
+    const won = await seedCancel(db, SEED_PLAN.cancelLines[1]!, "won-line");
+    const refused = await seedCancel(db, LINE, "refused-line");
+    const letter = (findingId: string, runId = CTX.runId) => ({ id: letterActionId(runId, findingId), findingId, kind: "letter" as const, status: "proposed" });
+    await db.insert(actions).values([letter(won), letter(refused), letter(won, "other-run")]);
+    const { call, cancel } = setup(db, { refuse: [LINE] });
+    const { callId } = await call();
+
+    await cancel(won, callId);
+    await cancel(won, callId);
+    await expect(cancel(refused, callId)).rejects.toThrow("does not confirm");
+
+    expect(await actionStatus(db, letterActionId(CTX.runId, won))).toBe("done");
+    expect(await actionStatus(db, letterActionId(CTX.runId, refused))).toBe("proposed");
+    expect(await actionStatus(db, letterActionId("other-run", won))).toBe("proposed");
   });
 
   test("never records an alarm line, even when a tampered outcome lists it", async (db) => {

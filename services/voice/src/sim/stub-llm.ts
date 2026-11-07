@@ -11,7 +11,8 @@ export function repAnswer(prompt: string) {
   if (last === `Caller: ${DISCLOSURE_LINE}`) return { lines: [MENU_LINE], endCall: false };
   if (last === "Caller: User's Keypad Entry: 2") return { lines: [REP_LINES.greeting], endCall: false };
   if (last.includes("To confirm") || last.includes("repeat")) return { lines: [REP_LINES.confirm], endCall: false };
-  if (last.includes("account number is")) return { lines: [REP_LINES.account], endCall: false };
+  if (last.includes("service address is")) return { lines: [REP_LINES.account], endCall: false };
+  if (last.includes("account number is")) return { lines: [REP_LINES.verify], endCall: false };
   if (last.includes("cancel")) return { lines: [REP_LINES.cancel], endCall: false };
   if (last.includes("promo")) return { lines: [REP_LINES.promo], endCall: false };
   if (last.includes("ticket number")) return { lines: [REP_LINES.ticket], endCall: false };

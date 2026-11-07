@@ -3,6 +3,7 @@
 import { type FormEvent, useState } from "react";
 import { post } from "../../lib/post.ts";
 import { replayOf } from "../../lib/replay.ts";
+import { isStopped, STOPPED_TEXT } from "../../lib/run-state.ts";
 import { useFollow } from "../../lib/use-follow.ts";
 import { useLive } from "../../lib/use-live.tsx";
 import { Panel } from "../panel.tsx";
@@ -22,7 +23,9 @@ export function Phone() {
   }
   const contact = snapshot?.customer?.contactName ?? "Owner";
   const local = run?.platform === "local";
-  const canReply = local && !replayOf(run) && sms.some((message) => message.direction === "outbound");
+  const asked = local && !replayOf(run) && sms.some((message) => message.direction === "outbound");
+  const stopped = isStopped(run?.status);
+  const canReply = asked && !stopped;
   const anchor = useFollow(sms.length);
 
   async function send(event: FormEvent) {
@@ -60,6 +63,11 @@ export function Phone() {
             );
           })}
         </ul>
+        {asked && stopped && snapshot?.approval?.status === "pending" && (
+          <p data-testid="sms-stopped" className="font-semibold text-stamp">
+            {STOPPED_TEXT}
+          </p>
+        )}
         {canReply && (
           <form onSubmit={send} className="sticky bottom-0 grid gap-1 bg-sheet pt-1">
             <label htmlFor="sms-reply" className="font-semibold">

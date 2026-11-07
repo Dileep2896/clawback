@@ -4,8 +4,8 @@ import type { TranscriptRow } from "./transcript.ts";
 
 export type CallOutcome = { cancelled_lines: string[]; credits: string[]; ticket: string | null };
 
-const PHONE_NUMBER = /(?<!\d)(?:\+?1[ .-]?)?\(?\d{3}\)?[ .-]?\d{3}[ .-]?\d{4}(?!\d)/g;
-const PROMO_ACCOUNT = /\bBC-\d+\b/g;
+export const PHONE_NUMBER = /(?<!\d)(?:\+?1[ .-]?)?\(?\d{3}\)?[ .-]?\d{3}[ .-]?\d{4}(?!\d)/g;
+export const PROMO_ACCOUNT = /\bBC-\d+\b/g;
 
 // Speech-to-text punctuates and spells freely, so only the words are compared.
 const words = (text: string) =>

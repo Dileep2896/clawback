@@ -5,12 +5,13 @@ import { withTestDb } from "@bill-fighter/db/test-db";
 import { getPlatform } from "@bill-fighter/platform/factory";
 import type { TranscriptRow } from "../transcript.ts";
 import { runSimCall } from "./engine.ts";
-import { SEED_PLAN, seedCallData } from "./fixture.ts";
+import { SEED_PLAN, seedCallData, seedCallFacts } from "./fixture.ts";
 
 const llm = await getPlatform().llm();
 
 await withTestDb("voice_sim_run", async (db) => {
   await seedCallData(db, "action");
+  await seedCallFacts(db, "action");
   let costUsd = 0;
   let modelCalls = 0;
   const started = Date.now();

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { replayLabel, replayOf } from "../lib/replay.ts";
+import { runProblems } from "../lib/run-state.ts";
 import { useLive } from "../lib/use-live.tsx";
 import { MeterRegister } from "./meter-register.tsx";
 
@@ -68,6 +69,7 @@ export function Header() {
   const { snapshot, connected } = useLive();
   const run = snapshot?.run;
   const humanActions = snapshot?.humanActions ?? 0;
+  const problems = runProblems(snapshot?.boardCards ?? []);
 
   return (
     <header className="flex flex-wrap items-center gap-x-10 gap-y-2 px-4 py-3">
@@ -88,11 +90,24 @@ export function Header() {
           <Fact label="Run status" testId="run-status">
             {statusLabel(run.status)}
           </Fact>
-          <Fact label="Run cost" testId="run-cost">
-            {usd.format(run.costUsd)}
-          </Fact>
+          <div>
+            <Fact label="Run cost" testId="run-cost">
+              {usd.format(run.costUsd)}
+            </Fact>
+            {run.status === "running" && (
+              <p data-testid="run-cost-note" className="leading-tight text-faded">
+                Model cost is added when the run ends
+              </p>
+            )}
+          </div>
         </>
       )}
+
+      {problems.map((problem) => (
+        <p key={problem} role="alert" data-testid="run-problem" className="order-last w-full text-[1.625rem] leading-tight font-semibold text-stamp">
+          {problem}
+        </p>
+      ))}
 
       {snapshot && !run && (
         <p data-testid="no-run" className="text-[1.75rem] font-semibold">

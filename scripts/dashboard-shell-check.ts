@@ -2,12 +2,15 @@
 // pnpm dev:dashboard must be running. Pass a folder to keep screenshots.
 // pnpm exec tsx --env-file-if-exists=.env scripts/dashboard-shell-check.ts
 import assert from "node:assert/strict";
+import { stopMessage } from "@bill-fighter/agents/retry";
 import { decideApproval } from "@bill-fighter/db/approvals";
 import { db } from "@bill-fighter/db/client";
+import { boardCards } from "@bill-fighter/db/schema";
+import { RUN_CARD_AGENT } from "@bill-fighter/shared/run-card";
 import { chromium, type Page } from "playwright";
 import { assertNotSharedDb, insertSampleRun, SAMPLE_RUN_ID, updateSampleRun } from "../apps/dashboard/lib/sample-data.ts";
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.DASHBOARD_URL || "http://localhost:3000";
 const VIEWPORT = { width: 1920, height: 1080 };
 const MIN_FONT_PX = 22;
 const screenshotDir = process.argv[2];
@@ -52,6 +55,7 @@ async function checkLiveUpdates(page: Page) {
   await seeText(page, "platform", "local");
   await seeText(page, "run-status", "Running");
   await seeText(page, "run-cost", "$1.24");
+  await seeText(page, "run-cost-note", "Model cost is added when the run ends");
   await seeText(page, "demo-data", "Demo data");
   await seeText(page, "human-actions", "Human actions: 0");
   await checkFitsOneScreen(page, "light");
@@ -69,6 +73,12 @@ async function checkLiveUpdates(page: Page) {
   await updateSampleRun(db, { costUsd: 2.5, status: "over_budget" });
   await seeText(page, "run-cost", "$2.50");
   await seeText(page, "run-status", "Over budget");
+  assert.equal(await page.getByTestId("run-cost-note").count(), 0, "the note is only for a running run");
+
+  // The longest message there is, so this also checks that it fits on the one screen.
+  await db.insert(boardCards).values({ id: "sample-stop", runId: SAMPLE_RUN_ID, agent: RUN_CARD_AGENT, title: stopMessage("over_budget"), status: "blocked" });
+  await seeText(page, "run-problem", "is an estimate");
+  await checkFitsOneScreen(page, "light, stopped");
 
   assert.equal(await page.evaluate("window.notReloaded"), true, "values must change with no page refresh");
   await page.waitForTimeout(800); // Let the drum finish rolling for the screenshot.
@@ -109,6 +119,20 @@ async function checkNoRun(page: Page, noRunBody: string) {
   await shot(page, "light-no-run");
 }
 
+// A fresh sample, so its approval is still pending when the run stops.
+async function checkStoppedRun(page: Page) {
+  await insertSampleRun(db);
+  await updateSampleRun(db, { costUsd: 1, status: "error" });
+  await page.goto(BASE);
+  await seeText(page, "approval-stopped", "This run stopped, so nothing can be approved.");
+  assert.equal(await page.getByTestId("approve").count(), 0, "no Approve button on a stopped run");
+  const reply = await page.request.post(`${BASE}/api/approve`, { data: { runId: SAMPLE_RUN_ID } });
+  assert.equal(reply.status(), 409);
+  await seeText(page, "human-actions", "Human actions: 0");
+  await checkFitsOneScreen(page, "light, stopped with a pending approval");
+  await shot(page, "light-stopped");
+}
+
 // Stacked, the page may scroll down, but never sideways.
 async function checkNarrow(page: Page) {
   await page.goto(BASE);
@@ -146,6 +170,7 @@ try {
 
   const fresh = await (await browser.newContext({ viewport: VIEWPORT })).newPage();
   await checkNoRun(fresh, JSON.stringify(NO_RUN));
+  await checkStoppedRun(await (await browser.newContext({ viewport: VIEWPORT })).newPage());
 
   await checkNarrow(await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage());
   console.info("dashboard-shell check passed");

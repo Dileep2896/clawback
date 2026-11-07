@@ -187,6 +187,15 @@ export default async function check() {
       return true;
     });
 
+    // A field that never appears: the Collector retries on the name, and Playwright's text still must not cross.
+    await assert.rejects(session.fillSecret("#no-such-field", "portal"), (error: Error) => {
+      assert.equal(error.name, "TimeoutError", "a fillSecret timeout lost its classification");
+      assert.match(error.message, /^fillSecret failed for #no-such-field/);
+      assert.ok(!String(error.stack).includes(SECRET), "fillSecret's stack holds the secret");
+      assert.equal(error.cause, undefined);
+      return true;
+    });
+
     // Login cookies must survive a refused navigation, because the session swaps pages after one.
     await session.goto(`${portal.origin}/set-cookie`);
     await assert.rejects(session.goto(`${portal.origin}/to-forbidden`));

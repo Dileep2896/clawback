@@ -5,6 +5,7 @@ import type { TranscriptRow } from "../transcript.ts";
 export type MoveKind =
   | "press_digit"
   | "give_account"
+  | "give_verification"
   | "cancel_line"
   | "restore_promo"
   | "read_back"
@@ -20,7 +21,7 @@ Moves and their target:
 - press_digit: the single key the phone menu asks for
 - cancel_line: a phone number from the lines to cancel
 - restore_promo: an account number from the promo accounts
-- give_account, read_back, ask_ticket, repeat_ticket, goodbye: an empty string`;
+- give_account, give_verification, read_back, ask_ticket, repeat_ticket, goodbye: an empty string`;
 
 const logLine = (row: TranscriptRow) => {
   if (row.role === "system") return `System: ${row.content}`;

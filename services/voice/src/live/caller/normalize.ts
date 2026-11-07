@@ -28,7 +28,12 @@ const ACCOUNT_PREFIX = /\b(?:b|bee|be)[\s,.-]*(?:(t|tee|tea)|(c|see|sea))[\s,.-]
  */
 export function normalizeSpeech(text: string): string {
   return text
-    .replace(DIGIT_RUN, (run) => run.split(/[\s,.()-]+/).map(toDigit).join(""))
+    .replace(DIGIT_RUN, (run) => {
+      const tokens = run.split(/[\s,.()-]+/).map(toDigit);
+      const joined = tokens.join("");
+      // Grouped digits join only as a phone number, so "November 7, 2026" and "$1,234.56" stay as said.
+      return tokens.every((token) => token.length === 1) || joined.length === 10 || joined.length === 11 ? joined : run;
+    })
     .replace(PRESSED, (_, word: string) => `press ${toDigit(word)}`)
     .replace(ACCOUNT_PREFIX, (_, t?: string) => (t ? "BT-" : "BC-"));
 }

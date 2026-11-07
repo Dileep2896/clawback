@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { post } from "../../lib/post.ts";
 import { replayOf } from "../../lib/replay.ts";
+import { isStopped, STOPPED_TEXT } from "../../lib/run-state.ts";
 import { useLive } from "../../lib/use-live.tsx";
 import { Panel } from "../panel.tsx";
 
@@ -14,6 +15,8 @@ export function Approval() {
   const [failed, setFailed] = useState(false);
   const approval = snapshot?.approval;
   const replay = replayOf(snapshot?.run);
+  // A recording plays back its own decision, so its status never offers the stopped notice.
+  const stopped = !replay && isStopped(snapshot?.run?.status);
 
   async function approve() {
     if (!approval) return;
@@ -32,7 +35,12 @@ export function Approval() {
         <div className="grid gap-2">
           {/* First, so a long summary can never push it out of sight. */}
           {approval.status === "pending" && replay && <p data-testid="approval-replay" className="font-semibold">Waiting for the recorded reply</p>}
-          {approval.status === "pending" && !replay && (
+          {approval.status === "pending" && stopped && (
+            <p role="alert" data-testid="approval-stopped" className="font-semibold text-stamp">
+              {STOPPED_TEXT}
+            </p>
+          )}
+          {approval.status === "pending" && !replay && !stopped && (
             <button
               type="button"
               data-testid="approve"

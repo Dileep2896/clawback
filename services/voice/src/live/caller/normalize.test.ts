@@ -49,7 +49,7 @@ describe("normalizeSpeech", () => {
     expect(normalizeSpeech(spoken)).toBe(expected);
   });
 
-  it.each(["Yes, that is cancelled.", "I can't cancel that one.", "Oh, thanks.", "Can we be there to see it?", REP_LINES.other])("leaves %s alone", (text) => {
+  it.each(["Yes, that is cancelled.", "I can't cancel that one.", "Oh, thanks.", "Can we be there to see it?", REP_LINES.other, "approved on November 7, 2026.", "The latest bill was $1,234.56.", "It was $95.00 for 412 Clement St, CA 94118."])("leaves %s alone", (text) => {
     expect(normalizeSpeech(text)).toBe(text);
   });
 });
