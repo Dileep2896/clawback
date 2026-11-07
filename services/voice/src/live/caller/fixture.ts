@@ -1,6 +1,7 @@
 // Test data only. Follows the transcript shape recorded in the spike (docs/plan/voice-design.md): the other AI as role
 // `user`, numbers as words, and press_digit as a tool invocation plus a result. Places nothing and calls nothing.
 import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
+import type { CallFacts } from "../../facts.ts";
 import { WORDS } from "../../sim/negotiator.ts";
 import { CLOSING_LINE, MENU_LINE, REP_LINES } from "../line/script.ts";
 import { callRequests, callVariables } from "./agent.ts";
@@ -26,9 +27,17 @@ export const press = (digit: string, successful = true): RetellItem[] => [
 type Plan = { accountNumber: string; promoAccounts: string[] };
 type Line = { number: string; accountNumber: string };
 
+export const STUB_FACTS: CallFacts = {
+  company: "Golden Gate Noodle Co.",
+  holder: "Linda Park",
+  approvedOn: "November 7, 2026",
+  byOwner: true,
+  accounts: [{ accountNumber: "BT-7001", address: "412 Clement St, San Francisco, CA 94118", latestBill: { amount: "$1,234.56", periodEnd: "2026-10-31" } }],
+};
+
 /** A whole good call, with utterances split and the ticket read as words, the way speech-to-text can give them. */
 export function fullCallItems(plan: Plan, lines: Line[]): RetellItem[] {
-  const variables = callVariables(plan, lines);
+  const variables = callVariables(plan, lines, STUB_FACTS);
   const answers = [...lines.map(() => ["Yes,", "that is canceled."]), ...plan.promoAccounts.map(() => [REP_LINES.promo])];
   return [
     said("agent", DISCLOSURE_LINE),
@@ -37,6 +46,8 @@ export function fullCallItems(plan: Plan, lines: Line[]): RetellItem[] {
     said("user", "BayTel billing."),
     said("user", "Can I have the account number, please?"),
     said("agent", variables.account_line),
+    said("user", REP_LINES.verify),
+    said("agent", variables.verify_answer),
     said("user", REP_LINES.account),
     ...callRequests(plan, lines).flatMap((request, i) => [said("agent", request), ...answers[i]!.map((answer) => said("user", answer))]),
     said("agent", variables.read_back),

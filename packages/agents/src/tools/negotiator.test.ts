@@ -11,7 +11,7 @@ import { runLiveCall } from "@bill-fighter/voice/live/caller/engine";
 import { endedCall, fullCallItems, said, stubRetell } from "@bill-fighter/voice/live/caller/fixture";
 import { LINE_NUMBER } from "@bill-fighter/voice/live/line/script";
 import { checkPlan, lineKey, runSimCall } from "@bill-fighter/voice/sim/engine";
-import { ALARM_LINES, SEED_PLAN, seedCallData } from "@bill-fighter/voice/sim/fixture";
+import { ALARM_LINES, SEED_PLAN, seedCallData, seedCallFacts } from "@bill-fighter/voice/sim/fixture";
 import { stubLlm } from "@bill-fighter/voice/sim/stub-llm";
 import type { TranscriptRow } from "@bill-fighter/voice/transcript";
 import { eq } from "drizzle-orm";
@@ -27,14 +27,18 @@ const LINE = SEED_PLAN.cancelLines[0]!;
 const PROMO = SEED_PLAN.promoAccounts[0]!;
 const STATUS = { totalUsd: 0, capUsd: 5, over: false };
 
-const test = (name: string, fn: (db: Db) => Promise<void>) =>
+const seeded = (name: string, fn: (db: Db) => Promise<void>, approved: boolean) =>
   it(name, () =>
     withTestDb("negotiator_tool", async (db) => {
       await seedCallData(db, CALL);
       await db.update(actions).set({ payloadJson: SEED_PLAN }).where(eq(actions.id, CALL));
+      if (approved) await seedCallFacts(db, CALL);
       await fn(db);
     }),
   );
+const test = (name: string, fn: (db: Db) => Promise<void>) => seeded(name, fn, true);
+// For the gate's own tests, which make their own bundles.
+const unapproved = (name: string, fn: (db: Db) => Promise<void>) => seeded(name, fn, false);
 
 // One finding and one cancel action for a line, the shape tools-file-approve creates.
 async function seedCancel(db: Db, number: string, id: string) {
@@ -119,14 +123,14 @@ describe("approval", () => {
     };
   }
 
-  test("both tools are blocked with no bundle, and without an actionId", async (db) => {
+  unapproved("both tools are blocked with no bundle, and without an actionId", async (db) => {
     const { callTool, cancelTool } = await decisions(db);
     expect(await callTool()).toMatchObject({ behavior: "deny" });
     expect(await cancelTool()).toMatchObject({ behavior: "deny" });
     expect(await callTool({})).toMatchObject({ behavior: "deny" });
   });
 
-  test("a denied bundle blocks both tools", async (db) => {
+  unapproved("a denied bundle blocks both tools", async (db) => {
     await seedRun(db, "run-1");
     const { gate, callTool, cancelTool } = await decisions(db);
     await gate.createBundle({ runId: "run-1", actionIds: [CALL], summary: "s" });
@@ -135,7 +139,7 @@ describe("approval", () => {
     expect(await cancelTool()).toMatchObject({ behavior: "deny" });
   });
 
-  test("one approval releases both tools with no second decision", async (db) => {
+  unapproved("one approval releases both tools with no second decision", async (db) => {
     await seedRun(db, "run-1");
     const { gate, callTool, cancelTool } = await decisions(db);
     await gate.createBundle({ runId: "run-1", actionIds: [CALL], summary: "s" });

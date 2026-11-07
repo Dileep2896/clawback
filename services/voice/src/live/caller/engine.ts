@@ -4,6 +4,7 @@ import { allowlistFromEnv } from "@bill-fighter/shared/allowlist";
 import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { callFacts } from "../../facts.ts";
 import { type CallOutcome, extractOutcome } from "../../outcome.ts";
 import { type CallPlan, checkPlan, lineKey } from "../../sim/engine.ts";
 import { appendRow, closeCall, transcriptRow, type TranscriptRow } from "../../transcript.ts";
@@ -84,13 +85,25 @@ function chargeCall(call: RetellCall | null, retellId: string, onCost: (usd: num
 }
 
 // `user_hangup` is how a good call ends here (the line hangs up), so a call is judged on what was said, not on why it ended.
-function problemWith(call: RetellCall, rows: TranscriptRow[]): string | null {
+function problemWith(call: RetellCall, rows: TranscriptRow[], plan: CallPlan): string | null {
   if (call.call_status !== "ended") return `the call ended as ${call.call_status}: ${call.disconnection_reason ?? "no reason given"}`;
   const first = rows[0];
   const disclosed = first?.role === "agent" && first.kind === "speech" && (first.content === DISCLOSURE_LINE || first.content.startsWith(`${DISCLOSURE_LINE} `));
   if (!disclosed) return "the call did not open with the disclosure";
-  if (!extractOutcome(rows).ticket) return `the call ended with no ticket number: ${call.disconnection_reason ?? "no reason given"}`;
+  const outcome = extractOutcome(rows);
+  const offPlan = offPlanItems(outcome, plan);
+  if (offPlan.length) return `the rep agreed to items outside the approved plan: ${offPlan.join(", ")}`;
+  if (!outcome.ticket) return `the call ended with no ticket number: ${call.disconnection_reason ?? "no reason given"}`;
   return null;
+}
+
+// Code cannot stop words on a live call, and the rep agrees to anything, so a caller that strays is caught here.
+function offPlanItems(outcome: CallOutcome, plan: CallPlan) {
+  const lines = new Set(plan.cancelLines.map(lineKey));
+  return [
+    ...outcome.cancelled_lines.filter((line) => !lines.has(lineKey(line))).map((line) => `line ${line}`),
+    ...outcome.credits.filter((account) => !plan.promoAccounts.includes(account)).map((account) => `account ${account}`),
+  ];
 }
 
 /** What stops a saved row passing the live acceptance test. The engine accepts a call with a disclosure and a ticket, and this asks for everything in the plan as well. */
@@ -101,6 +114,7 @@ export function liveRowProblems(row: { mode: string; recordingUrl: string | null
   return [
     ...plan.cancelLines.map(lineKey).filter((line) => !outcome.cancelled_lines.includes(line)).map((line) => `line ${line} is not in the outcome`),
     ...plan.promoAccounts.filter((account) => !outcome.credits.includes(account)).map((account) => `promo account ${account} is not in the outcome`),
+    ...offPlanItems(outcome, plan).map((item) => `${item} is outside the approved plan`),
     ...(outcome.ticket === TICKET_NUMBER ? [] : [`the ticket is ${outcome.ticket}, not ${TICKET_NUMBER}`]),
     ...(row.recordingUrl ? [] : ["the live row has no recording URL"]),
   ];
@@ -134,6 +148,9 @@ export async function runLiveCall(input: {
   if (!/^\d+$/.test(agentVersion)) throw new Error(`RETELL_CALLER_AGENT_VERSION is "${agentVersion}", so the Retell caller is not provisioned`);
 
   const { planned } = await checkPlan(db, plan);
+  const facts = await callFacts(db, actionId, plan, planned);
+  // A live call names the approver to a rep, and must never name a process or claim the owner approved.
+  if (!facts.byOwner) throw new Error("The approval is not from the account holder, so no live call is placed");
 
   const earlier = await db.select({ id: calls.id }).from(calls).where(and(eq(calls.actionId, actionId), eq(calls.mode, "live")));
   if (earlier.length) throw new Error(`Action ${actionId} already had live call ${earlier[0]!.id}, so it will not dial again`);
@@ -155,7 +172,7 @@ export async function runLiveCall(input: {
         override_agent_id: agentId,
         // The version provision proved, so a newer draft cannot change what is dialled.
         override_agent_version: Number(agentVersion),
-        retell_llm_dynamic_variables: callVariables(plan, planned),
+        retell_llm_dynamic_variables: callVariables(plan, planned, facts),
         metadata: { actionId },
       })) as { call_id?: unknown };
       if (typeof placed.call_id !== "string") throw new Error("Retell returned no call id");
@@ -190,7 +207,7 @@ export async function runLiveCall(input: {
       .where(eq(calls.id, callId));
     saved = true;
 
-    const problem = problemWith(call, rows);
+    const problem = problemWith(call, rows, plan);
     if (problem) throw new Error(`Retell call ${retellId}: ${problem}`);
     return { callId };
   } catch (error) {

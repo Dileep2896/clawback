@@ -1,21 +1,24 @@
 import type { Db } from "@bill-fighter/db/client";
-import { calls } from "@bill-fighter/db/schema";
+import { approvals, calls } from "@bill-fighter/db/schema";
 import { withTestDb } from "@bill-fighter/db/test-db";
 import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ANSWERS } from "../../facts.ts";
 import { extractOutcome } from "../../outcome.ts";
 import { checkPlan, lineKey } from "../../sim/engine.ts";
-import { ALARM_LINES, SEED_PLAN, seedCallData } from "../../sim/fixture.ts";
+import { ALARM_LINES, SEED_PLAN, seedCallData, seedCallFacts } from "../../sim/fixture.ts";
 import type { TranscriptRow } from "../../transcript.ts";
 import { LINE_NUMBER } from "../line/script.ts";
 import { CALLER_NUMBER } from "./agent.ts";
 import { liveRowProblems, runLiveCall } from "./engine.ts";
-import { endedCall, END_MS, fullCallItems, RECORDING_URL, RETELL_ID, said, START_MS, stubRetell } from "./fixture.ts";
+import { endedCall, END_MS, fullCallItems, RECORDING_URL, RETELL_ID, said, START_MS, STUB_FACTS, stubRetell } from "./fixture.ts";
 
 const ACTION = "call-action";
+const spacedDigits = (number: string) => [...lineKey(number)].join(" ");
 
 const test = (name: string, fn: (db: Db) => Promise<void>) => it(name, () => withTestDb("live_caller", async (db) => {
   await seedCallData(db, ACTION);
+  await seedCallFacts(db, ACTION);
   await fn(db);
 }));
 
@@ -50,6 +53,83 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("the fact sheet and the approval", () => {
+  test("sends the sheet from the database, with the approver and date, and no alarm line or contact details", async (db) => {
+    const stub = stubRetell([await goodCall(db)]);
+    await run(db, stub);
+    const variables = (stub.dials()[0]!.body as { retell_llm_dynamic_variables: Record<string, string> }).retell_llm_dynamic_variables;
+    expect(variables.authorized_answer).toBe("Yes. Linda Park, the account holder, approved these changes on November 7, 2026. I'm an AI assistant acting for Golden Gate Noodle Co.");
+    expect(variables.fact_sheet).toContain("412 Clement St");
+    const everything = Object.values(variables).join(" ");
+    for (const alarm of ALARM_LINES) expect(everything).not.toContain(spacedDigits(alarm));
+    expect(everything).not.toMatch(/linda@|555-0100/);
+  });
+
+  test("never dials if a process approved rather than the owner, and leaves no row", async (db) => {
+    await db.update(approvals).set({ approvedBy: "run-local auto approval" });
+    const stub = stubRetell([]);
+    await expect(run(db, stub)).rejects.toThrow(/not from the account holder/);
+    expect(stub.requests).toEqual([]);
+    expect(await db.select().from(calls)).toEqual([]);
+  });
+
+  test("never dials with no approved bundle", async (db) => {
+    await db.update(approvals).set({ status: "denied" });
+    const stub = stubRetell([]);
+    await expect(run(db, stub)).rejects.toThrow(/no approved bundle/);
+    expect(stub.requests).toEqual([]);
+  });
+});
+
+describe("items outside the approved plan", () => {
+  const stray = (planned: Parameters<typeof fullCallItems>[1]) => {
+    const items = fullCallItems(SEED_PLAN, planned);
+    // A line the rep said yes to, which nobody approved, just before the read-back.
+    const at = items.findIndex((item) => item.content?.startsWith("To confirm"));
+    items.splice(at, 0, said("agent", `Please cancel phone line ${spacedDigits(ALARM_LINES[0]!)}.`), said("user", "Yes, that is cancelled."));
+    return items;
+  };
+
+  test("a yes to an unapproved line fails the live call, keeping the row, even with a ticket", async (db) => {
+    const { planned } = await checkPlan(db, SEED_PLAN);
+    await expect(run(db, stubRetell([endedCall(stray(planned))]))).rejects.toThrow(/outside the approved plan: line/);
+    const { rows } = await onlyRow(db);
+    expect(rows.at(-1)!.content).toMatch(/^Live call failed: .*outside the approved plan/);
+  });
+
+  it("liveRowProblems names an item outside the plan", () => {
+    const outcomeJson = { cancelled_lines: [...SEED_PLAN.cancelLines.map(lineKey), "5105550999"], credits: [...SEED_PLAN.promoAccounts, "BC-9999"], ticket: "BT-48213" };
+    expect(liveRowProblems({ mode: "live", recordingUrl: RECORDING_URL, outcomeJson }, SEED_PLAN)).toEqual(["line 5105550999 is outside the approved plan", "account BC-9999 is outside the approved plan"]);
+  });
+});
+
+describe("the rep's question", () => {
+  test("a call where the rep asks a question mid-request still counts every item, once the request is repeated", async (db) => {
+    const { planned } = await checkPlan(db, SEED_PLAN);
+    const items = fullCallItems(SEED_PLAN, planned);
+    const at = items.findIndex((item) => item.content?.startsWith("Please cancel"));
+    const request = items[at]!.content!;
+    const reply = items.slice(at + 1, at + 3);
+    items.splice(at + 1, 2, said("user", "Are you authorized to do that?"), said("agent", `${ANSWERS.authorized(STUB_FACTS)} ${request}`), ...reply);
+    await run(db, stubRetell([endedCall(items)]));
+    const { rows } = await onlyRow(db);
+    expect(extractOutcome(rows).cancelled_lines).toEqual(SEED_PLAN.cancelLines.map(lineKey));
+    expect(rows.map((row) => row.content).join(" ")).toContain("on November 7, 2026.");
+  });
+
+  test("an answer between a request and its yes, with no repeat, leaves that item out", async (db) => {
+    const { planned } = await checkPlan(db, SEED_PLAN);
+    const items = fullCallItems(SEED_PLAN, planned);
+    const at = items.findIndex((item) => item.content?.startsWith("Please cancel"));
+    const reply = items.slice(at + 1, at + 3);
+    items.splice(at + 1, 2, said("user", "Are you authorized to do that?"), said("agent", ANSWERS.authorized(STUB_FACTS)), ...reply);
+    await run(db, stubRetell([endedCall(items)]));
+    const { rows } = await onlyRow(db);
+    expect(extractOutcome(rows).cancelled_lines).not.toContain(lineKey(SEED_PLAN.cancelLines[0]!));
+    expect(extractOutcome(rows).cancelled_lines).toHaveLength(6);
+  });
 });
 
 describe("a good call", () => {

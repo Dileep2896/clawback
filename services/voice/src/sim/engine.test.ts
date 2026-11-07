@@ -1,5 +1,5 @@
 import type { Db } from "@bill-fighter/db/client";
-import { calls } from "@bill-fighter/db/schema";
+import { approvals, calls } from "@bill-fighter/db/schema";
 import { withTestDb } from "@bill-fighter/db/test-db";
 import { createLlm, type Query } from "@bill-fighter/platform/local/llm";
 import type { JsonSchema, Llm, LlmInput } from "@bill-fighter/platform/types";
@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CLOSING_LINE, LINE_NUMBER, MENU_LINE, REP_LINES, SPOKEN_TICKET, SYSTEM_PROMPT } from "../live/line/script.ts";
 import type { TranscriptRow } from "../transcript.ts";
 import { runSimCall } from "./engine.ts";
-import { ALARM_LINES, SEED_PLAN, seedCallData } from "./fixture.ts";
+import { ALARM_LINES, SEED_PLAN, seedCallData, seedCallFacts } from "./fixture.ts";
 import { SIM_REFUSAL_LINE } from "./rep.ts";
 import { repAnswer, stubLlm } from "./stub-llm.ts";
 
@@ -16,6 +16,7 @@ const test = (name: string, fn: (db: Db) => Promise<void>) =>
   it(name, () =>
     withTestDb("voice_sim", async (db) => {
       await seedCallData(db, "action");
+      await seedCallFacts(db, "action");
       await fn(db);
     }),
   );
@@ -70,6 +71,8 @@ describe("runSimCall", () => {
     const agent = rows.filter((r) => r.role === "agent" && r.kind === "speech").map((r) => r.content);
     expect(agent[0]).toBe(DISCLOSURE_LINE);
     expect(agent[1]).toBe("The account number is BT-7001.");
+    // From the database and the approval record, not the model.
+    expect(agent[2]).toBe("The service address is 412 Clement St, San Francisco, CA 94118. Linda Park, the account holder, approved these changes on November 7, 2026. I'm an AI assistant acting for Golden Gate Noodle Co.");
     expect(agent.filter((l) => l.startsWith("Please cancel"))).toHaveLength(7);
     expect(agent).toContain("Please cancel phone line (415) 555-0102 on account BT-7001.");
     expect(agent).toContain("Please cancel phone line (510) 555-0133 on account BT-7012.");
@@ -82,12 +85,26 @@ describe("runSimCall", () => {
     expect(agent.slice(-3)).toEqual(["Can I have a ticket number, please?", `Let me repeat that: ${SPOKEN_TICKET}.`, "That's everything, thank you. Goodbye."]);
 
     const provider = said(rows, "provider");
-    expect(provider.slice(0, 2)).toEqual([MENU_LINE, REP_LINES.greeting]);
+    expect(provider.slice(0, 4)).toEqual([MENU_LINE, REP_LINES.greeting, REP_LINES.verify, REP_LINES.account]);
     expect(provider.filter((l) => l === REP_LINES.cancel)).toHaveLength(7);
     expect(provider.filter((l) => l === REP_LINES.promo)).toHaveLength(3);
     expect(provider).toContain(REP_LINES.ticket);
     expect(provider.at(-1)).toBe(CLOSING_LINE);
     expect(rows.some((r) => r.role === "system")).toBe(false);
+  });
+
+  test("a process's approval is said plainly, and never as the owner's", async (db) => {
+    await db.update(approvals).set({ approvedBy: "run-local auto approval" });
+    await runSimCall({ db, llm: stubLlm().llm, actionId: "action", plan: SEED_PLAN });
+    const agent = said((await transcript(db)).rows, "agent");
+    expect(agent.join(" ")).toContain("This test run was approved automatically on November 7, 2026, not by a person.");
+    expect(agent.join(" ")).not.toContain("Linda Park");
+  });
+
+  test("no approved bundle means no call and no row", async (db) => {
+    await db.update(approvals).set({ status: "pending" });
+    await expect(runSimCall({ db, llm: stubLlm().llm, actionId: "action", plan: SEED_PLAN })).rejects.toThrow(/no approved bundle/);
+    expect(await db.select().from(calls)).toEqual([]);
   });
 
   test("the rep runs on the imported script and hears the key as Vapi reports it", async (db) => {
