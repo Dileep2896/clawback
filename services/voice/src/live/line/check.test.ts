@@ -35,6 +35,13 @@ describe("keypadDigits", () => {
   it("does not count a caller saying the same words", () => {
     expect(keypadDigits([speech("User's Keypad Entry: 2")])).toEqual([]);
   });
+
+  it("does not count an entry without both timestamps", () => {
+    const message = "User's Keypad Entry: 2";
+    expect(keypadDigits([{ role: "user", message }])).toEqual([]);
+    expect(keypadDigits([{ role: "user", message, time: 7 }])).toEqual([]);
+    expect(keypadDigits([{ role: "user", message, endTime: 7 }])).toEqual([]);
+  });
 });
 
 describe("checkLineCall", () => {
@@ -65,6 +72,25 @@ describe("checkLineCall", () => {
 
   it("fails if the rep never answers", () => {
     expect(checkLineCall([disclosure, bot(MENU_LINE), keypad("2")])).toEqual(["the rep never answered after the key press"]);
+  });
+
+  it("fails if the bare keypad text has no timestamps, even if the rep answered", () => {
+    const bare: CallMessage = { role: "user", message: "User's Keypad Entry: 2" };
+    expect(checkLineCall([disclosure, bot(MENU_LINE), bare, bot(REP_LINES.greeting)])).toContain("no platform keypad entry for 2");
+  });
+
+  it.each([
+    ["an empty message", ""],
+    ["only the closing line", CLOSING_LINE],
+    ["a rep line without the greeting", REP_LINES.account],
+  ])("does not count %s as reaching the rep", (_, line) => {
+    expect(checkLineCall([disclosure, bot(MENU_LINE), keypad("2"), bot(line)])).toEqual(["the rep never answered after the key press"]);
+  });
+
+  it("does not count the greeting from before the key press", () => {
+    expect(checkLineCall([disclosure, bot(MENU_LINE), bot(REP_LINES.greeting), keypad("2"), bot(CLOSING_LINE)])).toContain(
+      "the rep never answered after the key press",
+    );
   });
 
   it("fails on any transfer", () => {

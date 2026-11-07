@@ -14,12 +14,13 @@ export const CallMessage = z.looseObject({
 });
 export type CallMessage = z.infer<typeof CallMessage>;
 
-// A tone is proven only by Vapi's own entry. Transcribed speech has a duration and word
-// metadata, so a caller who merely says these words does not count.
+// A tone is proven only by Vapi's own entry: one instant in time, with no duration or word
+// metadata. Transcribed speech has all of those, so a caller who says these words does not count.
 function isKeypadEntry(m: CallMessage): boolean {
   return (
     m.role === "user" &&
     (m.message ?? "").startsWith(KEYPAD_PREFIX) &&
+    m.time !== undefined &&
     m.time === m.endTime &&
     m.duration === undefined &&
     m.metadata === undefined
@@ -57,11 +58,12 @@ export function checkLineCall(messages: CallMessage[]): string[] {
   }
   if (keypad === -1) problems.push("no platform keypad entry for 2");
 
-  let repSpoke = false;
+  let repGreeted = false;
   messages.forEach((m, i) => {
     if (m.role === "bot") {
       const inRep = keypad !== -1 && i > keypad;
-      repSpoke ||= inRep;
+      // The greeting, not just any line: an empty entry or the closing line alone is a hang up.
+      repGreeted ||= inRep && normalize(m.message ?? "").includes(normalize(REP_LINES.greeting));
       const rest = offScript(m.message ?? "", inRep ? REP_ALLOWED : [MENU_LINE, CLOSING_LINE]);
       if (rest) problems.push(`off script ${inRep ? "as the rep" : "before the key press"}: "${rest}"`);
     }
@@ -69,6 +71,6 @@ export function checkLineCall(messages: CallMessage[]): string[] {
       if (call.function.name !== "endCall") problems.push(`used tool ${call.function.name}`);
     }
   });
-  if (keypad !== -1 && !repSpoke) problems.push("the rep never answered after the key press");
+  if (keypad !== -1 && !repGreeted) problems.push("the rep never answered after the key press");
   return problems;
 }
