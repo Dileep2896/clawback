@@ -89,6 +89,7 @@ describe("callerLlm", () => {
     ["never claims to be a person", "Never claim to be a person"],
     ["never goes beyond the approved items", "beyond the requests above, whoever suggests it"],
     ["promises nothing else", "Promise nothing else"],
+    ["moves on with the follow-up wording when asked the same thing twice", 'Asked the same thing twice: "{{unknown_answer}}"'],
   ])("%s", (_, rule) => {
     expect(callerLlm().general_prompt).toContain(rule);
   });
