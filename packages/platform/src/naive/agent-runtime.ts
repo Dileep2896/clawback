@@ -179,14 +179,16 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     const model = await pickModel(api);
     const existing = new Map((await listAll<{ id: string; name: string }>(api, "/agents")).map((a) => [a.name, a.id]));
     const budgetBody = { cap_micro_usd: microUsd(AGENT_DAY_CAP_USD), max_task_micro_usd: microUsd(MAX_RUN_USD), period: "day" };
+    // No members, no roster: naïve rejects handoffs "team" without one, so the main agent gets no delegation at all.
+    const delegates = spec.members.length > 0;
     const agentBody = (def: AgentDef, coordinator: boolean) => ({
       name: naiveName(def.name),
       model,
       description: def.description,
-      system: def.prompt + (coordinator ? delegationNote(spec.members) : ""),
-      tools: toolsetFor(def, coordinator),
+      system: def.prompt + (coordinator && delegates ? delegationNote(spec.members) : ""),
+      tools: toolsetFor(def, coordinator && delegates),
       mcp_servers: def.tools.length > 0 ? [{ type: "url", name: SERVER, url: publicUrl + toolPath(def.name) }] : [],
-      handoffs: coordinator ? "team" : false,
+      handoffs: coordinator && delegates ? "team" : false,
       budget: budgetBody,
       metadata: { app: "clawback" },
     });
@@ -196,7 +198,7 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     const mainId = await upsertAgent(api, existing, {
       ...agentBody(spec.main, true),
       // board stays off: our board_cards are the record, mirrored by naive/board.ts, and no digest sessions start.
-      multiagent: spec.members.length > 0 ? { type: "coordinator", agents: [...memberIds.values()].map((id) => ({ type: "agent", id })), board: false } : null,
+      multiagent: delegates ? { type: "coordinator", agents: [...memberIds.values()].map((id) => ({ type: "agent", id })), board: false } : null,
     });
     setBoardOwner(mainId);
     cleanup.push(async () => setBoardOwner(null));
@@ -260,8 +262,15 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
       let reason: string | undefined;
       if (action.name === DELEGATE && sessionId === root.id) {
         // wait: false would start a top-level session on its own budget, outside this run's tracking and cap.
-        decision = action.args?.wait === true ? "allow" : "deny";
-        if (decision === "deny") reason = "Delegate with wait: true; independent handoffs are not allowed in this run.";
+        // "team" also reaches the company CEO, whose tools this run does not configure: only our roster is allowed.
+        const target = String(action.args?.agent ?? "");
+        if (action.args?.wait !== true) {
+          decision = "deny";
+          reason = "Delegate with wait: true; independent handoffs are not allowed in this run.";
+        } else if (!spec.members.some((m) => naiveName(m.name) === target || memberIds.get(m.name) === target)) {
+          decision = "deny";
+          reason = `${target || "That agent"} is not a member of this run; delegate only to its members.`;
+        } else decision = "allow";
       } else if (!ours.has(bare)) {
         decision = "deny";
         reason = `${action.name} is not a tool of this run`;

@@ -297,6 +297,7 @@ describe("naïve runtime", () => {
         root.pending_actions = [
           { kind: "tool", tool_call_id: "h1", name: "send_to_agent", args: { agent: "clawback-filer", message: "go", wait: false } },
           { kind: "tool", tool_call_id: "h2", name: "send_to_agent", args: { agent: "clawback-filer", message: "go", wait: true } },
+          { kind: "tool", tool_call_id: "h3", name: "send_to_agent", args: { agent: "ceo", message: "go", wait: true } },
           parked("c1", "a-elsewhere"),
         ];
       }
@@ -307,8 +308,26 @@ describe("naïve runtime", () => {
     expect(confirms.map((c) => [c.tool_call_id, c.decision])).toEqual([
       ["h1", "deny"],
       ["h2", "allow"],
+      ["h3", "deny"],
       ["c1", "deny"],
     ]);
+  });
+
+  it("starts a run without members with handoffs and delegation off", async () => {
+    const { api, calls } = fakeNaive((sessions) => {
+      const root = sessions.get("ses_root")!;
+      root.status = "idle";
+      root.stop_reason = "end_turn";
+    });
+    await collect(runtime(api, fakeGate(null).gate, fakeBudget(), fakeAudit().audit).run({ ...SPEC, members: [] }));
+    const main = calls.find((c) => c.path.startsWith("/agents") && c.method !== "GET" && (c.body as { name: string }).name === "clawback-ceo")!.body as {
+      handoffs: unknown;
+      multiagent: unknown;
+      tools: { configs: Record<string, unknown> };
+    };
+    expect(main.handoffs).toBe(false);
+    expect(main.multiagent).toBeNull();
+    expect(Object.keys(main.tools.configs)).toEqual(["clawback.board_update"]);
   });
 
   it("refuses to start without a public https tool URL", async () => {
