@@ -18,6 +18,12 @@ const STEPS = [
   { title: "Approve once, keep the money", body: "One approval covers every fix. You watch each refund and saving land in your account." },
 ];
 
+// Market size estimates, wording fixed by the human (docs/plan/phases/13-product-ui.md, landing-tam).
+const MARKET = [
+  { value: "$500B+", label: "US businesses pay every year in electricity, gas, water and phone bills" },
+  { value: "$5 to 16B", label: "a year left on the table: 1 to 3% of it is billed wrong or on the wrong plan" },
+];
+
 export default function Landing() {
   return (
     <div className="min-h-dvh">
@@ -96,7 +102,26 @@ export default function Landing() {
           </div>
         </section>
 
-        <section aria-labelledby="proof" className="mx-auto max-w-[1200px] px-4 py-16 sm:px-6">
+        <section aria-labelledby="market" className="mx-auto max-w-[1200px] px-4 py-16 sm:px-6">
+          <h2 id="market" className="text-[1.75rem] leading-tight font-semibold">
+            The market
+          </h2>
+          <dl className="mt-8 grid gap-8 md:grid-cols-2">
+            {MARKET.map((figure) => (
+              <div key={figure.value} className="grid content-start gap-2">
+                <dt className="max-w-[40ch] text-faded">{figure.label}</dt>
+                <dd className="order-first font-figure text-[clamp(3rem,7vw,4.5rem)] leading-none">{figure.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-8 max-w-[60ch] text-[1.25rem]">Today only large companies pay auditors to get it back. Clawback&apos;s agents do it for every business.</p>
+          <p className="mt-4 max-w-[80ch] text-base text-faded">
+            Estimates. Electricity: US EIA, 2025 retail sales ($290B commercial and industrial). Telecom: Grand View Research, 2022 ($187B). Error rates: bill-audit
+            industry reports (3 to 5% recovered); we assume 1 to 3%.
+          </p>
+        </section>
+
+        <section aria-labelledby="proof" className="mx-auto max-w-[1200px] border-t border-line px-4 py-16 sm:px-6">
           <h2 id="proof" className="text-[1.75rem] leading-tight font-semibold">
             One noodle shop, one audit
           </h2>
