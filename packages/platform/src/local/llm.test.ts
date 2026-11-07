@@ -1,5 +1,7 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { ParsedBill } from "@bill-fighter/shared/parsed-bill";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { createLlm, type Query } from "./llm.ts";
 
 const SCHEMA = { type: "object", properties: { total: { type: "integer" } }, required: ["total"] };
@@ -36,6 +38,30 @@ describe("Llm.structured", () => {
     ["a plan rate limit", [INIT, { type: "rate_limit_event", rate_limit_info: { status: "rejected" } }, success({ total: 5 })], /rate limit/],
   ])("throws on %s", async (_name, messages, error) => {
     await expect(llmWith(messages).structured({ prompt: "x" }, SCHEMA)).rejects.toThrow(error);
+  });
+
+  it.each([
+    ["minItems with no items", { type: "array", minItems: 1 }, []],
+    ["minimum", { type: "number", minimum: 1 }, 0],
+    ["pattern", { type: "string", pattern: "^a" }, "b"],
+    ["format", { type: "string", format: "date" }, "not a date"],
+    ["uniqueItems", { type: "array", uniqueItems: true }, [1, 1]],
+    ["minProperties", { type: "object", minProperties: 1 }, {}],
+  ])("enforces %s", async (_name, lines, value) => {
+    const schema = { type: "object", properties: { lines }, required: ["lines"] };
+    await expect(llmWith([INIT, success({ lines: value })]).structured({ prompt: "x" }, schema)).rejects.toThrow(/does not match/);
+  });
+
+  it("refuses a keyword it cannot enforce, before calling the model", async () => {
+    const query: Query = async function* () {
+      throw new Error("the model was called");
+    };
+    await expect(createLlm(query).structured({ prompt: "x" }, { type: "object", notAKeyword: 1 })).rejects.toThrow(/notAKeyword/);
+  });
+
+  it("accepts the schema Zod emits for ParsedBill, the planned caller", async () => {
+    const schema = z.toJSONSchema(ParsedBill) as Record<string, unknown>;
+    await expect(llmWith([INIT, success({})]).structured({ prompt: "x" }, schema)).rejects.toThrow(/does not match/);
   });
 
   it("throws when the SDK throws", async () => {

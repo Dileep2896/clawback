@@ -1,5 +1,6 @@
 import { type Options, query as sdkQuery, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { z } from "zod";
+import { Ajv2020 } from "ajv/dist/2020.js";
+import addFormats from "ajv-formats";
 import type { JsonSchema, Llm, LlmInput } from "../types.ts";
 import { assertIsolated, assertLogin, loginOptions } from "./claude-login.ts";
 
@@ -26,10 +27,18 @@ async function* withImages({ prompt, images = [] }: LlmInput): AsyncGenerator<SD
   };
 }
 
+// Validates against the schema itself: converting it to Zod silently drops constraints.
+// strictSchema stays on, so a keyword Ajv cannot enforce throws instead of being ignored.
+function compile(jsonSchema: JsonSchema) {
+  const ajv = new Ajv2020({ useDefaults: true, strictTypes: false, strictTuples: false });
+  addFormats(ajv);
+  return ajv.compile(jsonSchema);
+}
+
 export function createLlm(query: Query = sdkQuery as Query): Llm {
   return {
     async structured<T>(input: LlmInput, jsonSchema: JsonSchema): Promise<T> {
-      const schema = z.fromJSONSchema(jsonSchema);
+      const validate = compile(jsonSchema);
       const abortController = new AbortController();
       let output: unknown;
       let failure: string | undefined;
@@ -63,10 +72,9 @@ export function createLlm(query: Query = sdkQuery as Query): Llm {
       }
       if (failure) throw new Error(`Llm.structured failed: ${failure}`);
       if (output === undefined) throw new Error("Llm.structured failed: the result had no structured output");
-      const parsed = schema.safeParse(output);
-      if (!parsed.success) throw new Error(`Llm.structured failed: output does not match the schema: ${parsed.error.message}`);
-      // Not the raw output: validation can fill in defaults, and the raw value would then break the schema.
-      return parsed.data as T;
+      // useDefaults fills defaults into output in place, so this returns the validated value.
+      if (!validate(output)) throw new Error(`Llm.structured failed: output does not match the schema: ${JSON.stringify(validate.errors)}`);
+      return output as T;
     },
   };
 }
