@@ -1,4 +1,4 @@
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
   AccountFixture,
@@ -88,19 +88,27 @@ export function readSeedFiles(dir: URL = SEED_DIR) {
 }
 
 export async function renderBills(views: BillView[], dir: URL = BILLS_DIR) {
-  // A removed bill must not leave an old PDF behind.
-  rmSync(dir, { recursive: true, force: true });
-  mkdirSync(dir, { recursive: true });
-  const browser = await chromium.launch();
+  // Render aside, so a failed run keeps the PDFs the database already points at.
+  const staging = new URL(dir.href.replace(/\/$/, ".staging/"));
+  rmSync(staging, { recursive: true, force: true });
+  mkdirSync(staging, { recursive: true });
   try {
-    for (const view of views) {
-      writeFileSync(new URL(`${view.bill.id}.pdf`, dir), await renderBillPdf(browser, view));
+    const browser = await chromium.launch();
+    try {
+      for (const view of views) {
+        writeFileSync(new URL(`${view.bill.id}.pdf`, staging), await renderBillPdf(browser, view));
+      }
+    } finally {
+      await browser.close();
     }
+    const written = readdirSync(staging).length;
+    if (written !== views.length) throw new Error(`Wrote ${written} PDFs for ${views.length} bills`);
+    // shortcut: a crash between these two lines leaves dir missing, the next `pnpm seed` restores it.
+    rmSync(dir, { recursive: true, force: true }); // A removed bill must not leave an old PDF behind.
+    renameSync(staging, dir);
   } finally {
-    await browser.close();
+    rmSync(staging, { recursive: true, force: true });
   }
-  const written = readdirSync(dir).length;
-  if (written !== views.length) throw new Error(`Wrote ${written} PDFs for ${views.length} bills`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
