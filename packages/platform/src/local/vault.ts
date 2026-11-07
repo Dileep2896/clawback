@@ -42,41 +42,45 @@ function decrypt(file: string, key: Buffer): Map<string, string> {
   }
 }
 
+// Keyed by resolved path, because every put rewrites the whole file and two vaults on one path would overwrite each other.
+// shortcut: serialized in this process only, upgrade to a file lock if two processes ever write the vault at once.
+const writeQueues = new Map<string, Promise<unknown>>();
+
+async function load(target: string, key: Buffer): Promise<Map<string, string>> {
+  let file: string;
+  try {
+    file = await readFile(target, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Map();
+    throw error;
+  }
+  return decrypt(file, key);
+}
+
 export function createVault(env: Record<string, string | undefined> = process.env): Vault {
   const path = () => resolve(ROOT, env.VAULT_PATH || ".vault/vault.json");
 
-  const load = async (key: Buffer): Promise<Map<string, string>> => {
-    let file: string;
-    try {
-      file = await readFile(path(), "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Map();
-      throw error;
-    }
-    return decrypt(file, key);
-  };
-
-  // shortcut: serialized in this process only, upgrade to a file lock if two processes ever write the vault at once.
-  let writes: Promise<unknown> = Promise.resolve();
-
   return {
     put(name, value) {
-      const write = writes.then(async () => {
+      const target = path();
+      const write = (writeQueues.get(target) ?? Promise.resolve()).then(async () => {
         const key = keyFrom(env);
-        const secrets = await load(key);
+        const secrets = await load(target, key);
         secrets.set(name, value);
-        const target = path();
         const temp = `${target}.${process.pid}.tmp`;
         await mkdir(dirname(target), { recursive: true, mode: 0o700 });
         await writeFile(temp, encrypt(secrets, key), { mode: 0o600 });
         await rename(temp, target);
       });
       // One failed put must not fail every put after it.
-      writes = write.catch(() => {});
+      writeQueues.set(
+        target,
+        write.catch(() => {}),
+      );
       return write;
     },
     async get(name) {
-      const value = (await load(keyFrom(env))).get(name);
+      const value = (await load(path(), keyFrom(env))).get(name);
       if (value === undefined) throw new Error(`Vault has no secret named "${name}"`);
       return value;
     },

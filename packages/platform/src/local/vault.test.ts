@@ -44,6 +44,13 @@ describe("vault", () => {
     expect(await Promise.all(["a", "b", "c", "d"].map((name) => vault.get(name)))).toEqual(["a!", "b!", "c!", "d!"]);
   });
 
+  it("keeps every concurrent put across vaults on the same path", async () => {
+    const names = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    await Promise.all(names.map((name) => createVault({ VAULT_PATH, VAULT_KEY }).put(name, `${name}!`)));
+    const vault = createVault({ VAULT_PATH, VAULT_KEY });
+    expect(await Promise.all(names.map((name) => vault.get(name)))).toEqual(names.map((name) => `${name}!`));
+  });
+
   it("still writes after a failed put on the same vault", async () => {
     const env: Record<string, string | undefined> = { VAULT_PATH, VAULT_KEY: "bad" };
     const vault = createVault(env);
