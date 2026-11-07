@@ -73,9 +73,29 @@ Stat figures are at least 48 px so the room can read them from the back. Sentenc
 | `PageHeader` | h1 plus an optional one-line description and actions on the right. |
 | `AppNav` | The signed-in top bar: Overview, Bills, Findings, Agents, Money. The current page is marked with `aria-current="page"` and a green underline. |
 
+## Landing page (`/`)
+
+Added by `landing-redesign`, 2026-11-07. The landing is the one page allowed a darker voice than the app; it still uses the wordmark, the money green, both fonts and the app's own surfaces.
+
+- **Idea: an audited statement.** The hero is a page of the demo customer's bills with each wrong amount struck through in crimson, the corrected amount in green serif beside it, an auditor's note under it, and the refund at the foot. Real product imagery, not icons.
+- **Two dark ink bands** (hero, market) alternate with the sage paper (the run, the result). The bands stay dark in both themes.
+- **Narrative structure:** hero statement → "One audit of one noodle shop" (four stages in a row under heavy 4 px ink rules, each with the static screen the run produced: kWh table, finding, call transcript, approval and ledger row) → the market → what the owner stands to keep (a statement total under a heavy rule) → footer with the demo-data line.
+- **Width:** up to 1320 px, wider than app pages, so the four stages sit in one row at 1920.
+- **Values are the recorded demo run's** (`data/replay/run.jsonl`); market figures are the landing-tam estimates with their source note.
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `band` | `#0f1a15` | `#070d0a` | Landing dark band background |
+| `band-text` | `#eef4f0` | `#eef4f0` | Text on the band |
+| `band-faded` | `#c3d1c9` | `#c3d1c9` | Secondary text on the band |
+| `band-line` | `#2c3e35` | `#24352d` | Rules on the band, hover fill for band buttons |
+| `band-money` | `#8be6b9` | `#8be6b9` | Money figures, primary button and focus ring on the band |
+
+The band text pairs are in `lib/contrast.test.ts`, lit-room check included. On the band, `.band :focus-visible` switches the ring to `band-money`.
+
 ## Motion
 
-Only motion that shows a change: the meter drums rolling, a board card arriving. Both are off under `prefers-reduced-motion`. No entrance animations on product pages.
+Only motion that shows a change: the meter drums rolling, a board card arriving, and on the landing the auditor's strike drawing through each wrong amount once on load. All are off under `prefers-reduced-motion` (the strike is then already drawn). No entrance animations on product pages.
 
 ## Copy
 

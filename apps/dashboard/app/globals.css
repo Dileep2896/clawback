@@ -22,6 +22,12 @@
   /* Chart bars only, never text. Run through the dataviz palette validator against white, including for colour blindness. */
   --bar-billed: #c2185b;
   --bar-real: #00889f;
+  /* The landing's dark ink band. Same in both themes; text colours are set for a lit room. */
+  --band: #0f1a15;
+  --band-text: #eef4f0;
+  --band-faded: #c3d1c9;
+  --band-line: #2c3e35;
+  --band-money: #8be6b9;
 }
 
 :root[data-theme="dark"] {
@@ -41,6 +47,11 @@
   --register-text: #0e1613;
   --bar-billed: #e0528a;
   --bar-real: #2aa5b8;
+  --band: #070d0a;
+  --band-text: #eef4f0;
+  --band-faded: #c3d1c9;
+  --band-line: #24352d;
+  --band-money: #8be6b9;
 }
 
 @theme inline {
@@ -61,6 +72,11 @@
   --color-alert-text: var(--alert-text);
   --color-bar-billed: var(--bar-billed);
   --color-bar-real: var(--bar-real);
+  --color-band: var(--band);
+  --color-band-text: var(--band-text);
+  --color-band-faded: var(--band-faded);
+  --color-band-line: var(--band-line);
+  --color-band-money: var(--band-money);
 }
 
 body {
@@ -129,5 +145,41 @@ body {
 
   .board-card {
     animation: none;
+  }
+}
+
+/* Landing: on the dark band the green focus ring would vanish, so it takes the band's money green. */
+.band :focus-visible {
+  outline-color: var(--band-money);
+}
+
+/* Landing statement: an auditor's strike drawn through each wrong amount. Static (already drawn) unless motion is welcome. */
+.strike {
+  position: relative;
+  white-space: nowrap;
+}
+
+.strike::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: 52%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--alert);
+  transform-origin: left center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .strike::after {
+    animation: strike-draw 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(500ms + var(--strike-order, 0) * 350ms);
+  }
+}
+
+@keyframes strike-draw {
+  from {
+    transform: scaleX(0);
   }
 }
