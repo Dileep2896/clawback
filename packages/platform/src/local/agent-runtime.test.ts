@@ -1,5 +1,7 @@
-import type { HookCallback, Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { HookCallback, McpSdkServerConfigWithInstance, Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { GATED_TOOLS } from "@bill-fighter/shared/gated-tools";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { ApprovalGate, Budget, RunEvent, RunSpec, ToolDef } from "../types.ts";
@@ -30,7 +32,15 @@ const result = (cost: number, extra: object = {}) => ({
   ...extra,
 });
 
-function setup(messages: unknown[], { capUsd = 5, totalUsd = 0, thenThrow = "" } = {}) {
+type SetupOptions = {
+  capUsd?: number;
+  totalUsd?: number;
+  thenThrow?: string;
+  gate?: Partial<ApprovalGate>;
+  during?: (options: Options) => Promise<void>;
+};
+
+function setup(messages: unknown[], { capUsd = 5, totalUsd = 0, thenThrow = "", gate = {}, during }: SetupOptions = {}) {
   const added: number[] = [];
   const captured: { options?: Options } = {};
   const budget: Budget = {
@@ -43,10 +53,11 @@ function setup(messages: unknown[], { capUsd = 5, totalUsd = 0, thenThrow = "" }
   };
   const query: Query = async function* ({ options }) {
     captured.options = options;
+    await during?.(options);
     yield* messages as SDKMessage[];
     if (thenThrow) throw new Error(thenThrow);
   };
-  const runtime = createAgentRuntime(async () => ({ gate: {} as ApprovalGate, budget, query }));
+  const runtime = createAgentRuntime(async () => ({ gate: gate as ApprovalGate, budget, query }));
   return { added, captured, runtime };
 }
 
@@ -145,6 +156,128 @@ describe("the main agent's tool list", () => {
     const input = { hook_event_name: "PreToolUse", tool_name: "mcp__platform__call_provider", tool_use_id: "t1" };
     const output = await hook(input as never, "t1", { signal: new AbortController().signal });
     expect(output).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+  });
+});
+
+// Calls the real registered MCP server directly, which is what a managed allow rule amounts to: no canUseTool, no hook.
+async function clientOf(options: Options) {
+  const server = options.mcpServers?.platform as McpSdkServerConfigWithInstance;
+  const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
+  await server.instance.connect(serverSide);
+  const client = new Client({ name: "test", version: "1.0.0" });
+  await client.connect(clientSide);
+  return client;
+}
+
+describe("the tool execution boundary", () => {
+  function gated(isReleased: ApprovalGate["isReleased"]) {
+    const handler = vi.fn(async () => "ran");
+    const tool: ToolDef = { ...def("call_provider"), handler };
+    const calls: Awaited<ReturnType<Client["callTool"]>>[] = [];
+    const run = (args: Record<string, unknown>) =>
+      collect(
+        setup([INIT, result(0)], {
+          gate: { isReleased },
+          during: async (options) => {
+            calls.push(await (await clientOf(options)).callTool({ name: "call_provider", arguments: args }));
+          },
+        }).runtime.run({ ...SPEC, tools: [tool] }),
+      );
+    return { handler, calls, run };
+  }
+
+  it("runs a gated handler once its action is released, and checks the id it receives", async () => {
+    const isReleased = vi.fn(async () => true);
+    const { handler, calls, run } = gated(isReleased);
+    await run({ actionId: "a1" });
+    expect(isReleased).toHaveBeenCalledWith("a1");
+    expect(handler).toHaveBeenCalledOnce();
+    expect(calls[0]?.isError).toBeFalsy();
+  });
+
+  it("refuses a gated call that skipped canUseTool, and reports the denial", async () => {
+    const { handler, calls, run } = gated(async () => false);
+    const { all } = await run({ actionId: "a1" });
+    expect(handler).not.toHaveBeenCalled();
+    expect(calls[0]?.isError).toBe(true);
+    expect(all).toContainEqual(expect.objectContaining({ type: "denied", agent: "ceo", tool: "call_provider" }));
+  });
+
+  it("refuses a gated call with no actionId and never asks the gate", async () => {
+    const isReleased = vi.fn(async () => true);
+    const { handler, calls, run } = gated(isReleased);
+    await run({});
+    expect(isReleased).not.toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
+    expect(calls[0]?.isError).toBe(true);
+  });
+
+  it("does not run the handler when the gate throws", async () => {
+    const { handler, calls, run } = gated(async () => {
+      throw new Error("database down");
+    });
+    await run({ actionId: "a1" });
+    expect(handler).not.toHaveBeenCalled();
+    expect(calls[0]?.isError).toBe(true);
+  });
+
+  it("does not ask the gate for an ungated tool", async () => {
+    const isReleased = vi.fn(async () => false);
+    const handler = vi.fn(async () => "ran");
+    const run = setup([INIT, result(0)], {
+      gate: { isReleased },
+      during: async (options) => {
+        await (await clientOf(options)).callTool({ name: "send_email", arguments: {} });
+      },
+    });
+    await collect(run.runtime.run({ ...SPEC, tools: [{ ...def("send_email"), handler }] }));
+    expect(handler).toHaveBeenCalledOnce();
+    expect(isReleased).not.toHaveBeenCalled();
+  });
+});
+
+describe("tool input validation", () => {
+  async function callWith(inputSchema: z.ZodType, args: Record<string, unknown>) {
+    const handler = vi.fn(async (input: unknown) => input);
+    const tool = { ...def("lookup"), inputSchema, handler } as ToolDef;
+    let outcome: Awaited<ReturnType<Client["callTool"]>> | undefined;
+    let listed: unknown;
+    const { runtime } = setup([INIT, result(0)], {
+      during: async (options) => {
+        const client = await clientOf(options);
+        listed = (await client.listTools()).tools[0]?.inputSchema;
+        outcome = await client.callTool({ name: "lookup", arguments: args });
+      },
+    });
+    await collect(runtime.run({ ...SPEC, tools: [tool] }));
+    return { handler, outcome, listed };
+  }
+  const positive = z.object({ value: z.number() }).refine((input) => input.value >= 0, "must not be negative");
+
+  it("applies an object-level refinement before the handler", async () => {
+    const { handler, outcome } = await callWith(positive, { value: -1 });
+    expect(handler).not.toHaveBeenCalled();
+    expect(outcome?.isError).toBe(true);
+  });
+
+  it("applies a strict object before the handler", async () => {
+    const { handler, outcome } = await callWith(z.strictObject({ value: z.number() }), { value: 1, extra: true });
+    expect(handler).not.toHaveBeenCalled();
+    expect(outcome?.isError).toBe(true);
+  });
+
+  it("rejects a wrong field type before the handler", async () => {
+    const { handler, outcome } = await callWith(positive, { value: "one" });
+    expect(handler).not.toHaveBeenCalled();
+    expect(outcome?.isError).toBe(true);
+  });
+
+  it("gives the handler the parsed input, parsed once, and still advertises the fields to the model", async () => {
+    const schema = z.object({ value: z.string().transform(Number), unit: z.string().default("kWh") });
+    const { handler, outcome, listed } = await callWith(schema, { value: "7" });
+    expect(outcome?.isError).toBeFalsy();
+    expect(handler.mock.calls[0]?.[0]).toEqual({ value: 7, unit: "kWh" });
+    expect(listed).toMatchObject({ type: "object", properties: { value: { type: "string" } } });
   });
 });
 

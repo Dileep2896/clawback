@@ -82,6 +82,7 @@ async function gatedSubagentRun() {
       released[actionId] = Date.now();
       return actionId === "a1";
     },
+    isReleased: async (actionId: string) => actionId === "a1" && actionId in released,
   } as unknown as ApprovalGate;
   const budget: Budget = {
     status: async () => ({ totalUsd: 0, capUsd: 5, over: false }),

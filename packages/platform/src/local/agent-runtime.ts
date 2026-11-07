@@ -60,12 +60,32 @@ export function createCanUseTool(
   };
 }
 
-function mcpTool(def: ToolDef, runId: string, callerOf: (toolUseId: unknown) => string) {
+function mcpTool(
+  def: ToolDef,
+  runId: string,
+  gate: Pick<ApprovalGate, "isReleased">,
+  callerOf: (toolUseId: unknown) => string,
+  onDenied: (agent: string, name: string, reason: string, toolUseId: string) => void,
+) {
   if (!(def.inputSchema instanceof z.ZodObject)) throw new Error(`Tool ${def.name}: inputSchema must be a z.object`);
-  return tool(def.name, def.description, def.inputSchema.shape, async (input, extra) => {
+  // shortcut: the SDK types ask for a raw shape, which would drop refinements and strictness, but it hands a whole
+  // z.object to MCP, which validates with it before the handler. The tests fail if an SDK upgrade changes that.
+  const schema = def.inputSchema as unknown as z.ZodRawShape;
+  return tool(def.name, def.description, schema, async (input, extra) => {
     const toolUseId = (extra as { _meta?: Record<string, unknown> })._meta?.["claudecode/toolUseId"];
+    const agent = callerOf(toolUseId);
     try {
-      const output = await def.handler(input, { runId, agent: callerOf(toolUseId) });
+      // Managed allow rules skip canUseTool even with settingSources: [], so approval is also enforced here,
+      // on the validated input, where nothing can route around it.
+      if (isGatedTool(def.name)) {
+        const { actionId } = input;
+        if (typeof actionId !== "string" || !actionId || !(await gate.isReleased(actionId))) {
+          const reason = `${def.name} ran without an approved actionId`;
+          onDenied(agent, def.name, reason, toolUseId as string);
+          return { content: [{ type: "text" as const, text: reason }], isError: true };
+        }
+      }
+      const output = await def.handler(input, { runId, agent });
       return { content: [{ type: "text" as const, text: JSON.stringify(output) ?? "null" }] };
     } catch (error) {
       return { content: [{ type: "text" as const, text: errorText(error) }], isError: true };
@@ -157,7 +177,7 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
           [SERVER]: createSdkMcpServer({
             name: SERVER,
             version: "1.0.0",
-            tools: spec.tools.map((def) => mcpTool(def, spec.runId, (id) => callers.get(id) ?? main)),
+            tools: spec.tools.map((def) => mcpTool(def, spec.runId, gate, (id) => callers.get(id) ?? main, onDenied)),
           }),
         },
       };
