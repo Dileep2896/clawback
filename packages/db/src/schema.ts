@@ -51,6 +51,22 @@ export const customers = pgTable("customers", {
   savingsSharePct: integer("savings_share_pct").notNull().default(30),
 });
 
+// Demo accounts for the dashboard. Not a real identity provider: demo:reset clears every row.
+export const users = pgTable("users", {
+  id: id(),
+  name: text("name").notNull(),
+  company: text("company").notNull(),
+  // Stored lowercase, so the unique index is case-insensitive in practice.
+  email: text("email").notNull().unique(),
+  // scrypt "salt:hash", both base64. Never the password.
+  passwordHash: text("password_hash").notNull(),
+  customerId: text("customer_id").notNull().references(() => customers.id),
+  // True when sign-up made the customer row, so demo:reset deletes it; false when the email matched a seeded customer.
+  createdCustomer: boolean("created_customer").notNull().default(false),
+  auditRequestedAt: timestamptz("audit_requested_at"),
+  createdAt: createdAt(),
+});
+
 export const locations = pgTable("locations", {
   id: id(),
   customerId: text("customer_id").notNull().references(() => customers.id),
