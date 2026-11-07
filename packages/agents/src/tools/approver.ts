@@ -132,7 +132,8 @@ export function approverTools({
           if (created.length > 0) await tx.insert(actions).values(created).onConflictDoNothing({ target: actions.id });
           const figures = `Refund to claim: ${dollars(totals.refundCents)}. Yearly savings: ${dollars(totals.annualSavingsCents)}.`;
           const scope = bundleLines([...created, ...letters].map(({ kind, payloadJson }) => ({ kind, payloadJson })));
-          return view(await approvals.createBundle({ runId, actionIds: own, summary: `${summary}\n\n${[...scope, figures].join("\n")}` }, tx));
+          // Code-built lines first: the Approval panel shows the top of the summary, and these must never fall below the fold.
+          return view(await approvals.createBundle({ runId, actionIds: own, summary: `${[...scope, figures].join("\n")}\n\n${summary}` }, tx));
         });
       }),
     }),

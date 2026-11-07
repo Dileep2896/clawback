@@ -222,6 +222,10 @@ describe("what the owner is told the bundle does", () => {
     const sentence = "On the BayTel call we will cancel 1 unused line and ask to restore 1 promo rate.";
     expect(summary).toContain(sentence);
     expect(summary).toContain("We will invoice you for our fee.");
+    // The panel shows the top of the summary, so the code-built lines and figures come before the model's wording.
+    expect(summary.startsWith(sentence)).toBe(true);
+    expect(summary.indexOf("Refund to claim:")).toBeLessThan(summary.indexOf(SUMMARY));
+    expect(summary.endsWith(SUMMARY)).toBe(true);
 
     await runTool(tools, "send_sms", { body: "Your approval is waiting. Reply YES." }, RUN);
     const [row] = await db.select().from(smsMessages);
