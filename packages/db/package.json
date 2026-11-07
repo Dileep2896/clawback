@@ -13,12 +13,14 @@
   "dependencies": {
     "@bill-fighter/core": "workspace:*",
     "@bill-fighter/shared": "workspace:*",
+    "@fontsource/ibm-plex-sans": "5.3.0",
     "drizzle-orm": "^0.45.4",
     "pg": "^8.23.1",
     "playwright": "^1.65.0"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",
-    "drizzle-kit": "^0.31.11"
+    "drizzle-kit": "^0.31.11",
+    "pdfjs-dist": "6.5.438"
   }
 }

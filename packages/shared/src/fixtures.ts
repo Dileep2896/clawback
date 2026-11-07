@@ -3,7 +3,7 @@ import { z } from "zod";
 // The one place the gas supplier is named.
 export const GAS_SUPPLIER = { provider: "bayhearth", name: "BayHearth Energy" } as const;
 
-export const Provider = z.enum(["pacific_power", "baytel", "bayconnect", GAS_SUPPLIER.provider]);
+export const Provider = z.enum(["baycurrent", "baytel", "bayconnect", GAS_SUPPLIER.provider]);
 export type Provider = z.infer<typeof Provider>;
 
 export const ServiceType = z.enum(["electric", "gas", "telecom", "internet"]);

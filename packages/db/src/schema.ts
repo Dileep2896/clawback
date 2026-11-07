@@ -22,7 +22,7 @@ const costUsd = () => numeric("cost_usd", { precision: 12, scale: 6, mode: "numb
 const confidence = (name: string) => numeric(name, { precision: 4, scale: 3, mode: "number" });
 const decimal = (name: string) => numeric(name, { precision: 14, scale: 6, mode: "number" });
 
-export const provider = pgEnum("provider", ["pacific_power", "baytel", "bayconnect", "bayhearth"]);
+export const provider = pgEnum("provider", ["baycurrent", "baytel", "bayconnect", "bayhearth"]);
 export const serviceType = pgEnum("service_type", ["electric", "gas", "telecom", "internet"]);
 export const phoneLinePurpose = pgEnum("phone_line_purpose", ["unknown", "fax", "alarm", "voice"]);
 export const findingStatus = pgEnum("finding_status", ["proposed", "approved", "filed", "won", "rejected"]);

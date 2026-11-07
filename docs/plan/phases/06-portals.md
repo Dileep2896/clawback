@@ -12,7 +12,7 @@ Build clearly fictional provider portals for the Collector to work through. Sect
 
 ### `portal-shell`
 
-**Goal:** Next.js portal on port 3001 with brand config (Pacific Power Business, BayTel Business, BayConnect, the fictional gas supplier), demo banner, login, account list with location picker and pagination, and one session-expiry modal.
+**Goal:** Next.js portal on port 3001 with brand config (BayCurrent Business, BayTel Business, BayConnect, the fictional gas supplier), demo banner, login, account list with location picker and pagination, and one session-expiry modal.
 
 **Estimate:** 1 hour
 

@@ -133,7 +133,7 @@ describe("db schema", () => {
         "SELECT enumlabel FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'provider' ORDER BY e.enumsortorder",
       ),
     ).map((r) => r.enumlabel);
-    expect(labels).toEqual(["pacific_power", "baytel", "bayconnect", "bayhearth"]);
+    expect(labels).toEqual(["baycurrent", "baytel", "bayconnect", "bayhearth"]);
   });
 
   it("rejects duplicates the later lanes rely on", async () => {

@@ -74,7 +74,7 @@ Claude usage is the only paid piece in local mode. Use `ANTHROPIC_API_KEY` (bare
 bill-fighter/
   apps/
     dashboard/          Next.js: board, findings, approvals, call view, phone (SMS) view, ledger, audit log
-    portal/             Next.js: replica "Pacific Power" and "BayTel" customer portals
+    portal/             Next.js: replica "BayCurrent Electric" and "BayTel" customer portals
   services/
     voice/              mock provider IVR, live call bridge, simulated call engine
     webhooks/           inbound email webhook that starts a run
@@ -126,7 +126,7 @@ Money is integer cents.
 
 - `customers` (id, name, contact_name, contact_email, contact_phone, savings_share_pct default 30)
 - `locations` (id, customer_id, name, address, city)
-- `accounts` (id, location_id, provider [pacific_power | baytel | bayconnect], account_number, service_type [electric | gas | telecom | internet], rate_schedule, meter_number)
+- `accounts` (id, location_id, provider [baycurrent | baytel | bayconnect], account_number, service_type [electric | gas | telecom | internet], rate_schedule, meter_number)
 - `authorizations` (id, customer_id, provider, form_type, scope, signed_by, signed_at, expires_at, pdf_path), modeled on PG&E Form 79-1095
 - `bills` (id, account_id, period_start, period_end, total_cents, pdf_path, parsed_json, parse_confidence)
 - `bill_lines` (id, bill_id, description, quantity, unit, rate, amount_cents, line_type)
@@ -148,7 +148,7 @@ Money is integer cents.
 
 Seed exactly this customer. All names are fictional. Label the dashboard "Demo data".
 
-**Golden Gate Noodle Co.** Owner: Linda Park. 12 restaurants: 4 in San Francisco, 3 in Oakland, 3 in San Jose, 2 in Fremont. Each location has one electric account at "Pacific Power" (our PG&E stand in, using real PG&E rate structures), one telecom account at "BayTel" (AT&T stand in) and one internet account at "BayConnect" (Comcast stand in). Annual spend across all bills is about $300,000.
+**Golden Gate Noodle Co.** Owner: Linda Park. 12 restaurants: 4 in San Francisco, 3 in Oakland, 3 in San Jose, 2 in Fremont. Each location has one electric account at "BayCurrent Electric" (our PG&E stand in, using real PG&E rate structures), one telecom account at "BayTel" (AT&T stand in) and one internet account at "BayConnect" (Comcast stand in). Annual spend across all bills is about $300,000.
 
 Generate 12 months of bills for every account, ending last month. Base electricity usage comes from a ComStock or Green Button restaurant load profile, scaled per store with small random noise (fixed seed). Then plant:
 
@@ -189,7 +189,7 @@ Unit tests must assert all four planted findings are found and the decoy gives n
 
 ## 9. Replica provider portals (`apps/portal`)
 
-Two clearly fictional portals: "Pacific Power Business" and "BayTel Business", with a banner "Demo portal, not a real utility". Login (credentials from the vault), account list with a location picker and pagination, bills page with PDF downloads, usage CSV download (15 minute data), and one "Your session will expire" modal for realistic friction. No CAPTCHA. Do not copy any real company's design, logo or text.
+Two clearly fictional portals: "BayCurrent Business" and "BayTel Business", with a banner "Demo portal, not a real utility". Login (credentials from the vault), account list with a location picker and pagination, bills page with PDF downloads, usage CSV download (15 minute data), and one "Your session will expire" modal for realistic friction. No CAPTCHA. Do not copy any real company's design, logo or text.
 
 ---
 
@@ -230,7 +230,7 @@ In both modes the caller must: say the disclosure first, navigate the menu, give
 
 ## 12. Trigger, scheduling and demo controls
 
-- **Trigger:** `scripts/demo-start.ts` sends a bill email from a "Pacific Power" sender to `bills@...` through the `Mail` interface. Locally it also POSTs the same payload to `services/webhooks/inbound` (or Mailpit notifies it), which starts a run with `trigger=email`. In naïve mode the naïve inbound mail webhook calls the same endpoint (naïve inbound mail does not auto-wake agents yet).
+- **Trigger:** `scripts/demo-start.ts` sends a bill email from a "BayCurrent Electric" sender to `bills@...` through the `Mail` interface. Locally it also POSTs the same payload to `services/webhooks/inbound` (or Mailpit notifies it), which starts a run with `trigger=email`. In naïve mode the naïve inbound mail webhook calls the same endpoint (naïve inbound mail does not auto-wake agents yet).
 - `scripts/demo-reset.ts`: clears runs, findings, actions, approvals, calls, ledger, board, audit and sms rows; keeps seed data.
 - `scripts/replay.ts`: replays a recorded run event by event at real speed if live services fail.
 - `scripts/run-local.ts`: runs the whole flow in the terminal with auto approval, for fast testing (never used on stage).
