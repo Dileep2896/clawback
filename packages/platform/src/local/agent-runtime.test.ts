@@ -1,0 +1,231 @@
+import type { HookCallback, Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { GATED_TOOLS } from "@bill-fighter/shared/gated-tools";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
+import type { ApprovalGate, Budget, RunEvent, RunSpec, ToolDef } from "../types.ts";
+import { allowedToolNames, createAgentRuntime, createCanUseTool, type Query } from "./agent-runtime.ts";
+
+const def = (name: string): ToolDef => ({
+  name,
+  description: name,
+  inputSchema: z.object({ actionId: z.string().optional() }) as unknown as ToolDef["inputSchema"],
+  handler: async () => "ok",
+});
+
+const SPEC: RunSpec = {
+  runId: "run-1",
+  prompt: "go",
+  main: { name: "ceo", description: "", prompt: "", tools: ["call_provider"], maxTurns: 1 },
+  members: [],
+  tools: [def("call_provider")],
+};
+
+const INIT = { type: "system", subtype: "init", apiKeySource: "none", tools: ["mcp__platform__call_provider"], agents: [] };
+const result = (cost: number, extra: object = {}) => ({
+  type: "result",
+  subtype: "success",
+  is_error: false,
+  result: "done",
+  total_cost_usd: cost,
+  ...extra,
+});
+
+function setup(messages: unknown[], { capUsd = 5, totalUsd = 0, thenThrow = "" } = {}) {
+  const added: number[] = [];
+  const captured: { options?: Options } = {};
+  const budget: Budget = {
+    status: async () => ({ totalUsd, capUsd, over: totalUsd >= capUsd }),
+    add: async (_runId, costUsd) => {
+      added.push(costUsd);
+      const total = totalUsd + added.reduce((sum, cost) => sum + cost, 0);
+      return { totalUsd: total, capUsd, over: total >= capUsd };
+    },
+  };
+  const query: Query = async function* ({ options }) {
+    captured.options = options;
+    yield* messages as SDKMessage[];
+    if (thenThrow) throw new Error(thenThrow);
+  };
+  const runtime = createAgentRuntime(async () => ({ gate: {} as ApprovalGate, budget, query }));
+  return { added, captured, runtime };
+}
+
+async function collect(events: AsyncIterable<RunEvent>) {
+  const all: RunEvent[] = [];
+  for await (const event of events) all.push(event);
+  return { all, last: all.at(-1) as Extract<RunEvent, { type: "result" }>, text: JSON.stringify(all) };
+}
+
+afterEach(() => vi.restoreAllMocks());
+
+describe("allowedToolNames", () => {
+  it("never lists a gated tool", () => {
+    const names = allowedToolNames([...GATED_TOOLS.map(def), def("send_email")]);
+    expect(names).toEqual(["mcp__platform__send_email"]);
+  });
+
+  it("is what the run passes to the SDK, along with no bypass mode", async () => {
+    const { captured, runtime } = setup([INIT, result(0)]);
+    await collect(runtime.run({ ...SPEC, tools: [...GATED_TOOLS.map(def), def("send_email")] }));
+    expect(captured.options?.allowedTools).toEqual(["mcp__platform__send_email"]);
+    expect(captured.options?.permissionMode).toBeUndefined();
+    expect(captured.options?.settingSources).toEqual([]);
+    expect(captured.options?.tools).toEqual([]);
+  });
+});
+
+describe("createCanUseTool", () => {
+  const sdk = { name: "platform", source: "sdk" };
+  const call = (
+    tool: string,
+    input: Record<string, unknown>,
+    waitForRelease: ApprovalGate["waitForRelease"] = async () => true,
+    // null means no provenance: undefined would pick up this default.
+    mcpServer: { name: string; source: string } | null = sdk,
+  ) => {
+    const onDenied = vi.fn();
+    const canUseTool = createCanUseTool([def("call_provider"), def("send_email")], { waitForRelease }, onDenied);
+    const options = { signal: new AbortController().signal, toolUseID: "t1", requestId: "r1", mcpServer: mcpServer ?? undefined };
+    return { decision: canUseTool(tool, input, options as never), onDenied };
+  };
+  const CALL = "mcp__platform__call_provider";
+
+  it("allows a gated call only after the gate releases it", async () => {
+    let release: (released: boolean) => void = () => {};
+    const { decision } = call(CALL, { actionId: "a1" }, () => new Promise((resolve) => (release = resolve)));
+    const settled = vi.fn();
+    void decision.then(settled);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(settled).not.toHaveBeenCalled();
+    release(true);
+    expect(await decision).toMatchObject({ behavior: "allow", updatedInput: { actionId: "a1" } });
+  });
+
+  it("denies when the gate does not release, without interrupting", async () => {
+    const { decision, onDenied } = call(CALL, { actionId: "a1" }, async () => false);
+    const outcome = await decision;
+    expect(outcome?.behavior).toBe("deny");
+    expect(outcome).not.toHaveProperty("interrupt");
+    expect(onDenied).toHaveBeenCalledOnce();
+  });
+
+  it("denies a gated call with no actionId and never asks the gate", async () => {
+    const wait = vi.fn(async () => true);
+    expect((await call(CALL, {}, wait).decision)?.behavior).toBe("deny");
+    expect(wait).not.toHaveBeenCalled();
+  });
+
+  it("denies when the gate throws, rather than crashing or allowing", async () => {
+    const down = async () => {
+      throw new Error("database down");
+    };
+    expect((await call(CALL, { actionId: "a1" }, down).decision)?.behavior).toBe("deny");
+  });
+
+  it.each([
+    ["an unknown tool of ours", "mcp__platform__other", sdk],
+    ["a built-in tool", "Bash", null],
+    ["an account connector", "mcp__claude_ai_Gmail__send_message", { name: "claude_ai_Gmail", source: "claudeai" }],
+    ["a configured server imitating ours", CALL, { name: "platform", source: "user" }],
+    ["a call with no provenance", CALL, null],
+  ])("denies %s", async (_name, tool, mcpServer) => {
+    expect((await call(tool, { actionId: "a1" }, async () => true, mcpServer).decision)?.behavior).toBe("deny");
+  });
+
+  it("allows an ungated tool of this run", async () => {
+    expect((await call("mcp__platform__send_email", {}).decision)?.behavior).toBe("allow");
+  });
+});
+
+describe("the main agent's tool list", () => {
+  it("is enforced for MCP tools, which tools: [\"Agent\"] does not limit", async () => {
+    const { captured, runtime } = setup([INIT, result(0)]);
+    await collect(runtime.run({ ...SPEC, main: { ...SPEC.main, tools: [] } }));
+    const hook = captured.options?.hooks?.PreToolUse?.[0]?.hooks[0] as HookCallback;
+    const input = { hook_event_name: "PreToolUse", tool_name: "mcp__platform__call_provider", tool_use_id: "t1" };
+    const output = await hook(input as never, "t1", { signal: new AbortController().signal });
+    expect(output).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+  });
+});
+
+describe("run", () => {
+  it("does not stop at the first result, and gives Budget the change in the running total", async () => {
+    const { added, runtime } = setup([INIT, result(0.25), INIT, result(0.75)]);
+    const { last } = await collect(runtime.run(SPEC));
+    expect(added).toEqual([0.25, 0.5]);
+    expect(last).toEqual({ type: "result", status: "success", costUsd: 0.75 });
+  });
+
+  it("labels the cost as an estimate", async () => {
+    const { runtime } = setup([INIT, result(0.25)]);
+    expect((await collect(runtime.run(SPEC))).text).toContain("an SDK estimate, not a bill");
+  });
+
+  it("treats is_error on a success subtype as a failure, which is how a bad key arrives", async () => {
+    const { runtime } = setup([INIT, result(0, { is_error: true, result: "Invalid API key" })], {
+      thenThrow: "Claude Code process exited with code 1",
+    });
+    const { last, text } = await collect(runtime.run(SPEC));
+    expect(last.status).toBe("error");
+    expect(text).toContain("Invalid API key");
+  });
+
+  it("refuses a run that reports a key instead of the login", async () => {
+    const { runtime } = setup([{ ...INIT, apiKeySource: "ANTHROPIC_API_KEY" }, result(0)]);
+    const { last, text } = await collect(runtime.run(SPEC));
+    expect(last.status).toBe("error");
+    expect(text).toContain("Refusing to run");
+  });
+
+  it("refuses when a connector shows up in a later init", async () => {
+    const leak = { ...INIT, tools: ["mcp__claude_ai_Gmail__send_message"] };
+    const { runtime } = setup([INIT, result(0.1), leak, result(0.2)]);
+    const { last, text } = await collect(runtime.run(SPEC));
+    expect(last.status).toBe("error");
+    expect(text).toContain("mcp__claude_ai_Gmail__send_message");
+  });
+
+  it("surfaces a plan rate limit as status error", async () => {
+    const limit = { type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt: 1_800_000_000 } };
+    const { runtime } = setup([INIT, limit, result(0.1)]);
+    const { last, text } = await collect(runtime.run(SPEC));
+    expect(last.status).toBe("error");
+    expect(text).toContain("rate limit");
+  });
+
+  it("ignores a rate limit warning that still allows the run", async () => {
+    const warning = { type: "rate_limit_event", rate_limit_info: { status: "allowed_warning" } };
+    const { runtime } = setup([INIT, warning, result(0.1)]);
+    expect((await collect(runtime.run(SPEC))).last.status).toBe("success");
+  });
+
+  it("reports over_budget when the SDK stops at the cap", async () => {
+    const stopped = result(5, { subtype: "error_max_budget_usd", is_error: true, errors: [] });
+    const { runtime } = setup([INIT, stopped]);
+    const { last, text } = await collect(runtime.run(SPEC));
+    expect(last.status).toBe("over_budget");
+    expect(text).toMatch(/estimated cost/i);
+  });
+
+  it("reports over_budget when Budget says the estimate passed the cap", async () => {
+    const { runtime } = setup([INIT, result(6)]);
+    expect((await collect(runtime.run(SPEC))).last.status).toBe("over_budget");
+  });
+
+  it("does not start when the budget is already spent, and passes on what remains", async () => {
+    const spent = setup([INIT, result(1)], { totalUsd: 5 });
+    const { last } = await collect(spent.runtime.run(SPEC));
+    expect(last.status).toBe("over_budget");
+    expect(spent.captured.options).toBeUndefined();
+
+    const partial = setup([INIT, result(1)], { totalUsd: 2 });
+    await collect(partial.runtime.run(SPEC));
+    expect(partial.captured.options?.maxBudgetUsd).toBe(3);
+  });
+
+  it("ends in status error, not a crash, when the SDK throws or there is no result", async () => {
+    const thrown = setup([INIT], { thenThrow: "boom" });
+    expect((await collect(thrown.runtime.run(SPEC))).last.status).toBe("error");
+    expect((await collect(setup([INIT]).runtime.run(SPEC))).last.status).toBe("error");
+  });
+});
