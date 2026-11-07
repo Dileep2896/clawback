@@ -39,7 +39,7 @@ export function financeInvoiceTools({
       try {
         return await handler(input, ctx);
       } catch (error) {
-        if (error instanceof Stripe.errors.StripeError) await reportProblem(db, ctx.runId, "Stripe did not create the invoice, so none was recorded. The fee is still in the ledger.");
+        if (error instanceof Stripe.errors.StripeError) await reportProblem(db, ctx.runId, "Stripe did not confirm the invoice, so it may be unfinished in Stripe. No invoice was recorded here, and the fee is still in the ledger.");
         throw error;
       }
     };
