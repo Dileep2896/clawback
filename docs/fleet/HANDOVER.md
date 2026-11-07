@@ -15,6 +15,15 @@ Picked up 2026-11-06
 - For finance-invoice: refuse a non-test Stripe key at call or run start, never at import, because one throwing tool file breaks the whole tool scan.
 - For agents-e2e: a gated call parks in waitForRelease while approval is pending; check this against "stops at one pending approval". fillSecret is first exercised by the collector tools.
 - Sim call measured 163 s, about three times the 50 s the demo script gives it, and about 16% of a $5 run budget. Not batched. Live call stays the primary; decide at rehearsal between speeding up the sim display, batching, or replay.
+- For voice-live-caller: outcome extraction is code only, an item counts when the rep's next line is a yes to it. Live transcripts must be normalised first (numbers as words, split utterances), or items get left out. Fill the live engine stub in the call_provider tool. Ask the human before each live call.
+- For finance-ledger: unusedLines and promoExpiry findings count only when status is won, set on the rep's yes.
+- For panels-action: a sim fallback from live is a system transcript row of kind fallback, right after the disclosure. Show it as the on-screen label.
+- For run-trigger: an open browser session's proxy keeps the process alive for 10 idle minutes, so run-local ends with process.exit. demo-start must print a seed account number in the inbound email, because Intake matches the customer by account number.
+- For monitor-check: parse_bill never calls the model, so a new next-month bill must be in the parse cache first, or it fails visibly.
+- For finance-invoice: request_approval creates one invoice action, id invoice-<runId>, finding_id null, no amount in the payload; the fee is computed in finance-invoice. card_pay has no action yet; the naive lanes own that.
+- goldengatenoodle.example is in ALLOWED_EMAIL_DOMAINS in .env and .env.example (human, 2026-11-06: "go ahead with the email"). Worktree .env files copied earlier need the same line for agents-e2e.
+- For the naive adapter at M10: BrowserSession gains attributes(selector, name).
+- `.env.example` keeps ALLOWED_CALL_NUMBERS empty on purpose; the root `.env` has the Vapi line.
 - Portal login needs `pnpm seed:portal` once on main, with VAULT_KEY set, before the first full run.
 
 ## Waiting on the human

@@ -28,7 +28,8 @@
     "run:local": "tsx --env-file-if-exists=.env scripts/run-local.ts",
     "parse:sample": "tsx --env-file-if-exists=.env scripts/parse-sample.ts",
     "dev:dashboard": "pnpm --filter @bill-fighter/dashboard dev",
-    "dev:portal": "pnpm --filter @bill-fighter/portal dev"
+    "dev:portal": "pnpm --filter @bill-fighter/portal dev",
+    "dev:webhooks": "tsx --env-file-if-exists=.env services/webhooks/src/main.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
