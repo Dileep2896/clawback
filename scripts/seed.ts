@@ -7,20 +7,16 @@ const startedAt = performance.now();
 const seed = generateSeed();
 writeSeed(seed);
 
-// Before the load, so a missing browser changes nothing in the database.
+const db = createDb();
+// Render, then load, then swap: a missing browser changes nothing in the database, and a failed load changes no PDFs.
 try {
-  await renderBills(billViews(seed));
+  await renderBills(billViews(seed), { beforeSwap: () => loadSeed(db, seed) });
 } catch (error) {
   if (error instanceof Error && error.message.includes("Executable doesn't exist")) {
     console.error("Chromium is missing. Run `pnpm exec playwright install chromium`, then `pnpm seed` again.");
     process.exit(1);
   }
   throw error;
-}
-
-const db = createDb();
-try {
-  await loadSeed(db, seed);
 } finally {
   await db.$client.end();
 }

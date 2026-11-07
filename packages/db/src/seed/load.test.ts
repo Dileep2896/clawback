@@ -1,11 +1,15 @@
-import { fileURLToPath } from "node:url";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { chromium, type Browser } from "playwright";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createDb, databaseUrl } from "../client.ts";
 import * as schema from "../schema.ts";
-import { billPdfPath } from "./bill-pdf.ts";
+import { billPdfPath, billViews, FIXED_PDF_DATE, renderBills } from "./bill-pdf.ts";
 import { METER_SWAP } from "./customer.ts";
 import { generateSeed, type Seed } from "./generate.ts";
 import { loadSeed } from "./load.ts";
@@ -200,5 +204,51 @@ describe("loadSeed", () => {
     await db.delete(schema.findings).where(eq(schema.findings.id, "blocking-finding"));
     await loadSeed(db, seed);
     expect(await snapshot()).toEqual(before);
+  }, LOAD_TIMEOUT);
+
+  it("keeps the old PDFs when the load rolls back, and replaces them only after it commits", async () => {
+    const pdf = Buffer.from(`/CreationDate (${FIXED_PDF_DATE}) /ModDate (${FIXED_PDF_DATE})`, "latin1");
+    const page = { setContent: async () => {}, evaluate: async () => {}, pdf: async () => pdf, close: async () => {} };
+    const browser = { newPage: async () => page, close: async () => {} } as unknown as Browser;
+    const launch = vi.spyOn(chromium, "launch").mockResolvedValue(browser);
+    const parent = mkdtempSync(join(tmpdir(), "bill-load-"));
+    const bills = join(parent, "bills");
+    const views = billViews(seed).slice(0, 2);
+    const render = (beforeSwap: () => Promise<unknown>) =>
+      renderBills(views, { dir: pathToFileURL(`${bills}/`), staging: pathToFileURL(`${parent}/staging/`), beforeSwap });
+    try {
+      mkdirSync(bills);
+      writeFileSync(join(bills, "kept.pdf"), "from the last good run");
+      const before = await snapshot();
+      await plantStaleRows();
+      await db.insert(schema.findings).values({
+        id: "blocking-finding",
+        customerId: seed.customer.id,
+        accountId: "stale-acct",
+        type: "test",
+        title: "Blocks",
+        explanation: "Blocks",
+        evidenceJson: {},
+        confidence: 0.5,
+      });
+
+      await expect(render(() => loadSeed(db, seed))).rejects.toThrow();
+      expect(readFileSync(join(bills, "kept.pdf"), "utf8")).toBe("from the last good run");
+      expect(readdirSync(parent)).toEqual(["bills"]);
+
+      await db.delete(schema.findings).where(eq(schema.findings.id, "blocking-finding"));
+      let duringLoad: string[] = [];
+      await render(async () => {
+        await loadSeed(db, seed);
+        duringLoad = readdirSync(bills);
+      });
+      expect(duringLoad).toEqual(["kept.pdf"]);
+      expect(readdirSync(bills).sort()).toEqual(views.map((v) => `${v.bill.id}.pdf`).sort());
+      expect(readdirSync(parent)).toEqual(["bills"]);
+      expect(await snapshot()).toEqual(before);
+    } finally {
+      launch.mockRestore();
+      rmSync(parent, { recursive: true, force: true });
+    }
   }, LOAD_TIMEOUT);
 });

@@ -16,6 +16,7 @@ import type { BillView, Template } from "./templates/common.ts";
 
 const SEED_DIR = new URL("../../../../data/seed/", import.meta.url);
 const BILLS_DIR = new URL("../../../../data/bills/", import.meta.url);
+const STAGING_DIR = new URL("bills.staging/", SEED_DIR);
 
 const TEMPLATES: Record<Provider, Template> = { baycurrent, baytel, bayconnect, bayhearth };
 
@@ -87,9 +88,11 @@ export function readSeedFiles(dir: URL = SEED_DIR) {
   };
 }
 
-export async function renderBills(views: BillView[], dir: URL = BILLS_DIR) {
-  // Render aside, so a failed run keeps the PDFs the database already points at.
-  const staging = new URL(dir.href.replace(/\/$/, ".staging/"));
+// Nothing in dir is replaced until beforeSwap resolves, so a failed render or load keeps the PDFs the database points at.
+export async function renderBills(
+  views: BillView[],
+  { dir = BILLS_DIR, staging = STAGING_DIR, beforeSwap }: { dir?: URL; staging?: URL; beforeSwap?: () => Promise<unknown> } = {},
+) {
   rmSync(staging, { recursive: true, force: true });
   mkdirSync(staging, { recursive: true });
   try {
@@ -103,6 +106,7 @@ export async function renderBills(views: BillView[], dir: URL = BILLS_DIR) {
     }
     const written = readdirSync(staging).length;
     if (written !== views.length) throw new Error(`Wrote ${written} PDFs for ${views.length} bills`);
+    await beforeSwap?.();
     // shortcut: a crash between these two lines leaves dir missing, the next `pnpm seed` restores it.
     rmSync(dir, { recursive: true, force: true }); // A removed bill must not leave an old PDF behind.
     renameSync(staging, dir);

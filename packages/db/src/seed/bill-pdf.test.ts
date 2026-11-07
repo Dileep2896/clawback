@@ -160,7 +160,9 @@ describe("a failed render", () => {
     try {
       mkdirSync(join(parent, "bills"));
       writeFileSync(join(parent, "bills", "kept.pdf"), "from the last good run");
-      await expect(renderBills(views, pathToFileURL(`${parent}/bills/`))).rejects.toThrow(message);
+      await expect(
+        renderBills(views, { dir: pathToFileURL(`${parent}/bills/`), staging: pathToFileURL(`${parent}/staging/`) }),
+      ).rejects.toThrow(message);
       expect(readFileSync(join(parent, "bills", "kept.pdf"), "utf8")).toBe("from the last good run");
       expect(readdirSync(parent)).toEqual(["bills"]);
     } finally {
@@ -183,7 +185,7 @@ describe.skipIf(!hasChromium)("rendered PDFs", () => {
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), "bill-pdfs-"));
     writeFileSync(join(dir, "stale.pdf"), "left over from an older seed");
-    await renderBills(views, pathToFileURL(`${dir}/`));
+    await renderBills(views, { dir: pathToFileURL(`${dir}/`), staging: pathToFileURL(`${dir}.staging/`) });
   }, SLOW);
 
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
