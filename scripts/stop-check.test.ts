@@ -11,7 +11,7 @@ function good(): StopSnapshot {
     row("store_bill", "collector", { totalStored: 448 }),
     row("parse_bill", "auditor", { cached: 448, fresh: 0 }),
     row("send_sms", "approver"),
-    ...MEMBERS.map((member) => row("board_update", "ceo", {}, { cardId: `card-${member}`, status: "done" })),
+    ...MEMBERS.map((member) => row("board_update", "ceo", { cardId: `card-${member}`, status: "done" }, { cardId: `card-${member}`, status: "done" })),
   ];
   return {
     run: { trigger: "email", platform: "local", status: "running" },
@@ -68,12 +68,14 @@ describe("stopProblems", () => {
     ["a summary attempt, even a refused one", (s) => s.audit.push(row("send_email", "ceo", { error: "pending" })), /send_email was called/],
     ["an email in the inbox", (s) => (s.summaryEmails = 1), /1 emails/],
     ["a second text", (s) => s.audit.push(row("send_sms", "approver")), /2 texts/],
+    ["a denied text as the only text", (s) => (s.audit.find((r) => r.tool === "send_sms")!.outputJson = { denied: "not approved" }), /0 texts/],
     ["a fresh parse", (s) => (s.audit.find((r) => r.tool === "parse_bill")!.outputJson = { cached: 447, fresh: 1 }), /not all cached/],
     ["a fresh parse hidden by a cached retry", (s) => s.audit.unshift(row("parse_bill", "auditor", { cached: 0, fresh: 448 })), /not all cached/],
     ["a tool call with no audit row", (s) => s.toolCalls.push({ agent: "auditor", tool: "run_audit" }), /run_audit: 1 calls but 0 audit rows/],
     ["a parked id with no gated call behind it", (s) => s.parked.push("cancel-0"), /2 parked, from 1 gated calls/],
     ["a member moving a card", (s) => s.audit.push(row("board_update", "filer")), /board_update called by filer/],
     ["a card never moved", (s) => (s.audit = s.audit.filter((r) => (r.inputJson as { cardId?: string }).cardId !== "card-filer")), /no card for filer was moved/],
+    ["a card move that failed", (s) => (s.audit.find((r) => (r.inputJson as { cardId?: string }).cardId === "card-filer")!.outputJson = { error: "db down" }), /no card for filer was moved/],
     ["a member's card not done", (s) => (s.cards.find((c) => c.agent === "auditor")!.status = "doing"), /no done card for auditor/],
     ["no card for the waiting member", (s) => (s.cards = s.cards.filter((c) => c.agent !== "negotiator")), /waiting member/],
     ["a leaked login", (s) => (s.leakedSecrets = 1), /login values/],

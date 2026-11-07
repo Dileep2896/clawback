@@ -104,7 +104,7 @@ export function stopProblems(s: StopSnapshot): string[] {
   }
   add(s.summaryEmails === 0, `${s.summaryEmails} emails reached the owner`);
   // A refused attempt reached nobody, so only sent ones count.
-  const texts = count(s.audit, (row) => row.tool === "send_sms" && (row.outputJson as { error?: unknown } | null)?.error === undefined);
+  const texts = count(s.audit, (row) => row.tool === "send_sms" && !isDenied(row) && (row.outputJson as { error?: unknown } | null)?.error === undefined);
   add(texts === 1, `${texts} texts to the owner, not 1`);
 
   const parses = s.audit.filter((row) => row.tool === "parse_bill").map((row) => row.outputJson as { cached?: number; fresh?: number } | null);
@@ -131,7 +131,9 @@ export function stopProblems(s: StopSnapshot): string[] {
   const boardRows = s.audit.filter((row) => row.tool === "board_update");
   const notCeo = boardRows.filter((row) => row.agent !== "ceo").map((row) => row.agent);
   add(notCeo.length === 0, `board_update called by ${notCeo.join(", ")}`);
-  const moved = new Set(boardRows.map((row) => (row.inputJson as { cardId?: string } | null)?.cardId));
+  const cardIdOf = (json: unknown) => (json as { cardId?: string } | null)?.cardId;
+  // A move returns the card it moved. A failed one records { error } instead, and a create has no input cardId.
+  const moved = new Set(boardRows.filter((row) => cardIdOf(row.inputJson) && cardIdOf(row.outputJson) === cardIdOf(row.inputJson)).map((row) => cardIdOf(row.inputJson)));
   for (const member of FINISHED_MEMBERS) {
     const cards = s.cards.filter((card) => card.agent === member);
     add(cards.some((card) => card.status === "done"), `no done card for ${member}`);
