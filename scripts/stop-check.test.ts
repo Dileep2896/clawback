@@ -19,7 +19,7 @@ function good(): StopSnapshot {
     approvals: [{ status: "pending", channel: null, approvedBy: null, approvedAt: null, summary: "Everything we found." }],
     bundle: [
       ...actions("cancel", 7),
-      { id: "call-1", kind: "call", findingId: null, payloadJson: { cancelLines: Array.from({ length: 7 }, (_, i) => `(415) 555-010${i}`), promoAccounts: ["a", "b", "c"] } },
+      { id: "call-1", kind: "call", findingId: null, payloadJson: { cancelLines: Array.from({ length: 7 }, (_, i) => `(415) 555-010${i}`), promoAccounts: [] } },
       { id: "invoice-1", kind: "invoice", findingId: null, payloadJson: {} },
       ...actions("claim", 1),
       ...actions("plan_change", 2),

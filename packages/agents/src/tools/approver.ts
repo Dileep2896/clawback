@@ -86,8 +86,10 @@ export function approverTools({
             if (lines.length > 0) cancels.push({ findingId: finding.id, lines });
           }
           const cancelLines = cancels.flatMap(({ lines }) => lines.map((line) => line.number));
-          const promoAccounts = proposed.filter(({ finding }) => finding.type === "promoExpiry").map(({ accountNumber }) => accountNumber).sort();
-          const totals = findingTotals(proposed.map(({ finding }) => finding));
+          // Promos stay off the call to keep it short (human's decision, rehearsal), so they stay open findings and this approval neither asks for them nor counts them.
+          const promoAccounts: string[] = [];
+          const openPromos = proposed.filter(({ finding }) => finding.type === "promoExpiry").length;
+          const totals = findingTotals(proposed.map(({ finding }) => finding).filter(({ type }) => type !== "promoExpiry"));
 
           // Fixed ids, so a retry or a race creates nothing twice.
           const created: (typeof actions.$inferInsert)[] = cancels.map(({ findingId }) => ({
@@ -132,8 +134,9 @@ export function approverTools({
           if (created.length > 0) await tx.insert(actions).values(created).onConflictDoNothing({ target: actions.id });
           const figures = `Refund to claim: ${dollars(totals.refundCents)}. Yearly savings: ${dollars(totals.annualSavingsCents)}.`;
           const scope = bundleLines([...created, ...letters].map(({ kind, payloadJson }) => ({ kind, payloadJson })));
-          // Code-built lines first: the Approval panel shows the top of the summary, and these must never fall below the fold.
-          return view(await approvals.createBundle({ runId, actionIds: own, summary: `${[...scope, figures].join("\n")}\n\n${summary}` }, tx));
+          const open = openPromos > 0 ? [`We found ${counted(openPromos, "expired promo rate")}. This approval does not act on ${openPromos === 1 ? "it" : "them"}.`] : [];
+          // Code-built lines first, figures at the very top: the Approval panel shows the top of the summary, and these must never fall below the fold.
+          return view(await approvals.createBundle({ runId, actionIds: own, summary: `${[figures, ...scope, ...open].join("\n")}\n\n${summary}` }, tx));
         });
       }),
     }),
