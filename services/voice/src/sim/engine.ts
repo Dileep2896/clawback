@@ -144,7 +144,9 @@ export async function runSimCall(input: {
         hear(lines);
         if (endCall) {
           await add(transcriptRow("provider", "speech", CLOSING_LINE));
-          if (stage !== "goodbye") throw new Error(`The rep ended the call early, at stage ${stage}`);
+          // Not the stage: a confirm with endCall reaches "goodbye" before the caller has said it.
+          const saidGoodbye = rows.some((row) => row.role === "agent" && row.content === WORDS.goodbye);
+          if (!saidGoodbye) throw new Error(`The rep ended the call early, at stage ${stage}`);
           return { callId };
         }
       }

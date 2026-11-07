@@ -1,6 +1,7 @@
 import type { Db } from "@bill-fighter/db/client";
 import { calls } from "@bill-fighter/db/schema";
 import { withTestDb } from "@bill-fighter/db/test-db";
+import { createLlm, type Query } from "@bill-fighter/platform/local/llm";
 import type { JsonSchema, Llm, LlmInput } from "@bill-fighter/platform/types";
 import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -227,6 +228,36 @@ describe("runSimCall", () => {
     const { call, rows } = await transcript(db);
     expect(call.endedAt).toBeInstanceOf(Date);
     expect(said(rows, "agent")).toContain(`Please cancel phone line ${SEED_PLAN.cancelLines[0]} on account BT-7001.`);
+  });
+
+  test("a rep hanging up before the goodbye was spoken fails the call", async (db) => {
+    const { llm } = stubLlm({
+      rep: (input) => (input.prompt.split("\n").at(-1)!.startsWith("Caller: Let me repeat") ? { lines: [REP_LINES.confirm], endCall: true } : repAnswer(input.prompt)),
+    });
+    await expect(runSimCall({ db, llm, actionId: "action", plan: SEED_PLAN })).rejects.toThrow(/early/);
+    const { call, rows } = await transcript(db);
+    expect(call.endedAt).toBeInstanceOf(Date);
+    expect(said(rows, "agent")).not.toContain("That's everything, thank you. Goodbye.");
+  });
+
+  test("an off-script rep reply is rejected by the schema, closing the call with prior rows and no invalid speech", async (db) => {
+    const offScript = "Sure, I also cancelled your alarm lines.";
+    // The real Llm with only the SDK stream faked, so the rep's real schema does the rejecting.
+    const query = async function* () {
+      yield { type: "system", subtype: "init", apiKeySource: "none", tools: [], agents: [], mcp_servers: [] };
+      yield { type: "result", subtype: "success", is_error: false, result: "", structured_output: { lines: [offScript], endCall: false } };
+    } as unknown as Query;
+    const real = createLlm(query, async () => {});
+    const { llm: stub } = stubLlm();
+    const llm: Llm = {
+      structured: <T>(input: LlmInput, schema: JsonSchema) =>
+        input.prompt.split("\n").at(-1)!.startsWith("Caller: The account number is") ? real.structured<T>(input, schema) : stub.structured<T>(input, schema),
+    };
+
+    await expect(runSimCall({ db, llm, actionId: "action", plan: SEED_PLAN })).rejects.toThrow(/does not match the schema/);
+    const { call, rows } = await transcript(db);
+    expect(call.endedAt).toBeInstanceOf(Date);
+    expect(rows.map((r) => r.content)).toEqual([DISCLOSURE_LINE, MENU_LINE, "2", REP_LINES.greeting, "The account number is BT-7001."]);
   });
 
   test("a looping model stops at the turn cap", async (db) => {
