@@ -105,7 +105,7 @@ Vapi (`POST /assistant`, `PATCH /phone-number/{id}`):
 
 - **`voice-live-line`: the assistant does not follow scripted lines exactly.** It was told to say "Key press received. Goodbye." and only "Goodbye." appears in either transcript. The fixed rep script needs a stricter prompt or a stronger model, and a full test. Handled so far in "Mock provider line", but not yet proven on the model.
 - **`voice-live-line`: a tone is only proven by the platform message** `User's Keypad Entry:`, never by the model's words. Handled in `check.ts`.
-- **`voice-live-caller`: the first full test must also close the line's open check** (see "Mock provider line"), and run `cli.ts readback <vapi call id>`.
+- **`voice-live-caller`: the first full test must also close the line's open check** (see "Mock provider line"), and run `cli.ts readback <vapi call id>`. It is also the first time the rep script runs on the model, so budget for finding script problems there.
 - **`voice-live-caller`: the Retell recording URL opens with no authentication.** The agent's `opt_in_signed_url` makes URLs expire after 24 hours by default, which conflicts with storing the URL in `calls`. Decide before any non-demo use. The expiry of the plain URL is not documented.
 - **`voice-live-caller`: when Vapi ends the call, Retell reports `disconnection_reason: user_hangup`.** That is a normal ending here, not a failure, so the sim fallback must not trigger on it.
 - **`voice-live-caller`: budget 2.08 cents per call** for the flat Retell line unless post-call analysis can be turned off, and confirm that it is the cause. A 15.3 s call was billed at 16 s, so expect rounding up to the second.
@@ -128,6 +128,15 @@ Code is in `services/voice/src/live/line/`. Assistant `baytel-line` (`027a8389-2
 
 - The rep agrees to all seven cancellations and all three promos, with no refusal.
 - The ticket number is fixed: `BT-48213`, read digit by digit.
+- **No card goes on Vapi, so the text rehearsal stays NOT RUN.** The rep script first runs on the model in the first `voice-live-caller` full test. The `rehearse` command stays in the code, and a 402 from `POST /chat` stops it at once with a message saying why.
+
+### Fixes after review (2026-11-06)
+
+All checked with stubbed tests only. No call, chat rehearsal or `provision` was run against the real account.
+
+- **`provision.ts` no longer attaches an unproven assistant.** The assistant's read-back must pass before the number is touched. Any later failure, or a failed update to an assistant already on the number, detaches it and reads the number back. If the assistant is still on the number, the error says `STILL ATTACHED`. A number on some other assistant is left alone.
+- **`check.ts` needs real proof of reaching the rep.** The scripted greeting must appear after the key press. An empty message, the closing line alone, another rep line, or a greeting from before the key press all fail.
+- **`check.ts` needs real proof of a tone.** A keypad entry must have both timestamps, present and equal.
 
 ### What the spike's data showed, with no new call
 
@@ -138,7 +147,10 @@ Code is in `services/voice/src/live/line/`. Assistant `baytel-line` (`027a8389-2
 
 ### Open risks
 
-- **The prompt has not run on the model.** The menu and rep lines still come from the LLM (`gpt-6-luna`, temperature 0), so word-for-word delivery is unproven. Text rehearsal is built, but `POST /chat` returned `402 payment_method_missing`, because Vapi chat needs a card on file. If the first full test finds the rep off script, try a stronger model.
+- **The prompt has not run on the model, and won't before the first full test.** The menu and rep lines still come from the LLM (`gpt-6-luna`, temperature 0), so word-for-word delivery is unproven. Text rehearsal is built but NOT RUN: `POST /chat` returned `402 payment_method_missing` because Vapi chat needs a card on file, and the human decided not to add one. If the first full test finds the rep off script, try a stronger model.
+- **The detach in `provision.ts` has not run against Vapi.** It sends `assistantId: null`, but Vapi's public schema types that field as a string and does not document null. If Vapi rejects it, the error says `STILL ATTACHED` and the number must be detached by hand.
+- **Detaching leaves other routes on the number.** A fallback, squad or workflow route stays until cleared by hand, so a call could still follow it. The error names it.
+- **The updated `provision.ts` has not run against Vapi at all.** The assistant on the number is unchanged, because these fixes change no assistant config.
 - **`gpt-6-luna` may ignore temperature.** Vapi accepted and returned the setting, which doesn't show the model honors it.
 - **Rep replies are not verified against the request.** The rep agrees to whatever line it is asked about, so the caller side must keep alarm lines out.
 
@@ -152,7 +164,7 @@ Code is in `services/voice/src/live/line/`. Assistant `baytel-line` (`027a8389-2
 
 ### Commands
 
-`pnpm exec tsx --env-file=.env services/voice/src/live/line/cli.ts provision | rehearse | readback <call id>`. None of them can place a call.
+`pnpm exec tsx --env-file=.env services/voice/src/live/line/cli.ts provision | rehearse | readback <call id>`. None of them can place a call. With no card on Vapi, `rehearse` stops at its first request with a 402 message.
 
 ## Sources (read 2026-11-06)
 

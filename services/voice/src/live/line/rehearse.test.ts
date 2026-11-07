@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { rehearse, TURNS } from "./rehearse.ts";
-import type { Vapi } from "./vapi.ts";
+import { type Vapi, vapiClient } from "./vapi.ts";
 
 const reply = (content: string | null, cost?: number) => ({
   id: "chat",
@@ -38,5 +38,15 @@ describe("rehearse", () => {
     const { stoppedBecause, results } = await rehearse(vapi, "a1");
     expect(stoppedBecause).toBe("Vapi did not report a cost");
     expect(results).toHaveLength(1);
+  });
+
+  it("fails clearly and stops at once when Vapi wants a card", async () => {
+    const body = '{"code":"payment_method_missing"}';
+    const fetchStub = vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { status: 402 }));
+    const error = await rehearse(vapiClient("secret-key", fetchStub), "a1").catch((e: Error) => e.message);
+    expect(error).toContain("Vapi chat needs a card on file");
+    expect(error).toContain(body);
+    expect(error).not.toContain("secret-key");
+    expect(fetchStub).toHaveBeenCalledTimes(1);
   });
 });

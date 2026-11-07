@@ -16,6 +16,12 @@ describe("vapiClient", () => {
     expect(fetchStub.mock.calls[0]?.[0]).toBe("https://api.vapi.ai/call/abc");
   });
 
+  it("keeps a 402 outside chat as a plain HTTP error", async () => {
+    const fetchStub = vi.fn<typeof fetch>().mockResolvedValue(new Response("nope", { status: 402 }));
+    const error = await vapiClient("key", fetchStub)("GET", "/assistant").catch((e: Error) => e.message);
+    expect(error).toBe("Vapi GET /assistant: HTTP 402: nope");
+  });
+
   it("keeps the key out of error messages", async () => {
     const fetchStub = vi.fn<typeof fetch>().mockResolvedValue(new Response("nope", { status: 400 }));
     const error = await vapiClient("secret-key", fetchStub)("GET", "/assistant").catch((e: Error) => e.message);
