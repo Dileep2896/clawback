@@ -23,6 +23,58 @@ function stub(options: { existing?: boolean; agentReadBack?: Json; llmReadBack?:
   return { retell, log };
 }
 
+// Answers the list from these pages in order, and everything else as the plain stub does.
+function paged(pages: Json[]) {
+  const { retell: inner, log } = stub({ existing: true });
+  let page = 0;
+  const retell: Retell = async (method, path, body) => {
+    if (!path.startsWith("/v2/list-agents")) return inner(method, path, body);
+    log.push(`${method} ${path}`);
+    return pages[page++];
+  };
+  return { retell, log };
+}
+
+const other = { agent_name: "other", agent_id: "x" };
+
+describe("the agent list", () => {
+  it("finds a caller on a later page and updates it, passing the key in the query", async () => {
+    const { retell, log } = paged([
+      { items: [other], has_more: true, pagination_key: "next/1" },
+      { items: [{ agent_name: AGENT_NAME, agent_id: "a1" }], has_more: false },
+    ]);
+    await provisionCaller(retell);
+    expect(log.slice(0, 2)).toEqual(["POST /v2/list-agents", "POST /v2/list-agents?pagination_key=next%2F1"]);
+    expect(log).toContain("PATCH /update-agent/a1");
+    expect(log).not.toContain("POST /create-agent");
+  });
+
+  it("creates the caller only after reading every page", async () => {
+    const { retell, log } = paged([
+      { items: [other], has_more: true, pagination_key: "p2" },
+      { items: [other], has_more: false },
+    ]);
+    await provisionCaller(retell);
+    expect(log.filter((entry) => entry.includes("list-agents"))).toHaveLength(2);
+    expect(log).toContain("POST /create-agent");
+  });
+
+  it.each([
+    ["no key", [{ items: [other], has_more: true }]],
+    [
+      "a repeated key",
+      [
+        { items: [other], has_more: true, pagination_key: "p2" },
+        { items: [other], has_more: true, pagination_key: "p2" },
+      ],
+    ],
+  ])("creates nothing when more pages are promised with %s", async (_, pages) => {
+    const { retell, log } = paged(pages);
+    await expect(provisionCaller(retell)).rejects.toThrow("says it has more");
+    expect(log.filter((entry) => !entry.includes("list-agents"))).toEqual([]);
+  });
+});
+
 describe("provisionCaller", () => {
   it("creates the LLM and agent, and proves them from a read-back", async () => {
     const { retell, log } = stub();

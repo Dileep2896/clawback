@@ -212,7 +212,7 @@ Code is in `services/voice/src/live/caller/`. **Built and tested against stubs o
 - **`extractOutcome` needs the rep's exact words.** If Retell's speech-to-text turns "that is" into "that's", the item stays out, and with no ticket the call falls back.
 - **Normalising only handles single digits.** "Double five" or "seven thousand one" leaves the item out.
 - **Vapi's share of the run budget is an estimate** ($0.07 a minute). The real figure comes from `cli.ts readback`.
-- **The live agent uses `override_agent_version: 0` as in the spike.** Whether an updated draft stays on version 0 is not confirmed.
+- **The live agent dials `RETELL_CALLER_AGENT_VERSION`, the version `provision` read back.** Whether an updated draft stays on the same version is not confirmed.
 - **Call length is unmeasured.** The estimate is about 3 minutes, and the demo script gives a call 50 s.
 
 ### Cost log

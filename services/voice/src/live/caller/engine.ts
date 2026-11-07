@@ -163,8 +163,10 @@ export async function runLiveCall(input: {
       if (!(error instanceof RetellHttpError && error.status < 500)) chargeCall(null, "(dial outcome unknown)", onCost);
       throw error;
     }
-    // Kept with the row, so the call can be read back by hand even after a crash.
-    await appendRow(db, callId, transcriptRow("system", "status", `Live call in progress. Retell call ${retellId}.`));
+    // Kept with the row, so the call can be read back by hand even after a crash. The call is running and being paid for, so a failed save must not stop the wait, stop or charge below.
+    await appendRow(db, callId, transcriptRow("system", "status", `Live call in progress. Retell call ${retellId}.`)).catch((error) =>
+      console.error(`Saving Retell call id ${retellId} failed: ${textOf(error)}`),
+    );
 
     const call = await waitForEnd(retell, retellId, { pollMs, deadlineMs, settleMs });
     chargeCall(call, retellId, onCost);

@@ -12,9 +12,11 @@ const retellKey = process.env.RETELL_API_KEY;
 if (!retellKey) throw new Error("RETELL_API_KEY is not set");
 const retell = retellClient(retellKey, allowlistFromEnv());
 const [command, arg] = process.argv.slice(2);
+const MAX_START_GAP_MS = 60_000;
 
 const VapiCall = z.looseObject({
   id: z.string(),
+  startedAt: z.string().optional(),
   status: z.string().optional(),
   cost: z.number().optional(),
   customer: z.looseObject({ number: z.string().optional() }).optional(),
@@ -41,6 +43,10 @@ if (command === "provision") {
   const [latest] = z.array(VapiCall).parse(await vapiClient(vapiKey)("GET", "/call?limit=1"));
   if (!latest) throw new Error("Vapi has no calls");
   if (latest.customer?.number !== CALLER_NUMBER) throw new Error(`The latest Vapi call ${latest.id} is from ${latest.customer?.number}, not our caller`);
+  // Written this way round so a missing time on either side (NaN) also fails.
+  if (!(Math.abs(Date.parse(latest.startedAt ?? "") - Number(call.start_timestamp)) <= MAX_START_GAP_MS)) {
+    throw new Error(`The latest Vapi call ${latest.id} started at ${latest.startedAt}, not within 60 seconds of Retell call ${arg} at ${String(call.start_timestamp)}`);
+  }
   const problems = checkLineCall(latest.messages);
   console.log(`\nVapi call ${latest.id}. Status: ${latest.status}, cost: $${latest.cost}, keypad digits: ${keypadDigits(latest.messages).join(",") || "none"}`);
   console.log(problems.length ? `Problems:\n${problems.join("\n")}` : "The line matches the design.");

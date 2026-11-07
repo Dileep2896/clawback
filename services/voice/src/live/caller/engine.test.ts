@@ -145,6 +145,35 @@ describe("the agent id", () => {
   });
 });
 
+describe("when saving the Retell id fails", () => {
+  const failFirstUpdate = (db: Db) => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(db, "update").mockImplementationOnce(() => {
+      throw new Error("database down");
+    });
+  };
+
+  test("logs the id to stderr, and still polls and charges", async (db) => {
+    const onCost = vi.fn();
+    const stub = stubRetell([await goodCall(db)]);
+    failFirstUpdate(db);
+    await expect(run(db, stub, { onCost })).resolves.toHaveProperty("callId");
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining(RETELL_ID));
+    expect(stub.requests.some((request) => request.path === `/v2/get-call/${RETELL_ID}`)).toBe(true);
+    expect(onCost).toHaveBeenCalledOnce();
+  });
+
+  test("still stops and charges a call that never ends", async (db) => {
+    const onCost = vi.fn();
+    const stub = stubRetell([{ call_status: "ongoing" }]);
+    failFirstUpdate(db);
+    await expect(run(db, stub, { deadlineMs: 20, onCost })).rejects.toThrow("did not end in time");
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining(RETELL_ID));
+    expect(stub.requests.at(-1)).toMatchObject({ method: "POST", path: `/v2/stop-call/${RETELL_ID}` });
+    expect(onCost).toHaveBeenCalledOnce();
+  });
+});
+
 describe("the deadline", () => {
   const DEADLINE_MS = 200;
   // Room for the database writes either side of the wait, and well short of any stalled request.

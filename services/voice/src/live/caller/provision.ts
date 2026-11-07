@@ -4,10 +4,22 @@ import type { Retell } from "./retell.ts";
 
 type Json = Record<string, unknown>;
 
+async function findCaller(retell: Retell): Promise<Json | undefined> {
+  let key: string | undefined;
+  for (;;) {
+    const path = key ? `/v2/list-agents?pagination_key=${encodeURIComponent(key)}` : "/v2/list-agents";
+    const page = (await retell("POST", path, {})) as { items?: Json[]; has_more?: boolean; pagination_key?: string };
+    const found = page.items?.find((agent) => agent.agent_name === AGENT_NAME);
+    if (found || !page.has_more) return found;
+    // Stopping here would read as "no caller" and create a duplicate, and following a repeated key would never end.
+    if (!page.pagination_key || page.pagination_key === key) throw new Error(`Retell's agent list says it has more, but its next key is "${page.pagination_key ?? ""}"`);
+    key = page.pagination_key;
+  }
+}
+
 /** Creates or updates the caller, and proves it from a read-back. Places no call. Costs no usage, though Retell's docs do not state that. */
 export async function provisionCaller(retell: Retell): Promise<{ agentId: string; agentVersion: number; llmId: string }> {
-  const { items = [] } = (await retell("POST", "/v2/list-agents", {})) as { items?: Json[] };
-  const existing = items.find((agent) => agent.agent_name === AGENT_NAME);
+  const existing = await findCaller(retell);
   // The list only has summaries, with no response_engine, so the LLM id needs the agent's own details.
   const details = existing ? ((await retell("GET", `/get-agent/${String(existing.agent_id)}`)) as Json) : undefined;
   const existingLlm = (details?.response_engine as { llm_id?: string } | undefined)?.llm_id;
