@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { runAudit } from "@bill-fighter/core/rules/index";
 import type { Db } from "@bill-fighter/db/client";
-import { accounts, actions, billLines, bills, customers, findings, locations, phoneLines, usageIntervals } from "@bill-fighter/db/schema";
+import { accounts, actions, approvals, billLines, bills, customers, findings, locations, phoneLines, runs, usageIntervals } from "@bill-fighter/db/schema";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { createApprovalGate } from "@bill-fighter/platform/local/approval-gate";
 import { createAudit } from "@bill-fighter/platform/local/audit";
@@ -558,10 +558,49 @@ describe("auditor", () => {
       const changed = runAudit(await loadCustomerAuditInput(db, CUSTOMER)).findings.find((f) => f.type === "unusedLines")!;
       expect(changed.annualSavingsCents).not.toBe(before!.annualSavingsCents);
 
+      // A running run's bundle freezes the whole audit, so the action guard is what remains once it finishes.
+      await db.update(runs).set({ status: "success" }).where(eq(runs.id, RUN));
       const output = await call<{ findings: { id: string }[]; annualSavingsCents: number }>("run_audit", INPUT);
       expect(await db.select().from(findings).where(eq(findings.id, before!.id))).toEqual([before]);
       expect(output.findings.find(({ id }) => id === before!.id)).toMatchObject({ status: "proposed", title: before!.title, annualSavingsCents: before!.annualSavingsCents });
       expect(output.annualSavingsCents).toBe(before!.annualSavingsCents);
+    }));
+
+  const FROZEN = "the audit is frozen while approved work is in progress";
+  const bundle = (db: Db, status: "pending" | "approved") => db.insert(approvals).values({ id: "ap1", runId: RUN, actionIds: [], summary: "Please approve.", status });
+
+  it.each(["pending", "approved"] as const)("refuses before any write while a %s bundle is on a running run", (status) =>
+    withCustomer(async (db) => {
+      await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));
+      await bundle(db, status);
+      await expect(auditor(db, "run_audit").handler(INPUT, CTX)).rejects.toThrow(FROZEN);
+      expect(await db.select().from(findings)).toEqual([]);
+    }),
+  );
+
+  it("leaves a promo finding unchanged while its bundle is in progress, though no action names it", () =>
+    withCustomer(async (db) => {
+      await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));
+      await auditor(db, "run_audit").handler(INPUT, CTX);
+      const [live] = await db.select().from(findings).where(eq(findings.type, "arithmeticCheck"));
+      // The audit no longer reports this row, so without the freeze it would be deleted.
+      const [promo] = await db.insert(findings).values({ ...live!, id: "promo", type: "promoExpiry", annualSavingsCents: 108_000 }).returning();
+      await db.insert(actions).values({ id: "act1", findingId: null, kind: "call", status: "pending" });
+      await bundle(db, "approved");
+
+      await expect(auditor(db, "run_audit").handler(INPUT, CTX)).rejects.toThrow(FROZEN);
+      expect(await db.select().from(findings).where(eq(findings.id, "promo"))).toEqual([promo]);
+    }));
+
+  it("allows a new audit once the bundle's run has finished", () =>
+    withCustomer(async (db) => {
+      await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));
+      await bundle(db, "approved");
+      await db.update(runs).set({ status: "success" }).where(eq(runs.id, RUN));
+      await db.insert(runs).values({ id: "r2", customerId: CUSTOMER, platform: "local", trigger: "manual", status: "running" });
+
+      await auditor(db, "run_audit").handler(INPUT, { runId: "r2", agent: "test" });
+      expect((await db.select().from(findings)).map(({ type }) => type)).toContain("arithmeticCheck");
     }));
 
   it("updates a proposed finding's content when inputs change", () =>

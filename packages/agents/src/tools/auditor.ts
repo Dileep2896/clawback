@@ -5,7 +5,7 @@ import { runAudit } from "@bill-fighter/core/rules/index";
 import { compareRates } from "@bill-fighter/core/rules/rate-optimization";
 import { findingTotals } from "@bill-fighter/core/rules/totals";
 import { db as sharedDb, type Db } from "@bill-fighter/db/client";
-import { actions, billLines, bills, findings, phoneLines } from "@bill-fighter/db/schema";
+import { actions, approvals, billLines, bills, findings, phoneLines, runs } from "@bill-fighter/db/schema";
 import type { Finding } from "@bill-fighter/shared/finding";
 import { and, eq, inArray, notExists, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -124,6 +124,14 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
       targets: () => [],
       async handler({ customerId }, { runId }) {
         await assertRunCustomer(db, runId, customerId);
+        // A bundle can rest on findings no action names (promo call actions have no finding id), so the row guards below cannot protect it.
+        const [inProgress] = await db
+          .select({ id: approvals.id })
+          .from(approvals)
+          .innerJoin(runs, eq(approvals.runId, runs.id))
+          .where(and(eq(runs.customerId, customerId), eq(runs.status, "running"), inArray(approvals.status, ["pending", "approved"])))
+          .limit(1);
+        if (inProgress) throw new Error("run_audit saved nothing: the audit is frozen while approved work is in progress");
         const run = runAudit(await loadCustomerAuditInput(db, customerId));
 
         // Evidence is JSON, which no foreign key checks. A finding must only point at rows that exist.
