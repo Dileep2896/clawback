@@ -248,13 +248,13 @@ describe("demoReset", () => {
       ));
 
     it.each([
-      ["a remote last host", "postgres://bill:bill@localhost:5433/billfighter?host=localhost&host=db.example.com", false],
-      ["an empty last host over a remote URL", "postgres://bill:bill@db.example.com:5433/billfighter?host=localhost&host=", false],
-      ["the override", "postgres://bill:bill@localhost:5433/billfighter?host=localhost&host=db.example.com", true],
-    ])("repeated ?host= before connecting: %s", (_name, url, allowNonlocal) =>
+      ["a remote last ?host=", "postgres://bill:bill@localhost:5433/billfighter?host=localhost&host=db.example.com"],
+      ["an empty last ?host= over a remote URL", "postgres://bill:bill@db.example.com:5433/billfighter?host=localhost&host="],
+      ["an encoded ?host= that a space makes pg ignore", "postgres://bill:bill@db.example.com:5433/billfighter?%68%6fst=localhost&application_name=demo reset"],
+    ])("before connecting, the host pg would really use: %s", (_name, url) =>
       withFullDb(async (db, runsDir) => {
         const pool = { query: vi.fn(), connect: vi.fn() };
-        await refuses(db, runsDir, () => ({ url, allowNonlocal, pool: pool as never }), /more than one host/);
+        await refuses(db, runsDir, () => ({ url, pool: pool as never }), /"db\.example\.com", which is not local/);
         expect(pool.query).not.toHaveBeenCalled();
         expect(pool.connect).not.toHaveBeenCalled();
       }),
