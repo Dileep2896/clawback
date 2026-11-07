@@ -1,12 +1,8 @@
 import { redirect } from "next/navigation";
 import { BRANDS, brandOf } from "../../lib/brands.ts";
+import { loginError } from "../../lib/login-errors.ts";
 import { BrandBand } from "../brand-band.tsx";
 import { login } from "./actions.ts";
-
-const ERRORS: Record<string, string> = {
-  wrong: "Username or password is incorrect. Check both and try again.",
-  setup: "Sign-in is not set up yet. Run scripts/seed-portal-credentials.ts, then try again.",
-};
 
 const FIELD = "mt-1 block w-full border border-rule bg-white px-3 py-2";
 
@@ -19,7 +15,7 @@ export default async function LoginPage({
   const provider = brandOf(requested);
   if (!provider) redirect("/");
   const brand = BRANDS[provider];
-  const message = typeof error === "string" ? ERRORS[error] : undefined;
+  const message = loginError(error);
 
   return (
     <>
