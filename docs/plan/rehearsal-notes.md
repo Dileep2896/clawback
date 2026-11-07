@@ -20,16 +20,18 @@ pnpm demo:replay --speed N
 
 ## Picking the speed
 
-Measured on the first recording (4:48 whole run, 2:01 call). **These change with the recapture, because that run adds steps.**
+From the committed recording (5:18 whole run, 2:01 call). 1×, 2× and 8× were played and timed. 1.7× is worked out from them.
 
 | Speed | Whole run | Call | Speech |
 |---|---|---|---|
-| 1× | 4:48 | 2:01 | normal |
-| 1.5× | 3:12 | 1:21 | 1.5× rate |
-| 2× | 2:24 | 1:01 | 2× rate |
-| 8× | 0:36 | 0:15 | off, the panel says so |
+| 1× | 5:18 | 2:01 | normal |
+| 1.7× | 3:07 | 1:11 | 1.7× rate |
+| 2× | 2:39 | 1:00 | 2× rate |
+| 8× | 0:39 | 0:15 | off, the panel says so |
 
-The script's run window is 0:20 to 3:30, about 190 s, which points to about 1.5×. Nothing makes the call fit its 50 s slot and stay audible, because speech turns off above 2×.
+The script's run window is 0:20 to 3:30, about 190 s, which points to about 1.7×. Nothing makes the call fit its 50 s slot and stay audible, because speech turns off above 2×.
+
+The audit log shows `send_email` twice near the end. Only one email went out: the first attempt sent nothing and the CEO retried.
 
 Offline speech depends on the machine's local voices and has not been heard by a person. Listen for it in rehearsal.
 
