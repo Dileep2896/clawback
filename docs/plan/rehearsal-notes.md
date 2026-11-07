@@ -19,10 +19,10 @@ The slot is 3 to 4 minutes; target 3:30. Sim mode only until the human decides o
 | 1 | Get started, sign up the sample business (Sam Lee, Mission Dumplings, any `@missiondumplings.example` email), Upload, pick `data/sample-bills/mission-dumplings-baycurrent-2026-09.pdf`, wait for it to read | 0:06 to 0:07 scripted, 0:24 at hand speed |
 | 2 | Log out, Log in as Linda. Overview shows Approval needed | 0:03 scripted, 0:14 at hand speed |
 | 3 | Approve, then "Watch your agents work" (`/agents`) | under 1 s |
-| 4 | Talk over the board, the BayTel call and the ledger filling in, until Run status says Success | 2:22 to 2:36 sim, 3:05 live |
+| 4 | Talk over the board, the BayTel call and the ledger filling in, until Run status says Success | 2:16 to 2:36 sim, 3:05 live |
 | 5 | Overview: refund $12,606.06, yearly savings $18,319.32, fee $9,277.61, you keep $21,647.77 | under 1 s |
 
-On stage it is 2:33 to 2:46 in sim at script speed, and **3:49** in the one live run at hand speed (step 1 0:24, step 2 0:14, step 4 3:05).
+On stage it is 2:27 to 2:46 in sim at script speed, and **3:49** in the one live run at hand speed (step 1 0:24, step 2 0:14, step 4 3:05).
 
 `pnpm exec tsx --env-file-if-exists=.env scripts/rehearse-stage.ts [screenshot-folder] [--hand] [--live]` plays all of the above in a browser, prints each step's time, then checks the Money page outside the stage clock. It fails unless the run ends in success with the three numbers on both the Overview and Money. It starts one real run. `--hand` types and clicks at a person's pace. `--live` needs `VOICE_MODE=live` on both the script and `pnpm dev:webhooks`, and places a real call.
 
@@ -35,9 +35,10 @@ Own database `clawback_rehearsal`, `VOICE_MODE=sim`, `scripts/rehearse-stage.ts`
 | Sim 1 | 1:59 | 0:06 | 0:03 | 2:22 | 2:33 | $12,606.06 / $18,319.32 / $9,277.61 | Money not checked | about $0.41 |
 | Sim 2 | 1:53 | 0:07 | 0:03 | 2:31 | 2:43 | same | Money not checked | about $0.41 |
 | Sim 3 | 1:50 | 0:06 | 0:03 | 2:36 | 2:46 | same | Money not checked | $0.41 |
+| Sim 4 | 1:49 | 0:06 | 0:03 | 2:16 | 2:27 | same | same three amounts | about $0.41 |
 | **Live 1** (hand speed) | 1:44 | 0:24 | 0:14 | 3:05 | **3:49** | same | same three amounts | run $0.76; call $0.3911 |
 
-Sim runs typed at about 60 ms a character with no pauses. Every run ended in success with the same three numbers on the Overview. Sim 3's database showed 13 ledger rows.
+Sim runs typed at about 60 ms a character with no pauses. Every run ended in success with the same three numbers on the Overview. Sims 1 to 3 ran before the Money check existed; Sim 4 (after the review) checked Money too and found the same three amounts, with a 1:30 sim call. Sim 3's database showed 13 ledger rows.
 
 **Live 1** (2026-11-07, `scripts/rehearse-stage.ts --hand --live`, typing at 200 ms a character with a 1.5 s pause before each click; the file picker counts double):
 
@@ -128,6 +129,7 @@ Limit: 2 to 4 minutes per run, `RUN_BUDGET_USD` $5. Cost is Claude Code login us
 | Sim 1 | sim, old script | success, Human actions 1, one email | 5:01 | $0.38 |
 | Sim 2 | sim, old script | success, same | 1:54 to approval, parked 10:30, 2:43 after YES | $0.40 |
 | Sim 3 | sim, old script | success, same | 5:12 | $0.41 |
+| Sim 4 | 1:49 | 0:06 | 0:03 | 2:16 | 2:27 | same | same three amounts | about $0.41 |
 | Live 1 | live, old script | success, call 3:04 | 6:14 | $0.51 voice |
 | Sim check | sim, Option A | success, one `send_email` | 4:36 | $0.39 |
 | Live 2 | live, Option A | success, call 2:23, no fallback | 5:24 | $0.40 voice |
