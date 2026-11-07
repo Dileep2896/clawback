@@ -61,8 +61,16 @@ export function createLlm(query: Query = sdkQuery as Query, login: () => Promise
       const thrown: unknown[] = [];
       let output: unknown;
       let costUsd: number | undefined;
+      let timedOut: Error | undefined;
+      let timer: NodeJS.Timeout | undefined;
+      // A race, not only the abort: a hung stream may never react to the abort.
+      const limit = new Promise<never>((_, reject) => {
+        if (input.timeoutMs === undefined) return;
+        const seconds = input.timeoutMs / 1000;
+        timer = setTimeout(() => reject((timedOut = new DOMException(`The model did not answer within ${seconds} s`, "TimeoutError"))), input.timeoutMs);
+      });
       try {
-        await login();
+        await Promise.race([login(), limit]);
         const stream = query({
           prompt: input.images?.length ? withImages(input) : input.prompt,
           options: {
@@ -72,8 +80,11 @@ export function createLlm(query: Query = sdkQuery as Query, login: () => Promise
             outputFormat: { type: "json_schema", schema: sentSchema },
             ...(input.system ? { systemPrompt: input.system } : {}),
           },
-        });
-        for await (const message of stream) {
+        })[Symbol.asyncIterator]();
+        for (;;) {
+          const next = await Promise.race([stream.next(), limit]);
+          if (next.done) break;
+          const message = next.value;
           messages.push(message);
           if (message.type === "system" && message.subtype === "init") assertInit(message, ALLOWED_INIT);
           if (message.type === "result") costUsd = message.total_cost_usd;
@@ -82,9 +93,11 @@ export function createLlm(query: Query = sdkQuery as Query, login: () => Promise
       } catch (error) {
         thrown.push(error);
       } finally {
+        clearTimeout(timer);
         abortController.abort();
       }
       if (costUsd !== undefined) input.onCost?.(costUsd);
+      if (timedOut) throw timedOut;
       const { finished, reason } = runOutcome(messages, ALLOWED_INIT, thrown);
       // An SDK exception is operational even after a give-up result, whose text would otherwise take over `reason`.
       if (thrown.length > 0 && onlyGaveUp(messages)) throw thrown[0];

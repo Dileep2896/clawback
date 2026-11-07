@@ -77,6 +77,101 @@ async function collect(events: AsyncIterable<RunEvent>) {
 
 afterEach(() => vi.restoreAllMocks());
 
+// Calls the run's real handler, the way the CLI does once canUseTool has allowed it.
+const callHandler = async (options: Options, name: string) => {
+  const { instance } = options.mcpServers!.platform as McpSdkServerConfigWithInstance;
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+  await instance.connect(serverSide);
+  const client = new Client({ name: "t", version: "1" });
+  await client.connect(clientSide);
+  return client.callTool({ name, arguments: {} });
+};
+const EMAIL_INIT = { ...INIT, tools: ["mcp__platform__send_email"] };
+const specWith = (tool: ToolDef): RunSpec => ({ ...SPEC, main: { ...SPEC.main, tools: [tool.name] }, tools: [tool] });
+
+describe("a model that goes quiet", () => {
+  const IDLE_MS = 30;
+  const budget: Budget = { status: async () => ({ totalUsd: 0, capUsd: 5, over: false }), add: async () => ({ totalUsd: 0, capUsd: 5, over: false }) };
+  const runtimeWith = (query: Query, gate: Partial<ApprovalGate> = {}, login = async () => {}) => createAgentRuntime(async () => ({ gate: gate as ApprovalGate, budget, query, login, idleMs: IDLE_MS }));
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const TIMED_OUT = { status: "error", reason: expect.stringContaining("did not answer") };
+
+  it("ends the run as an error with a timeout reason, even if the stream ignores the abort", async () => {
+    const hung: Query = async function* () {
+      yield INIT as unknown as SDKMessage;
+      await new Promise(() => {});
+    };
+    expect((await collect(runtimeWith(hung).run(SPEC))).last).toMatchObject(TIMED_OUT);
+  });
+
+  it("also covers a login check that hangs", async () => {
+    const query: Query = async function* () {
+      yield INIT as unknown as SDKMessage;
+    };
+    expect((await collect(runtimeWith(query, {}, () => new Promise(() => {})).run(SPEC))).last).toMatchObject(TIMED_OUT);
+  });
+
+  it("does not count the approval wait, however long it takes", async () => {
+    const waitForRelease = vi.fn(async () => {
+      await sleep(IDLE_MS * 4);
+      return true;
+    });
+    const parked: Query = async function* ({ options }) {
+      yield INIT as unknown as SDKMessage;
+      const context = { signal: new AbortController().signal, toolUseID: "t1", mcpServer: { name: "platform", source: "sdk" } };
+      await options.canUseTool!("mcp__platform__call_provider", { actionId: "a1" }, context as never);
+      yield result(0) as unknown as SDKMessage;
+    };
+    expect((await collect(runtimeWith(parked, { waitForRelease }).run(SPEC))).last.status).toBe("success");
+    expect(waitForRelease).toHaveBeenCalledOnce();
+  });
+
+  it("does not count a slow tool, such as a live call", async () => {
+    const query: Query = async function* ({ options }) {
+      yield EMAIL_INIT as unknown as SDKMessage;
+      await callHandler(options, "send_email");
+      yield result(0) as unknown as SDKMessage;
+    };
+    expect((await collect(runtimeWith(query).run(specWith({ ...def("send_email"), handler: () => sleep(IDLE_MS * 4) })))).last.status).toBe("success");
+  });
+
+  it("starts counting again once the slow tool has finished", async () => {
+    const query: Query = async function* ({ options }) {
+      yield EMAIL_INIT as unknown as SDKMessage;
+      await callHandler(options, "send_email");
+      await new Promise(() => {});
+    };
+    expect((await collect(runtimeWith(query).run(specWith(def("send_email"))))).last).toMatchObject(TIMED_OUT);
+  });
+});
+
+describe("a tool still running when the run ends", () => {
+  it("finishes before the result, so a caller that exits on the result cannot lose its rows", async () => {
+    const order: string[] = [];
+    let started: () => void = () => {};
+    const inTool = new Promise<void>((resolve) => (started = resolve));
+    const tool: ToolDef = {
+      ...def("send_email"),
+      handler: async () => {
+        started();
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        order.push("row written");
+        return "ok";
+      },
+    };
+    const { runtime } = setup([EMAIL_INIT, result(5.5, { subtype: "error_max_budget_usd", errors: [] })], {
+      during: async (options) => {
+        void callHandler(options, "send_email");
+        await inTool;
+      },
+    });
+    for await (const event of runtime.run(specWith(tool))) {
+      if (event.type === "result") order.push(`result ${event.status}`);
+    }
+    expect(order).toEqual(["row written", "result over_budget"]);
+  });
+});
+
 describe("allowedToolNames", () => {
   it("never lists a gated tool", () => {
     const names = allowedToolNames([...GATED_TOOLS.map(def), def("send_email")]);

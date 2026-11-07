@@ -19,8 +19,39 @@ const PREFIX = `mcp__${SERVER}__`;
 // The model calls "Agent", while the init message lists the same tool as "Task".
 const SUBAGENT_TOOLS = ["Agent", "Task"];
 
+// A subagent's messages count, and the SDK only sends whole messages, so this must outlast one long model turn.
+const MODEL_IDLE_MS = 180_000;
+
 export type Query = (params: { prompt: string; options: Options }) => AsyncIterable<SDKMessage>;
-export type Deps = { gate: ApprovalGate; budget: Budget; query?: Query; login?: () => Promise<void> };
+export type Deps = { gate: ApprovalGate; budget: Budget; query?: Query; login?: () => Promise<void>; idleMs?: number };
+
+/** Fails when the model goes quiet. Waiting on the owner or on a tool is not the model being quiet, so `hold` pauses it. */
+function idleWatch(idleMs: number) {
+  let holds = 0;
+  let timer: NodeJS.Timeout | undefined;
+  let expire: (error: Error) => void = () => {};
+  const expired = new Promise<never>((_, reject) => (expire = reject));
+  expired.catch(() => {});
+  const touch = () => {
+    clearTimeout(timer);
+    if (holds === 0) timer = setTimeout(() => expire(new Error(`The model did not answer for ${idleMs / 1000} s`)), idleMs);
+  };
+  return {
+    expired,
+    touch,
+    stop: () => clearTimeout(timer),
+    async hold<T>(work: () => Promise<T>): Promise<T> {
+      holds++;
+      clearTimeout(timer);
+      try {
+        return await work();
+      } finally {
+        holds--;
+        touch();
+      }
+    },
+  };
+}
 
 /** canUseTool only runs for calls that fall through allowedTools, so a gated tool here would skip approval. */
 export function allowedToolNames(tools: ToolDef[]): string[] {
@@ -64,6 +95,7 @@ function mcpTool(
   gate: Pick<ApprovalGate, "isReleased">,
   callerOf: (toolUseId: unknown) => string,
   onDenied: (agent: string, name: string, reason: string, toolUseId: string) => void,
+  running: <T>(work: () => Promise<T>) => Promise<T>,
 ) {
   if (!(def.inputSchema instanceof z.ZodObject)) throw new Error(`Tool ${def.name}: inputSchema must be a z.object`);
   // shortcut: the SDK types ask for a raw shape, which would drop refinements and strictness, but it hands a whole
@@ -83,7 +115,7 @@ function mcpTool(
           return { content: [{ type: "text" as const, text: reason }], isError: true };
         }
       }
-      const output = await def.handler(input, { runId, agent });
+      const output = await running(() => def.handler(input, { runId, agent }));
       return { content: [{ type: "text" as const, text: JSON.stringify(output) ?? "null" }] };
     } catch (error) {
       return { content: [{ type: "text" as const, text: errorText(error) }], isError: true };
@@ -138,16 +170,33 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
     agents: spec.members.map((def) => def.name),
   };
 
+  let watch: ReturnType<typeof idleWatch> | undefined;
+  const inFlight = new Set<Promise<unknown>>();
+
   try {
-    const { gate, budget, query = sdkQuery as Query, login = checkLogin } = await deps();
+    const { gate, budget, query = sdkQuery as Query, login = checkLogin, idleMs = Number(process.env.MODEL_IDLE_MS) || MODEL_IDLE_MS } = await deps();
     const start = await budget.status(spec.runId);
     const remainingUsd = start.capUsd - start.totalUsd;
     if (remainingUsd <= 0) {
       over = true;
     } else {
-      await login();
-      const canUseTool = createCanUseTool(spec.tools, gate, (name, reason, toolUseId) =>
-        onDenied(callers.get(toolUseId) ?? main, name, reason, toolUseId),
+      const watched = (watch = idleWatch(idleMs));
+      watched.touch();
+      await Promise.race([login(), watched.expired]);
+      const running = <T>(work: () => Promise<T>) => {
+        const handler = watched.hold(work);
+        const settled = handler.then(
+          () => {},
+          () => {},
+        );
+        inFlight.add(settled);
+        void settled.then(() => inFlight.delete(settled));
+        return handler;
+      };
+      const canUseTool = createCanUseTool(
+        spec.tools,
+        { waitForRelease: (actionId, signal) => watched.hold(() => gate.waitForRelease(actionId, signal)) },
+        (name, reason, toolUseId) => onDenied(callers.get(toolUseId) ?? main, name, reason, toolUseId),
       );
       const options: Options = {
         ...loginOptions(),
@@ -175,12 +224,18 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
           [SERVER]: createSdkMcpServer({
             name: SERVER,
             version: "1.0.0",
-            tools: spec.tools.map((def) => mcpTool(def, spec.runId, gate, (id) => callers.get(id) ?? main, onDenied)),
+            tools: spec.tools.map((def) => mcpTool(def, spec.runId, gate, (id) => callers.get(id) ?? main, onDenied, running)),
           }),
         },
       };
 
-      for await (const message of query({ prompt: spec.prompt, options })) {
+      const stream = query({ prompt: spec.prompt, options })[Symbol.asyncIterator]();
+      // A race, not only the abort: a hung stream may never react to the abort.
+      for (;;) {
+        watched.touch();
+        const next = await Promise.race([stream.next(), watched.expired]);
+        if (next.done) break;
+        const message = next.value;
         yield* pending.splice(0);
         messages.push(message);
         if (message.type === "system" && message.subtype === "init") {
@@ -223,15 +278,19 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
   } catch (error) {
     thrown.push(error);
   } finally {
+    watch?.stop();
     abortController.abort();
   }
 
+  // The abort does not reach a handler in this process, so its rows are still coming. The caller may exit once it sees the result.
+  // No limit of its own: portal steps, Stripe, model turns and live calls each have one.
+  await Promise.all(inFlight);
   yield* pending.splice(0);
   const { finished, reason } = runOutcome(messages, allowedInit, thrown);
   if (over) yield { type: "text", agent: main, text: "Stopped: estimated cost reached RUN_BUDGET_USD." };
   else if (!finished) yield { type: "text", agent: main, text: `Run failed: ${reason}` };
   yield { type: "text", agent: main, text: `Estimated cost: $${costUsd.toFixed(4)} (an SDK estimate, not a bill).` };
-  yield { type: "result", status: over ? "over_budget" : finished ? "success" : "error", costUsd };
+  yield { type: "result", status: over ? "over_budget" : finished ? "success" : "error", costUsd, ...(finished ? {} : { reason }) };
 }
 
 export default createAgentRuntime(async () => {
