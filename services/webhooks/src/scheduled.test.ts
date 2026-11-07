@@ -67,7 +67,8 @@ describe("forced firing", () => {
         expect(reply.status).toBe(200);
         const { runId } = (await reply.json()) as { runId: string };
 
-        expect(await finished(db, runId)).toMatchObject({ customerId: "noodle", trigger: "schedule", status: "success", platform: "local" });
+        // The stub model does none of the plan, so planGaps marks the run incomplete. Its row is what this test is about.
+        expect(await finished(db, runId)).toMatchObject({ customerId: "noodle", trigger: "schedule", status: "incomplete", platform: "local" });
         expect(await statusOf(db, check.id)).toBe("fired");
         const prompt = run.mock.calls[0]![0].prompt;
         expect(prompt).toContain("BE-1");

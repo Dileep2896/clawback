@@ -11,6 +11,7 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import { reportProblem, retryingCallLlm } from "../retry.ts";
 import { defineTool } from "../tool-wrapper.ts";
+import { letterActionId } from "./filer.ts";
 
 type EngineCall = { actionId: string; plan: CallPlan; onCost: (usd: number) => void; fallbackReason?: string };
 type Engine = (call: EngineCall) => Promise<{ callId: string }>;
@@ -111,7 +112,7 @@ export function negotiatorTools({ db, budget, sim, live }: NegotiatorDeps) {
         "Records one approved line cancellation. The line comes from the cancel action's finding, and it is recorded only if the outcome of the given call confirms it. Alarm lines are always refused.",
       inputSchema: z.object({ actionId: z.string().min(1), callId: z.string().min(1) }),
       targets: () => [],
-      async handler({ actionId, callId }) {
+      async handler({ actionId, callId }, { runId }) {
         const [action] = await db
           .select({ kind: actions.kind, findingId: findings.id, type: findings.type, evidence: findings.evidenceJson })
           .from(actions)
@@ -135,7 +136,8 @@ export function negotiatorTools({ db, budget, sim, live }: NegotiatorDeps) {
 
         await db.transaction(async (tx) => {
           await tx.update(findings).set({ status: "won" }).where(eq(findings.id, action.findingId!));
-          await tx.update(actions).set({ status: "done" }).where(eq(actions.id, actionId));
+          // The line's letter closes only here, so the letter of a line the rep refused stays open.
+          await tx.update(actions).set({ status: "done" }).where(inArray(actions.id, [actionId, letterActionId(runId, action.findingId!)]));
         });
         return { recorded: line.number };
       },

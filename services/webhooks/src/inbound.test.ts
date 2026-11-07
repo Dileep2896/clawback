@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
+import { join } from "node:path";
 import { defineTool } from "@bill-fighter/agents/tool-wrapper";
 import type { Db } from "@bill-fighter/db/client";
 import { accounts, actions, approvals, auditLog, customers, locations, runs } from "@bill-fighter/db/schema";
@@ -68,11 +69,33 @@ describe("handleInbound", () => {
       expect(reply.body.duplicate).toBe(false);
 
       const row = await finished(db, reply.body.runId as string);
-      expect(row).toMatchObject({ customerId: "noodle", trigger: "email", platform: "local", dedupeKey: "msg-1", status: "success" });
+      // The stub model does none of the plan, so planGaps marks the run incomplete. Its row is what this test is about.
+      expect(row).toMatchObject({ customerId: "noodle", trigger: "email", platform: "local", dedupeKey: "msg-1", status: "incomplete" });
       expect(run).toHaveBeenCalledOnce();
       // parse_inbound_email takes the whole email, so the model must be given every field.
       const prompt = run.mock.calls[0]![0].prompt;
       for (const value of Object.values(email())) expect(prompt).toContain(JSON.stringify(value));
+    });
+  });
+
+  it("keeps the run's events in its log file, and no tool input", async () => {
+    await withTestDb(DB_NAME, async (db) => {
+      await addCustomer(db, "noodle", BILL_ACCOUNT_NUMBER);
+      vi.spyOn(console, "info").mockImplementation(() => {});
+      const { deps } = depsFor(db, async function* () {
+        yield { type: "tool_call", agent: "intake", tool: "get_customer", input: { secret: "tool-input" } };
+        yield success;
+      });
+      const reply = await handleInbound(email(), deps);
+      const runId = reply.body.runId as string;
+      await finished(db, runId);
+
+      const log = readFileSync(join(process.env.RUN_EVENT_LOG_DIR!, `${runId}.log`), "utf8");
+      expect(log).toContain("[intake] calls get_customer");
+      // The stub model does none of the plan, so the logged result is the checked one, not the SDK's success.
+      expect(log).toContain("Run ended: incomplete");
+      expect(log).not.toContain("Run ended: success");
+      expect(log).not.toContain("tool-input");
     });
   });
 
@@ -130,7 +153,8 @@ describe("handleInbound", () => {
       });
       const reply = await handleInbound(email(), deps);
       const row = await finished(db, reply.body.runId as string);
-      expect(row.status).toBe("success");
+      // Finished, not failed: incomplete only because the stub does none of the plan.
+      expect(row.status).toBe("incomplete");
       const audited = await db.select().from(auditLog).where(eq(auditLog.runId, row.id));
       expect(audited.map(({ agent, tool }) => ({ agent, tool }))).toEqual([{ agent: "intake", tool: "get_customer" }]);
     });

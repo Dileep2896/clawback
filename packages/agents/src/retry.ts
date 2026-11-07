@@ -61,6 +61,7 @@ export async function reportStop(db: Db, runId: string, message: string) {
 }
 
 export function stopMessage(status: string, reason = "") {
+  if (status === "incomplete") return `Stopped before the plan finished. What is missing is in the server log. ${SAVED}`;
   if (status === "over_budget") return `Stopped because the estimated cost reached the run budget. The cost is an estimate, and it can include the full 5 minute charge for a dial that timed out. ${SAVED}`;
   if (/model did not answer/i.test(reason)) return `Stopped because the model did not answer in time. ${SAVED}`;
   if (/rate limit/i.test(reason)) return `Stopped because the Claude plan rate limit was reached. ${SAVED}`;

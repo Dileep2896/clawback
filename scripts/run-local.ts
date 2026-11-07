@@ -3,19 +3,13 @@
 import { randomUUID } from "node:crypto";
 import { loadTools } from "@bill-fighter/agents/registry";
 import { executeRun, runPrompt, stopRunsOnSignal } from "@bill-fighter/agents/run";
+import { runEventLog } from "@bill-fighter/agents/run-log";
 import { db } from "@bill-fighter/db/client";
 import { runs } from "@bill-fighter/db/schema";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
 import { getPlatform, platformName } from "@bill-fighter/platform/factory";
-import type { RunEvent } from "@bill-fighter/platform/types";
 import { billEmail } from "@bill-fighter/webhooks/bill-email";
 import { autoApprove } from "./auto-approve.ts";
-
-function print(event: RunEvent) {
-  if (event.type === "text") console.info(`[${event.agent}] ${event.text}`);
-  else if (event.type === "tool_call") console.info(`[${event.agent}] calls ${event.tool}`);
-  else if (event.type === "denied") console.info(`[${event.agent}] denied ${event.tool}: ${event.reason}`);
-}
 
 async function main() {
   if (platformName() !== "local") throw new Error("run-local auto approves, so it only runs on PLATFORM=local");
@@ -39,7 +33,7 @@ async function main() {
     runtime: await platform.agentRuntime(),
     audit: await platform.audit(),
     tools: await loadTools(),
-    onEvent: print,
+    onEvent: runEventLog(run!.id),
   });
   stop();
   console.info(`Run ${run!.id} finished: ${status}`);

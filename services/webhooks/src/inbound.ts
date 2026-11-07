@@ -1,4 +1,5 @@
 import { executeRun, runPrompt } from "@bill-fighter/agents/run";
+import { runEventLog } from "@bill-fighter/agents/run-log";
 import type { AgentTool } from "@bill-fighter/agents/tool-wrapper";
 import type { Db } from "@bill-fighter/db/client";
 import { accounts, locations, runs } from "@bill-fighter/db/schema";
@@ -55,7 +56,7 @@ export async function handleInbound(payload: unknown, deps: InboundDeps): Promis
 
   // shortcut: the run lives in this process, so a crash leaves its row "running" and a redelivery reads as a duplicate.
   // Upgrade when a run can be resumed.
-  void executeRun({ db, runId: created.id, prompt: runPrompt(email), runtime, audit, tools }).catch((error: unknown) => {
+  void executeRun({ db, runId: created.id, prompt: runPrompt(email), runtime, audit, tools, onEvent: runEventLog(created.id) }).catch((error: unknown) => {
     console.error(`Run ${created.id}: could not record its result:`, error);
   });
   return { status: 202, body: { runId: created.id, duplicate: false } };

@@ -8,7 +8,14 @@ import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import type { AgentRuntime, Audit, RunEvent } from "@bill-fighter/platform/types";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
+import { planGaps } from "./plan-check.ts";
 import { executeRun, stopActiveRuns } from "./run.ts";
+
+// The real check, wrapped so one test can make it fail.
+vi.mock("./plan-check.ts", async (original) => {
+  const real = await original<typeof import("./plan-check.ts")>();
+  return { planGaps: vi.fn(real.planGaps) };
+});
 
 const RUN = "r1";
 const FIXTURE = fileURLToPath(new URL("./signal-exit.fixture.ts", import.meta.url));
@@ -20,6 +27,8 @@ const runtimeOf = (...events: RunEvent[]): AgentRuntime => ({
   },
 });
 const execute = (db: Db, runtime: AgentRuntime) => executeRun({ db, runId: RUN, prompt: "p", runtime, audit: noAudit, tools: [] });
+/** A run whose audit finished and found nothing to approve, so planGaps calls it a clean finish. */
+const audited = (db: Db) => db.insert(auditLog).values({ runId: RUN, agent: "auditor", tool: "run_audit", outputJson: { findings: [] } });
 const row = async (db: Db) => (await db.select().from(runs).where(eq(runs.id, RUN)))[0]!;
 const titles = async (db: Db) => (await db.select().from(boardCards).where(eq(boardCards.agent, "run"))).map((card) => card.title);
 
@@ -85,8 +94,36 @@ describe("a run that stops", () => {
   });
 
   test("a clean finish adds no card", async (db) => {
+    await audited(db);
     expect(await execute(db, runtimeOf({ type: "result", status: "success", costUsd: 1 }))).toBe("success");
     expect(await titles(db)).toEqual([]);
+  });
+
+  test("a model that stops before the plan finished: incomplete, a card, and each gap in the run's log", async (db) => {
+    const events: RunEvent[] = [];
+    const status = await executeRun({ db, runId: RUN, prompt: "p", runtime: runtimeOf({ type: "result", status: "success", costUsd: 1 }), audit: noAudit, tools: [], onEvent: (event) => events.push(event) });
+    expect(status).toBe("incomplete");
+    expect(await row(db)).toMatchObject({ status: "incomplete", finishedAt: expect.any(Date) });
+    expect(await titles(db)).toEqual([expect.stringContaining("Stopped before the plan finished")]);
+    expect(events).toContainEqual({ type: "text", agent: "run", text: "Plan not finished: The run ended before its audit finished." });
+    // The log gets one result, after the check, so it never reports the SDK's success.
+    expect(events.filter((event) => event.type === "result")).toEqual([{ type: "result", status: "incomplete", costUsd: 1, reason: "The run ended before its audit finished." }]);
+    expect(events.at(-1)?.type).toBe("result");
+  });
+
+  test("a plan check that fails records error, never a false success", async (db) => {
+    vi.mocked(planGaps).mockRejectedValueOnce(new Error("database went away"));
+    const events: RunEvent[] = [];
+    const status = await executeRun({ db, runId: RUN, prompt: "p", runtime: runtimeOf({ type: "result", status: "success", costUsd: 1 }), audit: noAudit, tools: [], onEvent: (event) => events.push(event) });
+    expect(status).toBe("error");
+    expect(await row(db)).toMatchObject({ status: "error" });
+    expect(events.filter((event) => event.type === "result")).toEqual([{ type: "result", status: "error", costUsd: 1 }]);
+  });
+
+  test("a stopped run is not checked, and keeps its own status", async (db) => {
+    vi.mocked(planGaps).mockClear();
+    expect(await execute(db, runtimeOf({ type: "result", status: "over_budget", costUsd: 6 }))).toBe("over_budget");
+    expect(planGaps).not.toHaveBeenCalled();
   });
 
   test("stopActiveRuns marks only a run still going", async (db) => {
@@ -112,6 +149,7 @@ describe("a run that stops", () => {
   });
 
   test("stopActiveRuns waits for a run saving its outcome, and leaves that outcome alone", async (db) => {
+    await audited(db);
     const { locked, unlock, lock } = holdRowLock(db);
     await locked;
     const going = execute(db, runtimeOf({ type: "result", status: "success", costUsd: 0 }));

@@ -40,7 +40,7 @@ export type RunEvent =
   | { type: "tool_call"; agent: string; tool: string; input: unknown }
   | { type: "tool_result"; agent: string; tool: string; output: unknown }
   | { type: "denied"; agent: string; tool: string; reason: string }
-  | { type: "result"; status: "success" | "error" | "over_budget"; costUsd: number; reason?: string };
+  | { type: "result"; status: "success" | "error" | "over_budget" | "incomplete"; costUsd: number; reason?: string };
 
 export interface AgentRuntime {
   run(spec: RunSpec): AsyncIterable<RunEvent>;

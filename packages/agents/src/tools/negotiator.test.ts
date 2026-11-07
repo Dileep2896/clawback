@@ -18,6 +18,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadTools } from "../registry.ts";
 import { wrapTool } from "../tool-wrapper.ts";
+import { letterActionId } from "./filer.ts";
 import { negotiatorTools, type NegotiatorDeps } from "./negotiator.ts";
 
 const CALL = "call-action";
@@ -445,6 +446,8 @@ describe("the live engine behind call_provider, on a stubbed Retell", () => {
       },
     };
     const { call } = setup(db, { live: liveWith(db, stub), llm: down });
+    // setup's approved bundle feeds the caller's fact sheet, so only a new approval would be wrong.
+    const approvalsBefore = await db.$count(approvals);
     await expect(call()).rejects.toThrow("did not answer");
     await expect(call()).rejects.toThrow("did not answer");
     expect(stub.dials()).toHaveLength(1);
@@ -452,7 +455,7 @@ describe("the live engine behind call_provider, on a stubbed Retell", () => {
     const cards = await db.select().from(boardCards).where(eq(boardCards.agent, "run"));
     expect(cards).toMatchObject([{ status: "blocked", title: expect.stringContaining("provider call could not be completed") }]);
     expect(cards[0]!.title).not.toContain("HTTP 500");
-    expect(await db.$count(approvals)).toBe(0);
+    expect(await db.$count(approvals)).toBe(approvalsBefore);
   });
 
   test("user_hangup does not start the fallback", async (db) => {
@@ -472,6 +475,23 @@ describe("cancel_service", () => {
     await expect(cancel(id, callId)).resolves.toEqual({ recorded: LINE });
     expect(await statusOf(db, id)).toBe("won");
     expect(await actionStatus(db, id)).toBe("done");
+  });
+
+  test("closes this run's letter for a confirmed line, and a refused line's letter stays open", async (db) => {
+    const won = await seedCancel(db, SEED_PLAN.cancelLines[1]!, "won-line");
+    const refused = await seedCancel(db, LINE, "refused-line");
+    const letter = (findingId: string, runId = CTX.runId) => ({ id: letterActionId(runId, findingId), findingId, kind: "letter" as const, status: "proposed" });
+    await db.insert(actions).values([letter(won), letter(refused), letter(won, "other-run")]);
+    const { call, cancel } = setup(db, { refuse: [LINE] });
+    const { callId } = await call();
+
+    await cancel(won, callId);
+    await cancel(won, callId);
+    await expect(cancel(refused, callId)).rejects.toThrow("does not confirm");
+
+    expect(await actionStatus(db, letterActionId(CTX.runId, won))).toBe("done");
+    expect(await actionStatus(db, letterActionId(CTX.runId, refused))).toBe("proposed");
+    expect(await actionStatus(db, letterActionId("other-run", won))).toBe("proposed");
   });
 
   test("never records an alarm line, even when a tampered outcome lists it", async (db) => {
