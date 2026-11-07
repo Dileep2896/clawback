@@ -171,14 +171,21 @@ describe("naïve runtime", () => {
     expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(2);
   });
 
-  it("denies a gated call with no actionId or outside the bundle, and never touches a session it does not own", async () => {
+  it("denies a gated call with no actionId or outside the bundle and any foreign tool, allows an ungated one, and never touches a session it does not own", async () => {
     const { gate } = fakeGate({ status: "pending", actionIds: ["a1"] });
     const { api, calls } = fakeNaive((sessions, tick) => {
       const root = sessions.get("ses_root")!;
       if (tick === 0) {
         root.status = "idle";
         root.stop_reason = "awaiting_approval";
-        root.pending_actions = [parked("c1"), parked("c2", "zzz"), { kind: "question", tool_call_id: "q1", name: "ask_operator" }];
+        root.pending_actions = [
+          parked("c1"),
+          parked("c2", "zzz"),
+          { kind: "question", tool_call_id: "q1", name: "ask_operator" },
+          // naïve parks an allowed tool once the chat has read mail: ours and ungated, so it is allowed.
+          { kind: "tool", tool_call_id: "c3", name: "clawback.board_update", args: {} },
+          { kind: "tool", tool_call_id: "c4", name: "bash", args: {} },
+        ];
         sessions.set("ses_other", {
           id: "ses_other",
           status: "idle",
@@ -192,11 +199,14 @@ describe("naïve runtime", () => {
     });
     const events = await collect(runtime(api, gate, fakeBudget(), fakeAudit().audit).run(SPEC));
     const confirms = calls.filter((c) => c.path.endsWith("/tool_confirmations"));
-    expect(confirms.map((c) => [c.path, (c.body as { decision: string }).decision])).toEqual([
-      ["/sessions/ses_root/tool_confirmations", "deny"],
-      ["/sessions/ses_root/tool_confirmations", "deny"],
+    expect(confirms.map((c) => [(c.body as { tool_call_id: string }).tool_call_id, (c.body as { decision: string }).decision])).toEqual([
+      ["c1", "deny"],
+      ["c2", "deny"],
+      ["c3", "allow"],
+      ["c4", "deny"],
     ]);
-    expect(events.filter((e) => e.type === "denied")).toHaveLength(2);
+    expect(confirms.every((c) => c.path === "/sessions/ses_root/tool_confirmations")).toBe(true);
+    expect(events.filter((e) => e.type === "denied")).toHaveLength(3);
     expect(calls.some((c) => c.path.includes("ses_other"))).toBe(false);
   });
 

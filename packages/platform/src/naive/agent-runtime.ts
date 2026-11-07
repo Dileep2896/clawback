@@ -191,6 +191,7 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     ]);
     // By call id across sessions: naïve also lists a member's parked call on the coordinator (seen in the probe).
     const handled = new Set<string>();
+    const ours = new Set(spec.tools.map((def) => def.name));
     const memberOf = (naive: unknown) => {
       const name = String(naive ?? "");
       return name.startsWith("clawback-") ? name.slice("clawback-".length) : name;
@@ -234,9 +235,17 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     /** The single approval rule: approved bundle → allow; pending bundle holding the action → wait; anything else → deny. */
     const decide = async (sessionId: string, action: PendingAction) => {
       const actionId = action.args?.actionId;
+      const bare = action.name.startsWith(`${SERVER}.`) ? action.name.slice(SERVER.length + 1) : "";
       let decision: "allow" | "deny";
       let reason: string | undefined;
-      if (typeof actionId !== "string" || !actionId) {
+      if (!ours.has(bare)) {
+        decision = "deny";
+        reason = `${action.name} is not a tool of this run`;
+      } else if (!isGatedTool(bare)) {
+        // naïve asks even on an allowed MCP tool once the chat has read mail text (seen live on parse_inbound_email).
+        // An ungated tool needs no approval, as in local mode; our tool server still enforces the gate on gated ones.
+        decision = "allow";
+      } else if (typeof actionId !== "string" || !actionId) {
         decision = "deny";
         reason = `${action.name} needs an actionId to be approved`;
       } else if (await gate.isReleased(actionId)) {
