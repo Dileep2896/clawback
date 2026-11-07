@@ -109,7 +109,7 @@ describe("loadSeed", () => {
         expiresAt: new Date("2029-11-02T17:00:00.000Z"),
         pdfPath: null,
       });
-      expect(row.scope).toContain("Bill Fighter");
+      expect(row.scope).toContain("Clawback");
       expect(row.scope.includes("cancel unused lines")).toBe(row.provider === "baytel");
       expect(row.scope.includes("rate changes")).toBe(row.provider !== "bayhearth");
     }

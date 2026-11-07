@@ -1,6 +1,6 @@
-# Bill Fighter: build instructions for the coding agent
+# Clawback: build instructions for the coding agent
 
-You are building **Bill Fighter**, a demo of an autonomous company made of AI agents. The company audits and cuts utility and telecom bills for businesses with many locations, and gets paid a share of the savings. It will be shown live at the naïve x YC Autonomous Company Hackathon (YC, San Francisco, Nov 7 to 8, 2026). The demo is 2 to 4 minutes, and the judges score one thing above all: **how much of the company runs without the team.**
+You are building **Clawback**, a demo of an autonomous company made of AI agents. The company audits and cuts utility and telecom bills for businesses with many locations, and gets paid a share of the savings. It will be shown live at the naïve x YC Autonomous Company Hackathon (YC, San Francisco, Nov 7 to 8, 2026). The demo is 2 to 4 minutes, and the judges score one thing above all: **how much of the company runs without the team.**
 
 Read this whole file before writing code. Build in the order of the milestones in section 17. Every milestone must work end to end before you start the next one.
 
@@ -159,7 +159,7 @@ Generate 12 months of bills for every account, ending last month. Base electrici
 
 **Decoy:** Oakland #3 buys gas from a third party supplier. Flag "review contract, check exit fees". Never recommend switching.
 
-Check totals (the engine computes them): about $12,600 in refunds and about $20,000 a year in savings; Bill Fighter's 30% of first year value is about $9,900.
+Check totals (the engine computes them): about $12,600 in refunds and about $20,000 a year in savings; Clawback's 30% of first year value is about $9,900.
 
 Put one real public PG&E sample business bill in `data/samples/` only for parser testing.
 

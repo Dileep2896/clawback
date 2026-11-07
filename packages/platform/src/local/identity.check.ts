@@ -9,7 +9,7 @@ export default async function check() {
     phone: "+15550009999",
   });
   assert.deepEqual(await createIdentity({}).get(), {
-    companyName: "Bill Fighter",
+    companyName: "Clawback",
     email: "bills@billfighter.local",
     phone: "+15550002222",
   });

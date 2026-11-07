@@ -136,7 +136,7 @@ export async function renderLetter({
 
   paragraph(title, bold);
   paragraph(`To: ${provider}`);
-  paragraph(`From: Bill Fighter, as authorized agent for ${customerName}`);
+  paragraph(`From: Clawback, as authorized agent for ${customerName}`);
   paragraph(`Account: ${accountNumber}`);
   paragraph(`Date: ${new Date().toISOString().slice(0, 10)}`);
   for (const text of wording.split(/\n+/)) paragraph(text);

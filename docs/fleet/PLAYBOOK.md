@@ -20,7 +20,7 @@ House rules every agent reads before working. Edit freely.
 ## Conventions
 - Stack: TypeScript, pnpm workspaces, Next.js App Router and Tailwind for `apps/*`, Drizzle on Postgres, Zod v4, vitest.
 - Layout: `apps/` (dashboard, portal), `services/` (voice, webhooks), `packages/` (core, platform, agents, db, shared), `data/`, `scripts/`.
-- Package names are `@bill-fighter/<folder>`. "Bill Fighter" is the product name, "Clawback" only the repo name.
+- Package names are `@bill-fighter/<folder>`. "Clawback" is the product name (renamed from Bill Fighter on 2026-11-07); the package scope stays `@bill-fighter`.
 - Import by subpath, such as `@bill-fighter/shared/allowlist`, which resolves to `src/allowlist.ts`. No barrel files.
 - Tests sit beside the code as `*.test.ts`. Portal browser tests live in `apps/portal/e2e/` and do not run under `pnpm test`.
 - Money is integer cents, and money math lives in `packages/core`.
