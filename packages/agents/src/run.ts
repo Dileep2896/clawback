@@ -78,11 +78,16 @@ export async function stopActiveRuns(db: Db) {
 /**
  * Playwright's SIGTERM handler closes the browsers and leaves Node running, held up by the allowlist proxy and any
  * server, which is what keeps port 3002 taken. Exiting also clears the run's row, so its approval cannot be tapped.
+ * Call it before a browser opens: the local adapter then leaves SIGINT to this handler, and process.exit still kills Chromium.
  * shortcut: SIGKILL cannot be caught, so that row reads "running" until demo:reset. A sweep at startup could hit another process's live run.
  */
 export function stopRunsOnSignal(db: Db) {
+  let stopping = false;
   for (const [signal, code] of [["SIGTERM", 143], ["SIGINT", 130]] as const) {
-    process.once(signal, () => {
+    // on, not once: with no listener a second Ctrl-C kills Node outright, which skips the row and leaves Chromium running.
+    process.on(signal, () => {
+      if (stopping) return;
+      stopping = true;
       const limit = new Promise((resolve) => setTimeout(resolve, STOP_LIMIT_MS));
       void Promise.race([stopActiveRuns(db), limit])
         .catch((error: unknown) => console.error("Could not mark the running runs as stopped:", error))

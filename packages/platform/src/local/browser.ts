@@ -60,6 +60,8 @@ export function createBrowser(vault: Vault, getAllowlist: () => Allowlist = allo
         // The WebRTC flag: UDP does not go through an HTTP proxy, so it would reach any STUN or TURN server unchecked.
         const browser = await chromium.launch({
           headless: true,
+          // Playwright's own SIGINT handler exits as soon as the browsers close, so it would cut off a handler that is still saving.
+          handleSIGINT: process.listenerCount("SIGINT") === 0,
           proxy: { server: proxy.server, bypass: "<-loopback>" },
           args: ["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"],
         });

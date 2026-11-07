@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { connect } from "node:net";
+import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { auditLog, boardCards, ledger, runs } from "@bill-fighter/db/schema";
 import type { Db } from "@bill-fighter/db/client";
@@ -108,21 +109,68 @@ const portOpen = (port: number) =>
     socket.once("error", () => resolve(false));
   });
 
+async function startFixture(db: Db, ...args: string[]) {
+  const url = (db.$client.options as { connectionString: string }).connectionString;
+  const child = spawn(process.execPath, ["--import", "tsx", FIXTURE, RUN, ...args], { env: { ...process.env, DATABASE_URL: url }, stdio: ["ignore", "pipe", "inherit"] });
+  const port = await new Promise<number>((resolve, reject) => {
+    child.stdout.once("data", (data: Buffer) => resolve(Number(String(data).trim())));
+    child.once("exit", (code) => reject(new Error(`The fixture exited early with ${code}`)));
+  });
+  const exited = new Promise<number | null>((resolve) => child.once("exit", resolve));
+  return { child, port, exited };
+}
+
+describe("SIGINT with a browser open", () => {
+  it(
+    "waits for a slow database write before exiting, and takes Chromium with it",
+    () =>
+      withTestDb("run_sigint", async (db) => {
+        await seedRun(db, RUN);
+        const { child, exited } = await startFixture(db, "browser");
+        const chromium = execFileSync("pgrep", ["-P", String(child.pid)], { encoding: "utf8" }).trim().split("\n").map(Number);
+        expect(chromium.length).toBeGreaterThan(0);
+
+        // A held row lock makes the handler's writes wait, for longer than Playwright takes to close a browser and exit.
+        let unlock: () => void = () => {};
+        const unlocked = new Promise<void>((resolve) => (unlock = resolve));
+        let locked: () => void = () => {};
+        const isLocked = new Promise<void>((resolve) => (locked = resolve));
+        const lock = db.transaction(async (tx) => {
+          await tx.select().from(runs).where(eq(runs.id, RUN)).for("update");
+          locked();
+          await unlocked;
+        });
+        await isLocked;
+
+        child.kill("SIGINT");
+        // A second Ctrl-C must not cut the wait short either.
+        await sleep(300);
+        child.kill("SIGINT");
+        await sleep(1000);
+        expect(child.exitCode).toBeNull();
+        unlock();
+        await lock;
+
+        expect(await exited).toBe(130);
+        expect(await row(db)).toMatchObject({ status: "error" });
+        expect(await titles(db)).toEqual([expect.stringContaining("server was shut down")]);
+        await vi.waitFor(() => {
+          for (const pid of chromium) expect(() => process.kill(pid, 0)).toThrow();
+        });
+      }),
+    30_000,
+  );
+});
+
 describe("SIGTERM", () => {
   it(
     "ends a process held up by a listening server, frees its port and marks its run",
     () =>
       withTestDb("run_signal", async (db) => {
         await seedRun(db, RUN);
-        const url = (db.$client.options as { connectionString: string }).connectionString;
-        const child = spawn(process.execPath, ["--import", "tsx", FIXTURE, RUN], { env: { ...process.env, DATABASE_URL: url }, stdio: ["ignore", "pipe", "inherit"] });
-        const port = await new Promise<number>((resolve, reject) => {
-          child.stdout.once("data", (data: Buffer) => resolve(Number(String(data).trim())));
-          child.once("exit", (code) => reject(new Error(`The fixture exited early with ${code}`)));
-        });
+        const { child, port, exited } = await startFixture(db);
         expect(await portOpen(port)).toBe(true);
 
-        const exited = new Promise<number | null>((resolve) => child.once("exit", resolve));
         child.kill("SIGTERM");
         expect(await exited).toBe(143);
         expect(await portOpen(port)).toBe(false);
