@@ -9,8 +9,8 @@ import { CLOSING_LINE, LINE_NUMBER, MENU_LINE, REP_LINES, SPOKEN_TICKET, SYSTEM_
 import type { TranscriptRow } from "../transcript.ts";
 import { runSimCall } from "./engine.ts";
 import { ALARM_LINES, SEED_PLAN, seedCallData } from "./fixture.ts";
-import type { Move } from "./negotiator.ts";
 import { SIM_REFUSAL_LINE } from "./rep.ts";
+import { repAnswer, stubLlm } from "./stub-llm.ts";
 
 const test = (name: string, fn: (db: Db) => Promise<void>) =>
   it(name, () =>
@@ -19,43 +19,6 @@ const test = (name: string, fn: (db: Db) => Promise<void>) =>
       await fn(db);
     }),
   );
-
-function repAnswer(prompt: string) {
-  const last = prompt.split("\n").at(-1)!;
-  if (last === `Caller: ${DISCLOSURE_LINE}`) return { lines: [MENU_LINE], endCall: false };
-  if (last === "Caller: User's Keypad Entry: 2") return { lines: [REP_LINES.greeting], endCall: false };
-  if (last.includes("To confirm") || last.includes("repeat")) return { lines: [REP_LINES.confirm], endCall: false };
-  if (last.includes("account number is")) return { lines: [REP_LINES.account], endCall: false };
-  if (last.includes("cancel")) return { lines: [REP_LINES.cancel], endCall: false };
-  if (last.includes("promo")) return { lines: [REP_LINES.promo], endCall: false };
-  if (last.includes("ticket number")) return { lines: [REP_LINES.ticket], endCall: false };
-  if (last.includes("Goodbye")) return { lines: [], endCall: true };
-  return { lines: [REP_LINES.other], endCall: false };
-}
-
-// `nextMove` goes first, so a test can make the model ask for something bad. Returning null plays the call normally.
-function stubLlm(options: { nextMove?: (allowed: string[]) => Move | null; rep?: (input: LlmInput) => unknown } = {}) {
-  const lines = [...SEED_PLAN.cancelLines];
-  const promos = [...SEED_PLAN.promoAccounts];
-  const inputs: { kind: "rep" | "negotiator"; input: LlmInput }[] = [];
-  const llm: Llm = {
-    async structured<T>(input: LlmInput, schema: JsonSchema) {
-      const properties = schema.properties as { move?: { enum: Move["move"][] } };
-      if (!properties.move) {
-        inputs.push({ kind: "rep", input });
-        return (options.rep?.(input) ?? repAnswer(input.prompt)) as T;
-      }
-      inputs.push({ kind: "negotiator", input });
-      const allowed = properties.move.enum;
-      const forced = options.nextMove?.(allowed);
-      if (forced) return forced as T;
-      const move = allowed[0]!;
-      const target = move === "press_digit" ? "2" : move === "cancel_line" ? lines.shift()! : move === "restore_promo" ? promos.shift()! : "";
-      return { move, target } as T;
-    },
-  };
-  return { llm, inputs };
-}
 
 const transcript = async (db: Db) => {
   const [call] = await db.select().from(calls);
@@ -215,6 +178,22 @@ describe("runSimCall", () => {
     });
     await runSimCall({ db, llm, actionId: "action", plan: SEED_PLAN });
     expect(said((await transcript(db)).rows, "agent").find((l) => l.startsWith("To confirm"))).not.toContain(line);
+  });
+
+  test("a fallback is stored right after the disclosure, and no model is told about it", async (db) => {
+    const { llm, inputs } = stubLlm();
+    await runSimCall({ db, llm, actionId: "action", plan: SEED_PLAN, fallbackReason: "secret provider error" });
+    const { call, rows } = await transcript(db);
+    expect(call.mode).toBe("sim");
+    expect(rows[0]!.content).toBe(DISCLOSURE_LINE);
+    expect(rows[1]).toMatchObject({ role: "system", kind: "fallback", content: expect.stringContaining("secret provider error") });
+    expect(rows.filter((r) => r.kind === "fallback")).toHaveLength(1);
+    for (const { input } of inputs) expect(input.prompt).not.toContain("secret provider error");
+  });
+
+  test("a call with no fallback stores no fallback row", async (db) => {
+    await runSimCall({ db, llm: stubLlm().llm, actionId: "action", plan: SEED_PLAN });
+    expect((await transcript(db)).rows.some((r) => r.kind === "fallback")).toBe(false);
   });
 
   test("a failed call closes with its rows kept", async (db) => {

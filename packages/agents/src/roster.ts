@@ -36,7 +36,7 @@ export const MEMBERS: AgentDef[] = [
     "negotiator",
     "Calls the provider line about approved items and records confirmed cancellations.",
     ["call_provider", "cancel_service"],
-    8,
+    10,
   ),
   agent("finance", "Records savings in the ledger, and invoices our share once approved.", ["record_savings", "create_invoice", "card_pay"], 8),
   agent("monitor", "Schedules next month's bill check.", ["schedule_check"], 3),

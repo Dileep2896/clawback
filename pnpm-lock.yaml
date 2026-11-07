@@ -435,12 +435,18 @@ importers:
       '@bill-fighter/agents':
         specifier: workspace:*
         version: link:../../packages/agents
+      '@bill-fighter/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@bill-fighter/platform':
         specifier: workspace:*
         version: link:../../packages/platform
       '@bill-fighter/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@opentelemetry/api@1.10.0)(@types/pg@8.23.1)(pg@8.23.1)
       zod:
         specifier: ^4.6.7
         version: 4.6.7

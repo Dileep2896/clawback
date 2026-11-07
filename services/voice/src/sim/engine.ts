@@ -24,9 +24,12 @@ const STAGE_MOVES: Record<Exclude<Stage, "items">, MoveKind> = {
 };
 
 // Last ten digits, so "+1 415..." and "(415)..." are the same line.
-const lineKey = (number: string) => number.replace(/\D/g, "").slice(-10);
+export const lineKey = (number: string) => number.replace(/\D/g, "").slice(-10);
 
-/** Plays one whole call with no human on it. Rows are stored as they happen, also when the call fails. `refuse` lists items the sim rep turns down. */
+/**
+ * Plays one whole call with no human on it. Rows are stored as they happen, also when the call fails. `refuse` lists
+ * items the sim rep turns down. `fallbackReason` says why this call replaced a failed live one.
+ */
 export async function runSimCall(input: {
   db: Db;
   llm: Llm;
@@ -34,8 +37,9 @@ export async function runSimCall(input: {
   plan: CallPlan;
   refuse?: string[];
   onCost?: (usd: number) => void;
+  fallbackReason?: string;
 }): Promise<{ callId: string }> {
-  const { db, llm, actionId, plan, onCost } = input;
+  const { db, llm, actionId, plan, onCost, fallbackReason } = input;
   const refuse = new Set(input.refuse ?? []);
 
   // shortcut: reads every customer's lines, which errs toward refusing. Scope by customer if the demo ever has two.
@@ -135,6 +139,8 @@ export async function runSimCall(input: {
   };
 
   try {
+    // Stored only, not added to `rows`: it is for the screen, and neither model needs a provider's error text.
+    if (fallbackReason) await appendRow(db, callId, transcriptRow("system", "fallback", `Live call failed, so this call is simulated: ${fallbackReason}`));
     let repAnswers = true;
     for (let turn = 0; turn < MAX_TURNS; turn++) {
       if (repAnswers) {
