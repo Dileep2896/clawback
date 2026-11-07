@@ -60,9 +60,12 @@ export async function receiveSms(db: Db, { runId, body }: { runId: string; body:
 
 /**
  * These routes have no login, so a page on another site must not be able to post to them. Browsers always send Origin
- * on a POST. A request with none did not come from a page.
+ * on a POST. A request with none did not come from a page. The Host must be local first, because a rebound domain
+ * sends a matching Origin and Host of its own.
  */
 export function sameOrigin(request: Request) {
+  const host = `http://${request.headers.get("host")}`;
+  if (!URL.canParse(host) || !["localhost", "127.0.0.1"].includes(new URL(host).hostname)) return false;
   const origin = request.headers.get("origin");
   if (origin === null) return true;
   return URL.canParse(origin) && new URL(origin).host === request.headers.get("host");

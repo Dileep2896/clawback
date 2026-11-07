@@ -154,11 +154,23 @@ describe("sameOrigin", () => {
     expect(sameOrigin(request({ origin: "http://localhost:4000", host: "localhost:3000" }))).toBe(false);
     expect(sameOrigin(request({ origin: "null", host: "localhost:3000" }))).toBe(false);
   });
+
+  it("allows 127.0.0.1, where the dev server listens", () => {
+    expect(sameOrigin(request({ origin: "http://127.0.0.1:3000", host: "127.0.0.1:3000" }))).toBe(true);
+  });
+
+  it("refuses a rebinding host even though its Origin matches, and any Host that is not local", () => {
+    expect(sameOrigin(request({ origin: "http://evil.example:3000", host: "evil.example:3000" }))).toBe(false);
+    expect(sameOrigin(request({ host: "evil.example:3000" }))).toBe(false);
+    expect(sameOrigin(request({ origin: "http://localhost.evil.example:3000", host: "localhost.evil.example:3000" }))).toBe(false);
+    expect(sameOrigin(request({ host: "localhost@evil.example" }))).toBe(false);
+    expect(sameOrigin(request({}))).toBe(false);
+  });
 });
 
 describe("respond: what the routes answer", () => {
   const Body = z.object({ runId: z.string().min(1) });
-  const post = (body: string, headers: Record<string, string> = {}) => new Request("http://localhost:3000/api/approve", { method: "POST", body, headers });
+  const post = (body: string, headers: Record<string, string> = { host: "localhost:3000" }) => new Request("http://localhost:3000/api/approve", { method: "POST", body, headers });
   const valid = JSON.stringify({ runId: "r1" });
 
   it("gives 400 for malformed JSON and a bad body, without acting", async () => {
@@ -173,6 +185,8 @@ describe("respond: what the routes answer", () => {
     let acted = false;
     const crossSite = post(valid, { origin: "https://evil.example", host: "localhost:3000" });
     expect((await respond(crossSite, Body, async () => (acted = true))).status).toBe(403);
+    const rebound = post(valid, { origin: "http://evil.example:3000", host: "evil.example:3000" });
+    expect((await respond(rebound, Body, async () => (acted = true))).status).toBe(403);
     expect(acted).toBe(false);
   });
 
