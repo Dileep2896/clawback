@@ -5,9 +5,10 @@ import { eq, sql } from "drizzle-orm";
 
 // `keypress` records that the caller pressed a key, never that a tone was heard. `refused` rows are never spoken.
 // A `fallback` row marks a sim call that replaced a failed live one: the dashboard's call panel labels it from this.
+// A `status` row says how a live call is going. Retell only gives the transcript once the call ends, so that is all a live call shows until then.
 export type TranscriptRow = {
   role: "agent" | "provider" | "system";
-  kind: "speech" | "keypress" | "refused" | "fallback";
+  kind: "speech" | "keypress" | "refused" | "fallback" | "status";
   content: string;
   at: string;
 };

@@ -26,6 +26,24 @@ const STAGE_MOVES: Record<Exclude<Stage, "items">, MoveKind> = {
 // Last ten digits, so "+1 415..." and "(415)..." are the same line.
 export const lineKey = (number: string) => number.replace(/\D/g, "").slice(-10);
 
+/** Throws on a line that is unknown or an alarm line, so a bad plan never starts a call of either kind. */
+export async function checkPlan(db: Db, plan: CallPlan) {
+  // shortcut: reads every customer's lines, which errs toward refusing. Scope by customer if the demo ever has two.
+  const knownLines = await db
+    .select({ number: phoneLines.number, purpose: phoneLines.purpose, accountNumber: accounts.accountNumber })
+    .from(phoneLines)
+    .innerJoin(accounts, eq(phoneLines.accountId, accounts.id));
+  const lineByKey = new Map(knownLines.map((line) => [lineKey(line.number), line]));
+
+  const planned = plan.cancelLines.map((number) => {
+    const line = lineByKey.get(lineKey(number));
+    if (!line) throw new Error(`Line ${number} is not on file`);
+    if (line.purpose === "alarm") throw new Error(`Line ${number} is an alarm line and is never cancelled`);
+    return line;
+  });
+  return { lineByKey, planned };
+}
+
 /**
  * Plays one whole call with no human on it. Rows are stored as they happen, also when the call fails. `refuse` lists
  * items the sim rep turns down. `fallbackReason` says why this call replaced a failed live one.
@@ -42,19 +60,7 @@ export async function runSimCall(input: {
   const { db, llm, actionId, plan, onCost, fallbackReason } = input;
   const refuse = new Set(input.refuse ?? []);
 
-  // shortcut: reads every customer's lines, which errs toward refusing. Scope by customer if the demo ever has two.
-  const knownLines = await db
-    .select({ number: phoneLines.number, purpose: phoneLines.purpose, accountNumber: accounts.accountNumber })
-    .from(phoneLines)
-    .innerJoin(accounts, eq(phoneLines.accountId, accounts.id));
-  const lineByKey = new Map(knownLines.map((line) => [lineKey(line.number), line]));
-
-  const planned = plan.cancelLines.map((number) => {
-    const line = lineByKey.get(lineKey(number));
-    if (!line) throw new Error(`Line ${number} is not on file`);
-    if (line.purpose === "alarm") throw new Error(`Line ${number} is an alarm line and is never cancelled`);
-    return line;
-  });
+  const { lineByKey, planned } = await checkPlan(db, plan);
 
   const { id: callId, first } = await openCall(db, { actionId, toNumber: LINE_NUMBER });
   const rows: TranscriptRow[] = [first];
