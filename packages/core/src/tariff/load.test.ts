@@ -122,6 +122,61 @@ describe("compareTariffs", () => {
     expect(compareTariffs(a, b)).toEqual([]);
   });
 
+  describe("periods shared across weekdays and weekends", () => {
+    const zeros = Array.from({ length: 12 }, () => Array<number>(24).fill(0));
+    const ones = Array.from({ length: 12 }, () => Array<number>(24).fill(1));
+
+    it("catches one demand maximum against separate weekday and weekend maximums", () => {
+      const a = read("B-19");
+      const tiers = [{ upToKw: null, usdPerKw: 5 }];
+      const shared = {
+        ...a,
+        demandWeekdaySchedule: zeros,
+        demandWeekendSchedule: zeros,
+        demandPeriods: [{ name: "All", tiers }],
+      };
+      const separate = {
+        ...a,
+        demandWeekdaySchedule: zeros,
+        demandWeekendSchedule: ones,
+        demandPeriods: [
+          { name: "Weekday", tiers },
+          { name: "Weekend", tiers },
+        ],
+      };
+      expect(compareTariffs(shared, separate).join()).toContain("demand periods group differently");
+    });
+
+    const energy = (tiers: Tariff["energyPeriods"][number]["tiers"]): [Tariff, Tariff] => {
+      const a = read("B-6");
+      return [
+        { ...a, energyWeekdaySchedule: zeros, energyWeekendSchedule: zeros, energyPeriods: [{ name: "All", tiers }] },
+        {
+          ...a,
+          energyWeekdaySchedule: zeros,
+          energyWeekendSchedule: ones,
+          energyPeriods: [
+            { name: "Weekday", tiers },
+            { name: "Weekend", tiers },
+          ],
+        },
+      ];
+    };
+
+    it("catches tiers that accumulate in one energy period against two", () => {
+      const [shared, separate] = energy([
+        { upToKwh: 100, usdPerKwh: 0.1 },
+        { upToKwh: null, usdPerKwh: 0.2 },
+      ]);
+      expect(compareTariffs(shared, separate).join()).toContain("energy periods group differently");
+    });
+
+    it("ignores energy grouping when no tier threshold can change the bill", () => {
+      const [shared, separate] = energy([{ upToKwh: null, usdPerKwh: 0.1 }]);
+      expect(compareTariffs(shared, separate)).toEqual([]);
+    });
+  });
+
   it("catches changed rates, fixed charges and demand season months", () => {
     const a = read("B-19");
     const energyPeriods = a.energyPeriods.map((p, i) =>

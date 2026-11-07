@@ -42,11 +42,20 @@ function grouping(cells: number[]) {
 }
 
 // The calculator keeps one max kW per demand period, so equal prices grouped differently still bill differently.
-function compareGrouping(name: string, a: number[] | undefined, b: number[] | undefined): string[] {
+function compareGrouping(name: string, a: number[] | null, b: number[] | null): string[] {
   return grouping(a ?? Array<number>(b?.length ?? 0).fill(-1)) === grouping(b ?? Array<number>(a?.length ?? 0).fill(-1))
     ? []
     : [`${name} periods group differently: [${a}] vs [${b}]`];
 }
+
+// Weekdays and weekends together, because one period can span both and share a max kW or a tier count.
+const demandCells = (t: Tariff) =>
+  t.demandWeekdaySchedule && [...t.demandWeekdaySchedule.flat(), ...t.demandWeekendSchedule!.flat()];
+// Untiered periods are all -1: usage only accumulates towards a threshold, so their grouping cannot change a bill.
+const tieredEnergyCells = (t: Tariff) =>
+  [...t.energyWeekdaySchedule.flat(), ...t.energyWeekendSchedule.flat()].map((cell) =>
+    t.energyPeriods[cell]!.tiers.length > 1 ? cell : -1,
+  );
 
 const fixedLabel = (tariff: Tariff) =>
   tariff.fixedCharges
@@ -69,9 +78,9 @@ export function compareTariffs(a: Tariff, b: Tariff): string[] {
       [a.demandWeekendSchedule, demandTiers(a.demandPeriods)],
       [b.demandWeekendSchedule, demandTiers(b.demandPeriods)],
     ),
-    ...compareGrouping("demand weekday", a.demandWeekdaySchedule?.flat(), b.demandWeekdaySchedule?.flat()),
-    ...compareGrouping("demand weekend", a.demandWeekendSchedule?.flat(), b.demandWeekendSchedule?.flat()),
-    ...compareGrouping("flat demand", a.flatDemandMonths ?? undefined, b.flatDemandMonths ?? undefined),
+    ...compareGrouping("energy", tieredEnergyCells(a), tieredEnergyCells(b)),
+    ...compareGrouping("demand", demandCells(a), demandCells(b)),
+    ...compareGrouping("flat demand", a.flatDemandMonths, b.flatDemandMonths),
   ];
   const flatA = demandTiers(a.flatDemandPeriods);
   const flatB = demandTiers(b.flatDemandPeriods);
