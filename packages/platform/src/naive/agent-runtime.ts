@@ -189,6 +189,7 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     const owned = new Map<string, { agent: string; afterSeq: number; consumed: number; session?: Session }>([
       [root.id, { agent: main, afterSeq: 0, consumed: 0 }],
     ]);
+    // By call id across sessions: naïve also lists a member's parked call on the coordinator (seen in the probe).
     const handled = new Set<string>();
     const memberOf = (naive: unknown) => {
       const name = String(naive ?? "");
@@ -247,7 +248,7 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
         reason = `Action ${actionId} did not run and nothing was changed: the owner denied its approval request, or it was never in one. It is not pending.`;
       }
       await api(`/sessions/${sessionId}/tool_confirmations`, { method: "POST", body: { tool_call_id: action.tool_call_id, decision, ...(reason ? { reason } : {}) } });
-      handled.add(`${sessionId}:${action.tool_call_id}`);
+      handled.add(action.tool_call_id);
       if (decision === "deny") pending.push({ type: "denied", agent: owned.get(sessionId)!.agent, tool: action.name.replace(`${SERVER}.`, ""), reason: reason! });
     };
 
@@ -268,9 +269,9 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
         if (session.stop_reason === "awaiting_approval") {
           // Branch on kind, never on name: a question row is never a tool call.
           for (const action of session.pending_actions.filter((a) => (a.kind ?? "tool") === "tool")) {
-            if (handled.has(`${sessionId}:${action.tool_call_id}`)) continue;
+            if (handled.has(action.tool_call_id)) continue;
             await decide(sessionId, action);
-            if (!handled.has(`${sessionId}:${action.tool_call_id}`)) waitingOnOwner = true;
+            if (!handled.has(action.tool_call_id)) waitingOnOwner = true;
           }
         }
       }
