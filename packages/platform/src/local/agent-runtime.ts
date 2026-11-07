@@ -96,31 +96,36 @@ function mcpTool(
   callerOf: (toolUseId: unknown) => string,
   onDenied: (agent: string, name: string, reason: string, toolUseId: string) => void,
   running: <T>(work: () => Promise<T>) => Promise<T>,
+  ended: () => boolean,
 ) {
   if (!(def.inputSchema instanceof z.ZodObject)) throw new Error(`Tool ${def.name}: inputSchema must be a z.object`);
   // shortcut: the SDK types ask for a raw shape, which would drop refinements and strictness, but it hands a whole
   // z.object to MCP, which validates with it before the handler. The tests fail if an SDK upgrade changes that.
   const schema = def.inputSchema as unknown as z.ZodRawShape;
-  return tool(def.name, def.description, schema, async (input, extra) => {
-    const toolUseId = (extra as { _meta?: Record<string, unknown> })._meta?.["claudecode/toolUseId"];
-    const agent = callerOf(toolUseId);
-    try {
-      // Managed allow rules skip canUseTool even with settingSources: [], so approval is also enforced here,
-      // on the validated input, where nothing can route around it.
-      if (isGatedTool(def.name)) {
-        const { actionId } = input;
-        if (typeof actionId !== "string" || !actionId || !(await gate.isReleased(actionId))) {
-          const reason = `${def.name} ran without an approved actionId`;
-          onDenied(agent, def.name, reason, toolUseId as string);
-          return { content: [{ type: "text" as const, text: reason }], isError: true };
+  return tool(def.name, def.description, schema, (input, extra) =>
+    running(async () => {
+      const toolUseId = (extra as { _meta?: Record<string, unknown> })._meta?.["claudecode/toolUseId"];
+      const agent = callerOf(toolUseId);
+      try {
+        // Managed allow rules skip canUseTool even with settingSources: [], so approval is also enforced here,
+        // on the validated input, where nothing can route around it.
+        if (isGatedTool(def.name)) {
+          const { actionId } = input;
+          if (typeof actionId !== "string" || !actionId || !(await gate.isReleased(actionId))) {
+            const reason = `${def.name} ran without an approved actionId`;
+            onDenied(agent, def.name, reason, toolUseId as string);
+            return { content: [{ type: "text" as const, text: reason }], isError: true };
+          }
         }
+        // Checked last: the gate check above can outlast the run, and nothing may start once the run has ended.
+        if (ended()) return { content: [{ type: "text" as const, text: `${def.name} did not run, because this run has ended` }], isError: true };
+        const output = await def.handler(input, { runId, agent });
+        return { content: [{ type: "text" as const, text: JSON.stringify(output) ?? "null" }] };
+      } catch (error) {
+        return { content: [{ type: "text" as const, text: errorText(error) }], isError: true };
       }
-      const output = await running(() => def.handler(input, { runId, agent }));
-      return { content: [{ type: "text" as const, text: JSON.stringify(output) ?? "null" }] };
-    } catch (error) {
-      return { content: [{ type: "text" as const, text: errorText(error) }], isError: true };
-    }
-  });
+    }),
+  );
 }
 
 export function createAgentRuntime(deps: () => Promise<Deps>): AgentRuntime {
@@ -172,6 +177,7 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
 
   let watch: ReturnType<typeof idleWatch> | undefined;
   const inFlight = new Set<Promise<unknown>>();
+  let ended = false;
 
   try {
     const { gate, budget, query = sdkQuery as Query, login = checkLogin, idleMs = Number(process.env.MODEL_IDLE_MS) || MODEL_IDLE_MS } = await deps();
@@ -224,7 +230,7 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
           [SERVER]: createSdkMcpServer({
             name: SERVER,
             version: "1.0.0",
-            tools: spec.tools.map((def) => mcpTool(def, spec.runId, gate, (id) => callers.get(id) ?? main, onDenied, running)),
+            tools: spec.tools.map((def) => mcpTool(def, spec.runId, gate, (id) => callers.get(id) ?? main, onDenied, running, () => ended)),
           }),
         },
       };
@@ -278,6 +284,7 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
   } catch (error) {
     thrown.push(error);
   } finally {
+    ended = true;
     watch?.stop();
     abortController.abort();
   }

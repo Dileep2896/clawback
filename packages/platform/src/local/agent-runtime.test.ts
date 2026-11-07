@@ -78,13 +78,13 @@ async function collect(events: AsyncIterable<RunEvent>) {
 afterEach(() => vi.restoreAllMocks());
 
 // Calls the run's real handler, the way the CLI does once canUseTool has allowed it.
-const callHandler = async (options: Options, name: string) => {
+const callHandler = async (options: Options, name: string, args: Record<string, unknown> = {}) => {
   const { instance } = options.mcpServers!.platform as McpSdkServerConfigWithInstance;
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   await instance.connect(serverSide);
   const client = new Client({ name: "t", version: "1" });
   await client.connect(clientSide);
-  return client.callTool({ name, arguments: {} });
+  return client.callTool({ name, arguments: args });
 };
 const EMAIL_INIT = { ...INIT, tools: ["mcp__platform__send_email"] };
 const specWith = (tool: ToolDef): RunSpec => ({ ...SPEC, main: { ...SPEC.main, tools: [tool.name] }, tools: [tool] });
@@ -169,6 +169,46 @@ describe("a tool still running when the run ends", () => {
       if (event.type === "result") order.push(`result ${event.status}`);
     }
     expect(order).toEqual(["row written", "result over_budget"]);
+  });
+
+  it("never starts a gated tool whose approval check was still going when the run ended", async () => {
+    const order: string[] = [];
+    let asked: () => void = () => {};
+    const asking = new Promise<void>((resolve) => (asked = resolve));
+    let call: ReturnType<typeof callHandler> | undefined;
+    const isReleased = async () => {
+      asked();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      order.push("released");
+      return true;
+    };
+    const gated: ToolDef = {
+      ...def("call_provider"),
+      handler: async () => {
+        order.push("side effect");
+        return "ok";
+      },
+    };
+    const { runtime } = setup([{ ...INIT, tools: ["mcp__platform__call_provider"] }, result(5.5, { subtype: "error_max_budget_usd", errors: [] })], {
+      gate: { isReleased },
+      during: async (options) => {
+        call = callHandler(options, "call_provider", { actionId: "a1" });
+        await asking;
+      },
+    });
+    for await (const event of runtime.run(specWith(gated))) {
+      if (event.type === "result") order.push(`result ${event.status}`);
+    }
+    expect(order).toEqual(["released", "result over_budget"]);
+    expect(await call).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("this run has ended") }] });
+  });
+
+  it("refuses a tool call that arrives after the result", async () => {
+    const handler = vi.fn(async () => "ok");
+    const { runtime, captured } = setup([EMAIL_INIT, result(1)]);
+    await collect(runtime.run(specWith({ ...def("send_email"), handler })));
+    expect(await callHandler(captured.options!, "send_email")).toMatchObject({ isError: true });
+    expect(handler).not.toHaveBeenCalled();
   });
 });
 
