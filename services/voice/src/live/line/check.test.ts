@@ -78,6 +78,11 @@ describe("checkLineCall", () => {
     expect(problems.some((p) => p.startsWith("off script before the key press"))).toBe(true);
   });
 
+  it("treats canceled and cancelled as the same word, and still flags other text", () => {
+    expect(check([disclosure, bot(MENU_LINE), keypad("2"), bot(REP_LINES.greeting), bot("Yes, that is canceled.")])).toEqual([]);
+    expect(check([disclosure, bot(MENU_LINE), keypad("2"), bot(REP_LINES.greeting), bot("Yes, that is canceled twice.")])).toEqual(['off script as the rep: "twice"']);
+  });
+
   it("flags a claimed tone as off script", () => {
     const problems = check([disclosure, bot(MENU_LINE), keypad("2"), bot(`Key press received. ${REP_LINES.greeting}`)]);
     expect(problems).toEqual(['off script as the rep: "key press received"', "the rep did not open with its greeting after the key press"]);
