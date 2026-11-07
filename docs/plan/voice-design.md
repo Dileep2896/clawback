@@ -220,8 +220,8 @@ The transcripts ran locally, so the audio went to no outside service.
 
 ### Open risks
 
-- **The line check failed on the one real call, and the causes are not confirmed.** `checkLineCall` reported the disclosure problem above, "the rep did not open with its greeting" with the greeting logged as "paytel billing...", and seven "off script" entries for "yes that is canceled". The seven look like spelling only, since the check does not treat "canceled" and "cancelled" as equal the way `extractOutcome` does. The recording settles the disclosure (see "Disclosure check") but not why the check failed. The greeting is not settled by transcript: `small.en` heard "Baytel billing", `base.en` heard "Beto Billing", and `medium.en` missed those words.
-- **The caller spoke over the rep's account question** on that call. The rep still accepted the account. The human has heard the recording, and the prompt is unchanged in this lane. The human wants the caller to answer the rep's questions instead of following a fixed script, which is a new lane after this one ships.
+- **The line check failed on the one real call.** Causes are now read from Vapi's record: see "Caller answers". The "canceled" entries are fixed. The disclosure and greeting flags are speech-to-text differences, and the check still reports such differences.
+- **The caller spoke over the rep's account question** on that call. Vapi's timestamps show how much: see "Caller answers".
 - **One real call is one sample.** Speech-to-text also gave "Baytown Billing" and an added "Um", which changed no outcome.
 - **`extractOutcome` needs the rep's exact words.** If Retell's speech-to-text turns "that is" into "that's", the item stays out, and with no ticket the call falls back.
 - **Normalising only handles single digits.** "Double five" or "seven thousand one" leaves the item out.
