@@ -192,6 +192,18 @@ describe("parsing through the real Llm adapter with a stubbed SDK", () => {
     expect(readdirSync(dir)).toEqual([]);
   });
 
+  it("rethrows an SDK exception that follows a give-up result, with no retry and nothing cached", async () => {
+    let calls = 0;
+    const query = async function* () {
+      calls++;
+      yield* [INIT, SDK_GAVE_UP];
+      throw new Error("transport down");
+    };
+    await expect(createParseCache({ dir, llm: createLlm(query as unknown as Query, async () => {}) }).parse(PDF, "bill-1")).rejects.toThrow(/transport down/);
+    expect(calls).toBe(1);
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
   it("throws straight away when the login check refuses, before calling the model", async () => {
     const { query, prompts } = sdk([INIT, success(GOOD)]);
     const refuse = async () => {

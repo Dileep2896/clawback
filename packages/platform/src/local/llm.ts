@@ -86,6 +86,8 @@ export function createLlm(query: Query = sdkQuery as Query, login: () => Promise
       }
       if (costUsd !== undefined) input.onCost?.(costUsd);
       const { finished, reason } = runOutcome(messages, ALLOWED_INIT, thrown);
+      // An SDK exception is operational even after a give-up result, whose text would otherwise take over `reason`.
+      if (thrown.length > 0 && onlyGaveUp(messages)) throw thrown[0];
       if (!finished && onlyGaveUp(messages)) throw new LlmOutputError(`Llm.structured failed: ${reason}`);
       if (!finished) throw new Error(`Llm.structured failed: ${reason}`);
       if (output === undefined) throw new LlmOutputError("Llm.structured failed: the result had no structured output");
