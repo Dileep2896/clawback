@@ -62,7 +62,7 @@ export default async function check() {
         posted = new URLSearchParams(body).get("password") ?? "";
         response.writeHead(302, { location: "/accounts" }).end();
       });
-    } else if (path === "/accounts") send(`<h1 class="welcome">Welcome</h1><p id="hidden" hidden>x</p>`);
+    } else if (path === "/accounts") send(`<h1 class="welcome">Welcome</h1><p id="hidden" hidden>x</p><p class="noted" data-note="n2"></p><p class="noted"></p>`);
     else if (path === "/to-forbidden") response.writeHead(302, { location: `${forbidden.origin}/redirect` }).end();
     else if (path === "/to-https") response.writeHead(302, { location: `${forbiddenHttps}/redirect` }).end();
     else if (path === "/hop") response.writeHead(302, { location: "/to-forbidden" }).end();
@@ -170,6 +170,8 @@ export default async function check() {
     assert.equal(posted, SECRET, "fillSecret did not reach the form");
     assert.deepEqual(await session.texts(".welcome"), ["Welcome"]);
     assert.equal(await session.isVisible("#hidden"), false);
+    assert.deepEqual(await session.attributes(".noted", "data-note"), ["n2", ""]);
+    assert.deepEqual(await session.attributes(".absent", "data-note"), []);
 
     await assert.rejects(session.fillSecret("#password", "missing"), (error: Error) => {
       assert.ok(!error.message.includes(SECRET));

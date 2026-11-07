@@ -24,21 +24,23 @@ export function createApprovalGate(db: Db): ApprovalGate {
   return {
     get,
 
-    async createBundle({ runId, actionIds, summary }) {
+    async createBundle({ runId, actionIds, summary }, tx = db) {
       const unique = [...new Set(actionIds)];
       if (unique.length === 0) throw new Error(`Run ${runId}: an approval bundle needs at least one action`);
       // Postgres cannot enforce foreign keys on array elements.
-      const known = await db.select({ id: actions.id }).from(actions).where(inArray(actions.id, unique));
+      const known = await tx.select({ id: actions.id }).from(actions).where(inArray(actions.id, unique));
       const knownIds = new Set(known.map((row) => row.id));
       const missing = unique.filter((id) => !knownIds.has(id));
       if (missing.length > 0) throw new Error(`Run ${runId}: unknown actions in bundle: ${missing.join(", ")}`);
 
-      const [created] = await db
+      const [created] = await tx
         .insert(approvals)
         .values({ runId, actionIds: unique, summary })
         .onConflictDoNothing({ target: approvals.runId })
         .returning();
-      return created ?? (await get(runId))!;
+      if (created) return created;
+      const [existing] = await tx.select().from(approvals).where(eq(approvals.runId, runId));
+      return existing!;
     },
 
     decide: (decision) => decideApproval(db, decision),
