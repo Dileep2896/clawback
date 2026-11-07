@@ -166,4 +166,12 @@ describe("callVariables", () => {
       ticket: null,
     });
   });
+
+  it("asks for and reads back no promo when the approved plan is cancellations only", () => {
+    const plan = { ...PLAN, promoAccounts: [] };
+    const { requests, read_back } = callVariables(plan, [LINE], STUB_FACTS);
+    expect(callRequests(plan, [LINE])).toHaveLength(1);
+    expect(requests).not.toMatch(/promo/i);
+    expect(read_back).toBe("To confirm, you cancelled 1 phone lines. Is that correct?");
+  });
 });
