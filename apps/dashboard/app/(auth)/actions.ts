@@ -3,12 +3,10 @@
 import { db } from "@bill-fighter/db/client";
 import { redirect } from "next/navigation";
 import { createUser, logIn, SignUp } from "../../lib/accounts.ts";
+import { safeNext } from "../../lib/auth.ts";
 import { endSession, startSession } from "../../lib/session.ts";
 
 export type FormState = { error?: string; fields?: Record<string, string> };
-
-// Only a path on this site, so ?next= cannot send a signed-in user somewhere else.
-const safeNext = (value: FormDataEntryValue | null) => (typeof value === "string" && /^\/(?![/\\])/.test(value) ? value : null);
 
 export async function signUpAction(_state: FormState, form: FormData): Promise<FormState> {
   // Never echo the password back into the form.

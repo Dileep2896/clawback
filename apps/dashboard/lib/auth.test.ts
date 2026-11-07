@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hashPassword, isPublicPath, newSession, readSession, sessionSecret, signSession, verifyPassword } from "./auth.ts";
+import { hashPassword, isPublicPath, newSession, readSession, safeNext, sessionSecret, signSession, verifyPassword } from "./auth.ts";
 
 const secret = sessionSecret({ VAULT_KEY: "a".repeat(43) + "=" })!;
 
@@ -51,6 +51,19 @@ describe("the login guard's public paths", () => {
     for (const path of ["/", "/signup", "/login", "/api/sms", "/_next/static/x.css"]) expect(isPublicPath(path)).toBe(true);
     for (const path of ["/overview", "/bills", "/findings", "/money", "/agents", "/onboarding", "/api/approve", "/api/live", "/api/bills/upload", "/signup/x"]) {
       expect(isPublicPath(path)).toBe(false);
+    }
+  });
+});
+
+describe("safeNext", () => {
+  it("keeps a path on this site", () => {
+    expect(safeNext("/overview")).toBe("/overview");
+    expect(safeNext("/bills?site=1#top")).toBe("/bills?site=1#top");
+  });
+
+  it("refuses anything a browser could take to another host", () => {
+    for (const bad of ["//evil.example", "/\\evil.example", "/\t/evil.example", "/\n/evil.example", "/\r//evil.example", "/ /evil.example", "/\u0000/x", "https://evil.example", "evil.example", "", null, undefined, 1]) {
+      expect(safeNext(bad), JSON.stringify(bad)).toBeNull();
     }
   });
 });
