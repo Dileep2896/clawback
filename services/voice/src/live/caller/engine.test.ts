@@ -99,9 +99,25 @@ describe("items outside the approved plan", () => {
     expect(rows.at(-1)!.content).toMatch(/^Live call failed: .*outside the approved plan/);
   });
 
-  it("liveRowProblems names an item outside the plan", () => {
-    const outcomeJson = { cancelled_lines: [...SEED_PLAN.cancelLines.map(lineKey), "5105550999"], credits: [...SEED_PLAN.promoAccounts, "BC-9999"], ticket: "BT-48213" };
-    expect(liveRowProblems({ mode: "live", recordingUrl: RECORDING_URL, outcomeJson }, SEED_PLAN)).toEqual(["line 5105550999 is outside the approved plan", "account BC-9999 is outside the approved plan"]);
+  // The reply matches neither fixed yes, so extractOutcome drops both items: the check must not depend on it.
+  test("a combined request and combined yes fails the call and the row check, though the outcome looks clean", async (db) => {
+    const { planned } = await checkPlan(db, SEED_PLAN);
+    const items = fullCallItems(SEED_PLAN, planned);
+    const at = items.findIndex((item) => item.content?.startsWith("To confirm"));
+    items.splice(at, 0, said("agent", `Please cancel phone line ${spacedDigits(ALARM_LINES[0]!)}, and restore promo pricing on B C, 9 9 9 9.`), said("user", "Yes, that is cancelled. Yes, promo pricing is restored."));
+    await expect(run(db, stubRetell([endedCall(items)]))).rejects.toThrow(/outside the approved plan: line .*account BC-9999/);
+    const { call, rows } = await onlyRow(db);
+    const outcomeJson = extractOutcome(rows);
+    expect(outcomeJson).toEqual({ cancelled_lines: SEED_PLAN.cancelLines.map(lineKey), credits: SEED_PLAN.promoAccounts, ticket: "BT-48213" });
+    expect(liveRowProblems({ ...call, outcomeJson }, SEED_PLAN)).toEqual([`line ${lineKey(ALARM_LINES[0]!)} is outside the approved plan`, "account BC-9999 is outside the approved plan"]);
+  });
+
+  test("answers from the fact sheet are not mistaken for an item outside the plan", async (db) => {
+    const { planned } = await checkPlan(db, SEED_PLAN);
+    const items = fullCallItems(SEED_PLAN, planned);
+    const at = items.findIndex((item) => item.content?.startsWith("To confirm"));
+    items.splice(at, 0, said("user", "What was the last bill?"), said("agent", "B T, 7 0 0 1 at 412 Clement St, San Francisco, CA 94118: $1,234.56 for the period ending 2026-10-31, approved on November 7, 2026."));
+    await expect(run(db, stubRetell([endedCall(items)]))).resolves.toHaveProperty("callId");
   });
 });
 
@@ -349,7 +365,7 @@ describe("the deadline", () => {
 
 describe("liveRowProblems", () => {
   const lines = SEED_PLAN.cancelLines.map(lineKey);
-  const good = { mode: "live", recordingUrl: RECORDING_URL, outcomeJson: { cancelled_lines: lines, credits: SEED_PLAN.promoAccounts, ticket: "BT-48213" } };
+  const good = { mode: "live", recordingUrl: RECORDING_URL, transcriptJson: [], outcomeJson: { cancelled_lines: lines, credits: SEED_PLAN.promoAccounts, ticket: "BT-48213" } };
   const outcome = good.outcomeJson;
 
   it("checks seven lines and three accounts", () => {

@@ -253,7 +253,7 @@ The caller now answers the rep's questions from a fact sheet, then returns to it
 | Disclosure is fixed text and first | `begin_message` and `problemWith`, unchanged |
 | Only code-checked data on the sheet | `facts.ts` reads the database after `checkPlan`. Alarm lines and contact details never get in, proven by a test |
 | Never invents a fact, never claims to be a person | **The prompt only.** Code cannot stop words on a live call |
-| Nothing beyond the approved items | The prompt, then the off-plan check: a yes to anything outside the plan fails the live call, and sim takes over with the label |
+| Nothing beyond the approved items | The prompt, then the off-plan check: the caller naming any phone number or BC account outside the plan fails the live call, with or without a yes, and sim takes over with the label. Wording with no number ("the alarm lines") is covered by the prompt only |
 | `extractOutcome` decides what counts | `outcome.ts` is unchanged. Requests stay word for word, so the number and the yes stay on adjacent rows |
 
 ### Human's decisions (2026-11-07, relayed by the orchestrator)

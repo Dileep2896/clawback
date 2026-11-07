@@ -5,7 +5,7 @@ import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { callFacts } from "../../facts.ts";
-import { type CallOutcome, extractOutcome } from "../../outcome.ts";
+import { type CallOutcome, extractOutcome, PHONE_NUMBER, PROMO_ACCOUNT } from "../../outcome.ts";
 import { type CallPlan, checkPlan, lineKey } from "../../sim/engine.ts";
 import { appendRow, closeCall, transcriptRow, type TranscriptRow } from "../../transcript.ts";
 import { LINE_NUMBER, TICKET_NUMBER } from "../line/script.ts";
@@ -90,31 +90,34 @@ function problemWith(call: RetellCall, rows: TranscriptRow[], plan: CallPlan): s
   const first = rows[0];
   const disclosed = first?.role === "agent" && first.kind === "speech" && (first.content === DISCLOSURE_LINE || first.content.startsWith(`${DISCLOSURE_LINE} `));
   if (!disclosed) return "the call did not open with the disclosure";
-  const outcome = extractOutcome(rows);
-  const offPlan = offPlanItems(outcome, plan);
-  if (offPlan.length) return `the rep agreed to items outside the approved plan: ${offPlan.join(", ")}`;
-  if (!outcome.ticket) return `the call ended with no ticket number: ${call.disconnection_reason ?? "no reason given"}`;
+  const offPlan = offPlanItems(rows, plan);
+  if (offPlan.length) return `the caller named items outside the approved plan: ${offPlan.join(", ")}`;
+  if (!extractOutcome(rows).ticket) return `the call ended with no ticket number: ${call.disconnection_reason ?? "no reason given"}`;
   return null;
 }
 
-// Code cannot stop words on a live call, and the rep agrees to anything, so a caller that strays is caught here.
-function offPlanItems(outcome: CallOutcome, plan: CallPlan) {
+// Code cannot stop words on a live call, and the rep agrees to anything, so a caller that strays is caught here. It reads what the caller said, not extractOutcome, which drops a reply that is not the exact yes.
+// shortcut: only numbers and BC accounts can be seen, so "cancel the alarm lines" or a yes to a number only the rep said gets past. The prompt alone covers those until a rep script names numbers.
+function offPlanItems(rows: TranscriptRow[], plan: CallPlan) {
   const lines = new Set(plan.cancelLines.map(lineKey));
+  const said = rows.filter((row) => row.role === "agent" && row.kind === "speech").map((row) => row.content).join("\n");
   return [
-    ...outcome.cancelled_lines.filter((line) => !lines.has(lineKey(line))).map((line) => `line ${line}`),
-    ...outcome.credits.filter((account) => !plan.promoAccounts.includes(account)).map((account) => `account ${account}`),
+    ...new Set([
+      ...[...said.matchAll(PHONE_NUMBER)].map(([line]) => lineKey(line)).filter((line) => !lines.has(line)).map((line) => `line ${line}`),
+      ...[...said.matchAll(PROMO_ACCOUNT)].map(([account]) => account).filter((account) => !plan.promoAccounts.includes(account)).map((account) => `account ${account}`),
+    ]),
   ];
 }
 
 /** What stops a saved row passing the live acceptance test. The engine accepts a call with a disclosure and a ticket, and this asks for everything in the plan as well. */
-export function liveRowProblems(row: { mode: string; recordingUrl: string | null; outcomeJson: unknown } | undefined, plan: CallPlan): string[] {
+export function liveRowProblems(row: { mode: string; recordingUrl: string | null; outcomeJson: unknown; transcriptJson: unknown } | undefined, plan: CallPlan): string[] {
   if (row?.mode !== "live") return ["no live row was saved"];
   const outcome = row.outcomeJson as CallOutcome | null;
   if (!outcome) return ["the live row has no saved outcome"];
   return [
     ...plan.cancelLines.map(lineKey).filter((line) => !outcome.cancelled_lines.includes(line)).map((line) => `line ${line} is not in the outcome`),
     ...plan.promoAccounts.filter((account) => !outcome.credits.includes(account)).map((account) => `promo account ${account} is not in the outcome`),
-    ...offPlanItems(outcome, plan).map((item) => `${item} is outside the approved plan`),
+    ...offPlanItems((row.transcriptJson ?? []) as TranscriptRow[], plan).map((item) => `${item} is outside the approved plan`),
     ...(outcome.ticket === TICKET_NUMBER ? [] : [`the ticket is ${outcome.ticket}, not ${TICKET_NUMBER}`]),
     ...(row.recordingUrl ? [] : ["the live row has no recording URL"]),
   ];
