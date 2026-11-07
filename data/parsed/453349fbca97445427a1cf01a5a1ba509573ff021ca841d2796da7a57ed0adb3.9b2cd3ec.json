@@ -1,0 +1,34 @@
+{
+  "source": "sf-4-telecom-2026-06",
+  "pdfSha256": "453349fbca97445427a1cf01a5a1ba509573ff021ca841d2796da7a57ed0adb3",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BT-7004",
+    "serviceAddress": "230 Noriega St, San Francisco, CA 94122",
+    "providerName": "BayTel",
+    "serviceType": "telecom",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BT-BIZ-VOICE",
+    "periodStart": "2026-06-01",
+    "periodEnd": "2026-06-30",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Voice line (415) 555-0108",
+        "quantity": 1,
+        "unit": "line",
+        "rate": 135,
+        "amountCents": 13500,
+        "lineType": "voice"
+      }
+    ],
+    "totalCents": 13500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.011471199999999999
+}

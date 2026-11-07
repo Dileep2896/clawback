@@ -1,0 +1,79 @@
+{
+  "source": "oakland-2-electric-2026-09",
+  "pdfSha256": "c39344b3907d273f3fb1dc421e084a431e28d999e9aaf4667a26197abab6f0d8",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7006",
+    "serviceAddress": "3312 Grand Ave, Oakland, CA 94610",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009006",
+    "multiplier": 1,
+    "rateSchedule": "B-10",
+    "planCode": null,
+    "periodStart": "2026-09-01",
+    "periodEnd": "2026-09-30",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Summer",
+        "kwh": 4675.657
+      },
+      {
+        "period": "Part-Peak Summer",
+        "kwh": 1060.774
+      },
+      {
+        "period": "Peak Summer",
+        "kwh": 1444.68
+      }
+    ],
+    "maxKw": 39.224,
+    "lineItems": [
+      {
+        "description": "Off-Peak Summer energy",
+        "quantity": 4675.657,
+        "unit": "kWh",
+        "rate": 0.24522,
+        "amountCents": 114656,
+        "lineType": "energy"
+      },
+      {
+        "description": "Part-Peak Summer energy",
+        "quantity": 1060.774,
+        "unit": "kWh",
+        "rate": 0.27778,
+        "amountCents": 29466,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Summer energy",
+        "quantity": 1444.68,
+        "unit": "kWh",
+        "rate": 0.33947,
+        "amountCents": 49043,
+        "lineType": "energy"
+      },
+      {
+        "description": "Maximum Demand Summer",
+        "quantity": 39.224,
+        "unit": "kW",
+        "rate": 20.5,
+        "amountCents": 80409,
+        "lineType": "demand"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 34106,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 307680
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0155969
+}

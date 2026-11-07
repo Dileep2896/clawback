@@ -1,0 +1,59 @@
+{
+  "source": "sf-4-electric-2026-06",
+  "pdfSha256": "77c19787c31e39ab8345513cf3df66b1b34d71e41b02cc3e65fadf097df9e605",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7004",
+    "serviceAddress": "230 Noriega St, San Francisco, CA 94122",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009004",
+    "multiplier": 1,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-06-01",
+    "periodEnd": "2026-06-30",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Summer",
+        "kwh": 3037.931
+      },
+      {
+        "period": "Peak Summer",
+        "kwh": 835.514
+      }
+    ],
+    "maxKw": 16.644,
+    "lineItems": [
+      {
+        "description": "Off-Peak Summer energy",
+        "quantity": 3037.931,
+        "unit": "kWh",
+        "rate": 0.38491,
+        "amountCents": 116933,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Summer energy",
+        "quantity": 835.514,
+        "unit": "kWh",
+        "rate": 0.64253,
+        "amountCents": 53684,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2464,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 173081
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0137743
+}

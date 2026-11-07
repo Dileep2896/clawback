@@ -1,0 +1,59 @@
+{
+  "source": "san-jose-3-electric-2026-02",
+  "pdfSha256": "1e4c64fdbc307db913f1aaccdbe05ed47202947be7f98c9fc7153a6eb4cbd99b",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7010",
+    "serviceAddress": "2005 Story Rd, San Jose, CA 95122",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009010",
+    "multiplier": 1,
+    "rateSchedule": "B-1",
+    "planCode": null,
+    "periodStart": "2026-02-01",
+    "periodEnd": "2026-02-28",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Winter",
+        "kwh": 1368.229
+      },
+      {
+        "period": "Peak Winter",
+        "kwh": 416.313
+      }
+    ],
+    "maxKw": 3.916,
+    "lineItems": [
+      {
+        "description": "Off-Peak Winter energy",
+        "quantity": 1368.229,
+        "unit": "kWh",
+        "rate": 0.37933,
+        "amountCents": 51901,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Winter energy",
+        "quantity": 416.313,
+        "unit": "kWh",
+        "rate": 0.39545,
+        "amountCents": 16463,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2300,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 70664
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0137374
+}

@@ -1,0 +1,59 @@
+{
+  "source": "san-jose-2-electric-2026-08",
+  "pdfSha256": "b31f441f196d27ad5d5e547253ada09f3c0b0b5bb7da7215937ecbbe33abf5ff",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7009",
+    "serviceAddress": "1175 Lincoln Ave, San Jose, CA 95125",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009009",
+    "multiplier": 1,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-08-01",
+    "periodEnd": "2026-08-31",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Summer",
+        "kwh": 2978.898
+      },
+      {
+        "period": "Peak Summer",
+        "kwh": 819.943
+      }
+    ],
+    "maxKw": 16.228,
+    "lineItems": [
+      {
+        "description": "Off-Peak Summer energy",
+        "quantity": 2978.898,
+        "unit": "kWh",
+        "rate": 0.38491,
+        "amountCents": 114661,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Summer energy",
+        "quantity": 819.943,
+        "unit": "kWh",
+        "rate": 0.64253,
+        "amountCents": 52684,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2546,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 169891
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.013811
+}

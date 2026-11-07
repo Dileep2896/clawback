@@ -1,0 +1,67 @@
+{
+  "source": "oakland-2-electric-2025-11",
+  "pdfSha256": "128898ffd28c9921403658f72537f7bef5bcc1e53d3faafaffb16e7305957977",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7006",
+    "serviceAddress": "3312 Grand Ave, Oakland, CA 94610",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009006",
+    "multiplier": 1,
+    "rateSchedule": "B-10",
+    "planCode": null,
+    "periodStart": "2025-11-01",
+    "periodEnd": "2025-11-30",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Winter",
+        "kwh": 5518.676
+      },
+      {
+        "period": "Peak Winter",
+        "kwh": 1324.725
+      }
+    ],
+    "maxKw": 38.004,
+    "lineItems": [
+      {
+        "description": "Off-Peak Winter energy",
+        "quantity": 5518.676,
+        "unit": "kWh",
+        "rate": 0.22773,
+        "amountCents": 125677,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Winter energy",
+        "quantity": 1324.725,
+        "unit": "kWh",
+        "rate": 0.26321,
+        "amountCents": 34868,
+        "lineType": "energy"
+      },
+      {
+        "description": "Maximum Demand Winter",
+        "quantity": 38.004,
+        "unit": "kW",
+        "rate": 20.5,
+        "amountCents": 77908,
+        "lineType": "demand"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 34106,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 272559
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0145155
+}

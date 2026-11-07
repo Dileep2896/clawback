@@ -1,0 +1,79 @@
+{
+  "source": "oakland-1-electric-2026-09",
+  "pdfSha256": "a51f397a5fcff0cd03876c8b4db156b982f32cccbd42f3c3d960dba040659a85",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7005",
+    "serviceAddress": "1520 Broadway, Oakland, CA 94612",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009005",
+    "multiplier": 1,
+    "rateSchedule": "B-10",
+    "planCode": null,
+    "periodStart": "2026-09-01",
+    "periodEnd": "2026-09-30",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Summer",
+        "kwh": 4663.959
+      },
+      {
+        "period": "Part-Peak Summer",
+        "kwh": 1058.542
+      },
+      {
+        "period": "Peak Summer",
+        "kwh": 1443.478
+      }
+    ],
+    "maxKw": 38.888,
+    "lineItems": [
+      {
+        "description": "Off-Peak Summer energy",
+        "quantity": 4663.959,
+        "unit": "kWh",
+        "rate": 0.24522,
+        "amountCents": 114370,
+        "lineType": "energy"
+      },
+      {
+        "description": "Part-Peak Summer energy",
+        "quantity": 1058.542,
+        "unit": "kWh",
+        "rate": 0.27778,
+        "amountCents": 29404,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Summer energy",
+        "quantity": 1443.478,
+        "unit": "kWh",
+        "rate": 0.33947,
+        "amountCents": 49002,
+        "lineType": "energy"
+      },
+      {
+        "description": "Maximum Demand Summer",
+        "quantity": 38.888,
+        "unit": "kW",
+        "rate": 20.5,
+        "amountCents": 79720,
+        "lineType": "demand"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 34106,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 306602
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0155687
+}

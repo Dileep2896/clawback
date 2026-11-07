@@ -1,0 +1,71 @@
+{
+  "source": "san-jose-3-electric-2026-08",
+  "pdfSha256": "1b505f2de713939f119768569463f98c765583e541163bc32c1dfacbdb15d1e8",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7010",
+    "serviceAddress": "2005 Story Rd, San Jose, CA 95122",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009010",
+    "multiplier": 1,
+    "rateSchedule": "B-1",
+    "planCode": null,
+    "periodStart": "2026-08-01",
+    "periodEnd": "2026-08-31",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Summer",
+        "kwh": 1237.881
+      },
+      {
+        "period": "Part-Peak Summer",
+        "kwh": 376.946
+      },
+      {
+        "period": "Peak Summer",
+        "kwh": 517.477
+      }
+    ],
+    "maxKw": 4.424,
+    "lineItems": [
+      {
+        "description": "Off-Peak Summer energy",
+        "quantity": 1237.881,
+        "unit": "kWh",
+        "rate": 0.40083,
+        "amountCents": 49618,
+        "lineType": "energy"
+      },
+      {
+        "description": "Part-Peak Summer energy",
+        "quantity": 376.946,
+        "unit": "kWh",
+        "rate": 0.42164,
+        "amountCents": 15894,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Summer energy",
+        "quantity": 517.477,
+        "unit": "kWh",
+        "rate": 0.47087,
+        "amountCents": 24366,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2546,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 92424
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.014780900000000001
+}

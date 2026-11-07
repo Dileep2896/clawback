@@ -1,6 +1,6 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { ParsedBill } from "@bill-fighter/shared/parsed-bill";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createLlm, type Query } from "./llm.ts";
 
@@ -17,6 +17,32 @@ const llmWith = (messages: unknown[], thenThrow = "") => {
 const success = (structured_output: unknown) => ({ type: "result", subtype: "success", is_error: false, result: "", structured_output });
 
 describe("Llm.structured", () => {
+  it("leaves out the $schema URL the CLI rejects, without touching the caller's schema", async () => {
+    const schema = z.toJSONSchema(ParsedBill) as Record<string, unknown>;
+    expect(schema.$schema).toBeDefined();
+    let sent: unknown;
+    const query: Query = async function* ({ options }) {
+      sent = options.outputFormat;
+      yield* [INIT, success({})] as unknown as SDKMessage[];
+    };
+    await expect(createLlm(query, async () => {}).structured({ prompt: "x" }, schema)).rejects.toThrow(/does not match/);
+    expect(sent).toMatchObject({ type: "json_schema", schema: { properties: schema.properties } });
+    expect((sent as { schema: object }).schema).not.toHaveProperty("$schema");
+    expect(schema.$schema).toBeDefined();
+  });
+
+  it("reports the call's cost through onCost", async () => {
+    const onCost = vi.fn();
+    await llmWith([INIT, { ...success({ total: 5 }), total_cost_usd: 0.02 }]).structured({ prompt: "x", onCost }, SCHEMA);
+    expect(onCost.mock.calls).toEqual([[0.02]]);
+  });
+
+  it("still reports the cost of a call that then fails", async () => {
+    const onCost = vi.fn();
+    await expect(llmWith([INIT, { ...success({ wrong: 1 }), total_cost_usd: 0.02 }]).structured({ prompt: "x", onCost }, SCHEMA)).rejects.toThrow(/does not match/);
+    expect(onCost.mock.calls).toEqual([[0.02]]);
+  });
+
   it("returns JSON that matches the schema", async () => {
     await expect(llmWith([INIT, success({ total: 5 })]).structured({ prompt: "x" }, SCHEMA)).resolves.toEqual({ total: 5 });
   });

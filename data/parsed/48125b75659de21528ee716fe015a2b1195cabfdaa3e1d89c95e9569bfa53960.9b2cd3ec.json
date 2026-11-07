@@ -1,0 +1,71 @@
+{
+  "source": "san-jose-1-electric-2026-03",
+  "pdfSha256": "48125b75659de21528ee716fe015a2b1195cabfdaa3e1d89c95e9569bfa53960",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7008",
+    "serviceAddress": "98 E Santa Clara St, San Jose, CA 95113",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009008",
+    "multiplier": 1,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-03-01",
+    "periodEnd": "2026-03-31",
+    "kwhByTouPeriod": [
+      {
+        "period": "Super Off-Peak Winter",
+        "kwh": 1537.195
+      },
+      {
+        "period": "Off-Peak Winter",
+        "kwh": 1909.651
+      },
+      {
+        "period": "Peak Winter",
+        "kwh": 915.202
+      }
+    ],
+    "maxKw": 18.12,
+    "lineItems": [
+      {
+        "description": "Super Off-Peak Winter energy",
+        "quantity": 1537.195,
+        "unit": "kWh",
+        "rate": 0.31617,
+        "amountCents": 48601,
+        "lineType": "energy"
+      },
+      {
+        "description": "Off-Peak Winter energy",
+        "quantity": 1909.651,
+        "unit": "kWh",
+        "rate": 0.35225,
+        "amountCents": 67267,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Winter energy",
+        "quantity": 915.202,
+        "unit": "kWh",
+        "rate": 0.39584,
+        "amountCents": 36227,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2546,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 154641
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.014925500000000001
+}

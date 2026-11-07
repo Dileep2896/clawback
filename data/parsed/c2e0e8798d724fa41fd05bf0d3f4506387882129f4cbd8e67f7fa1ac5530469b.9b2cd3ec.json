@@ -1,0 +1,59 @@
+{
+  "source": "sf-2-electric-2026-08",
+  "pdfSha256": "c2e0e8798d724fa41fd05bf0d3f4506387882129f4cbd8e67f7fa1ac5530469b",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7002",
+    "serviceAddress": "1840 Irving St, San Francisco, CA 94122",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009002",
+    "multiplier": 1,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-08-01",
+    "periodEnd": "2026-08-31",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Summer",
+        "kwh": 3445.221
+      },
+      {
+        "period": "Peak Summer",
+        "kwh": 955.813
+      }
+    ],
+    "maxKw": 18.292,
+    "lineItems": [
+      {
+        "description": "Off-Peak Summer energy",
+        "quantity": 3445.221,
+        "unit": "kWh",
+        "rate": 0.38491,
+        "amountCents": 132610,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Summer energy",
+        "quantity": 955.813,
+        "unit": "kWh",
+        "rate": 0.64253,
+        "amountCents": 61414,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2546,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 196570
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.013772799999999998
+}

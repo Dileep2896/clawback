@@ -1,0 +1,59 @@
+{
+  "source": "sf-4-electric-2025-11",
+  "pdfSha256": "a68eb18db74f415f9a443399d49454283035557f60eb3b72b2cb43b7860cead2",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7004",
+    "serviceAddress": "230 Noriega St, San Francisco, CA 94122",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009004",
+    "multiplier": 1,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2025-11-01",
+    "periodEnd": "2025-11-30",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Winter",
+        "kwh": 2899.253
+      },
+      {
+        "period": "Peak Winter",
+        "kwh": 755.902
+      }
+    ],
+    "maxKw": 16.056,
+    "lineItems": [
+      {
+        "description": "Off-Peak Winter energy",
+        "quantity": 2899.253,
+        "unit": "kWh",
+        "rate": 0.35225,
+        "amountCents": 102126,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Winter energy",
+        "quantity": 755.902,
+        "unit": "kWh",
+        "rate": 0.39584,
+        "amountCents": 29922,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2464,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 134512
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0137743
+}

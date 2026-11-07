@@ -1,0 +1,59 @@
+{
+  "source": "sf-1-electric-2025-12",
+  "pdfSha256": "2f6e872ef9bff41d0cf7d5b8dd5737659e106f9687329d3723712d7103cf4ccd",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7001",
+    "serviceAddress": "412 Clement St, San Francisco, CA 94118",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009001",
+    "multiplier": 1,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2025-12-01",
+    "periodEnd": "2025-12-31",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Winter",
+        "kwh": 3566.423
+      },
+      {
+        "period": "Peak Winter",
+        "kwh": 930.18
+      }
+    ],
+    "maxKw": 19.136,
+    "lineItems": [
+      {
+        "description": "Off-Peak Winter energy",
+        "quantity": 3566.423,
+        "unit": "kWh",
+        "rate": 0.35225,
+        "amountCents": 125627,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Winter energy",
+        "quantity": 930.18,
+        "unit": "kWh",
+        "rate": 0.39584,
+        "amountCents": 36820,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2546,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 164993
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0137587
+}

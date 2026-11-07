@@ -1,4 +1,5 @@
 import { type Options, query as sdkQuery, type SDKMessage, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { LlmOutputError } from "@bill-fighter/shared/llm-output-error";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import type { JsonSchema, Llm, LlmInput } from "../types.ts";
@@ -38,14 +39,28 @@ function compile(jsonSchema: JsonSchema) {
   return validate;
 }
 
+const gaveUp = (message: SDKMessage) => message.type === "result" && message.subtype === "error_max_structured_output_retries";
+
+// The SDK's own schema check gave up. Only if nothing else failed: a rate limit or login error in the same run must still throw.
+const onlyGaveUp = (messages: SDKMessage[]) =>
+  messages.some(gaveUp) &&
+  runOutcome(
+    messages.map((message) => (gaveUp(message) ? ({ ...message, subtype: "success", is_error: false, terminal_reason: "completed" } as unknown as SDKMessage) : message)),
+    ALLOWED_INIT,
+  ).finished;
+
 export function createLlm(query: Query = sdkQuery as Query, login: () => Promise<void> = checkLogin): Llm {
   return {
     async structured<T>(input: LlmInput, jsonSchema: JsonSchema): Promise<T> {
       const validate = compile(jsonSchema);
+      // The CLI rejects the 2020-12 $schema URL that z.toJSONSchema emits. Ajv above still validates to that draft.
+      const sentSchema = { ...jsonSchema };
+      delete sentSchema.$schema;
       const abortController = new AbortController();
       const messages: SDKMessage[] = [];
       const thrown: unknown[] = [];
       let output: unknown;
+      let costUsd: number | undefined;
       try {
         await login();
         const stream = query({
@@ -54,13 +69,14 @@ export function createLlm(query: Query = sdkQuery as Query, login: () => Promise
             ...loginOptions(),
             abortController,
             tools: [],
-            outputFormat: { type: "json_schema", schema: jsonSchema },
+            outputFormat: { type: "json_schema", schema: sentSchema },
             ...(input.system ? { systemPrompt: input.system } : {}),
           },
         });
         for await (const message of stream) {
           messages.push(message);
           if (message.type === "system" && message.subtype === "init") assertInit(message, ALLOWED_INIT);
+          if (message.type === "result") costUsd = message.total_cost_usd;
           if (message.type === "result" && message.subtype === "success") output = message.structured_output;
         }
       } catch (error) {
@@ -68,10 +84,14 @@ export function createLlm(query: Query = sdkQuery as Query, login: () => Promise
       } finally {
         abortController.abort();
       }
+      if (costUsd !== undefined) input.onCost?.(costUsd);
       const { finished, reason } = runOutcome(messages, ALLOWED_INIT, thrown);
+      // An SDK exception is operational even after a give-up result, whose text would otherwise take over `reason`.
+      if (thrown.length > 0 && onlyGaveUp(messages)) throw thrown[0];
+      if (!finished && onlyGaveUp(messages)) throw new LlmOutputError(`Llm.structured failed: ${reason}`);
       if (!finished) throw new Error(`Llm.structured failed: ${reason}`);
-      if (output === undefined) throw new Error("Llm.structured failed: the result had no structured output");
-      if (!validate(output)) throw new Error(`Llm.structured failed: output does not match the schema: ${JSON.stringify(validate.errors)}`);
+      if (output === undefined) throw new LlmOutputError("Llm.structured failed: the result had no structured output");
+      if (!validate(output)) throw new LlmOutputError(`Llm.structured failed: output does not match the schema: ${JSON.stringify(validate.errors)}`);
       return output as T;
     },
   };

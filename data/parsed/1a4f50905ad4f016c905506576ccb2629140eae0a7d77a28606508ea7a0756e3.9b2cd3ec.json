@@ -1,0 +1,59 @@
+{
+  "source": "sf-3-electric-2026-01",
+  "pdfSha256": "1a4f50905ad4f016c905506576ccb2629140eae0a7d77a28606508ea7a0756e3",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7003",
+    "serviceAddress": "655 Valencia St, San Francisco, CA 94110",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009003",
+    "multiplier": 1,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-01-01",
+    "periodEnd": "2026-01-31",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Winter",
+        "kwh": 3891.742
+      },
+      {
+        "period": "Peak Winter",
+        "kwh": 1015.675
+      }
+    ],
+    "maxKw": 20.896,
+    "lineItems": [
+      {
+        "description": "Off-Peak Winter energy",
+        "quantity": 3891.742,
+        "unit": "kWh",
+        "rate": 0.35225,
+        "amountCents": 137087,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Winter energy",
+        "quantity": 1015.675,
+        "unit": "kWh",
+        "rate": 0.39584,
+        "amountCents": 40204,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2546,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 179837
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.013810699999999999
+}
