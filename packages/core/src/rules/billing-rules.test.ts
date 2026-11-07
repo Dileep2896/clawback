@@ -160,6 +160,34 @@ describe("meterMultiplierJump", () => {
     expect(meterMultiplierJump(input(swapped(3, 1.5)))).toEqual([]);
   });
 
+  describe("treats the 1% tolerance as inclusive", () => {
+    const flat = (kwh: number) => [{ period: "flat", kwh }];
+    // True usage is 1,000 kWh a month, so these kWh values are the ratios times 1,000.
+    const swap = (baselineKwh: number, jumpKwh: number) => [
+      bill(0),
+      bill(1, { kwhByTouPeriod: flat(baselineKwh) }),
+      { ...billedAt(2, 2, "NEW"), kwhByTouPeriod: flat(jumpKwh) },
+    ];
+
+    it.each([
+      ["baseline 0.99", 990, 2000],
+      ["baseline 1.01", 1010, 2000],
+      ["jump 1.98", 1000, 1980],
+      ["jump 2.02", 1000, 2020],
+    ])("finds a jump at exactly %s", (_, baselineKwh, jumpKwh) => {
+      expect(meterMultiplierJump(input(swap(baselineKwh, jumpKwh)))).toHaveLength(1);
+    });
+
+    it.each([
+      ["baseline 0.9899", 989.9, 2000],
+      ["baseline 1.0101", 1010.1, 2000],
+      ["jump 1.9799", 1000, 1979.9],
+      ["jump 2.0201", 1000, 2020.1],
+    ])("finds nothing just outside, at %s", (_, baselineKwh, jumpKwh) => {
+      expect(meterMultiplierJump(input(swap(baselineKwh, jumpKwh)))).toEqual([]);
+    });
+  });
+
   it("needs a clean baseline: already doubled before the meter change is no finding", () => {
     expect(meterMultiplierJump(input([billedAt(0, 2, "OLD"), billedAt(1, 2, "NEW")]))).toEqual([]);
   });

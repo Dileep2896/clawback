@@ -7,9 +7,11 @@ import { billsOf, dollars, followsOn, latestPeriodEnd, type AuditInput } from ".
 const CLAIM_MONTHS = 36;
 const SAVINGS_MONTHS = 12;
 const NEAR = 0.01;
+// Absorbs float error only: 0.99 - 1 comes out just over 0.01, and the 1% limit is inclusive.
+const FLOAT_ERROR = 1e-9;
 
 const threeDecimals = (value: number) => Number(value.toFixed(3));
-const isNear = (ratio: number, whole: number) => Math.abs(ratio - whole) <= whole * NEAR;
+const isNear = (ratio: number, whole: number) => Math.abs(ratio - whole) <= whole * NEAR + FLOAT_ERROR;
 
 function monthsBefore(date: string, months: number) {
   const from = new Date(`${date}T00:00:00Z`);
