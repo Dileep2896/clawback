@@ -15,7 +15,9 @@ const shots = args.find((arg) => !arg.startsWith("--"));
 const start = args.includes("--start");
 const shot = async (page: Page, name: string) => shots && (await page.screenshot({ path: join(shots, `${name}.png`), fullPage: true }));
 
-const LINDA = { name: CUSTOMER.contactName, company: CUSTOMER.name, email: CUSTOMER.contactEmail, password: "noodles-on-stage" };
+// A bill for a fictional second business (scripts/make-sample-bill.ts), parsed once and committed.
+const SAMPLE_BILL = "data/sample-bills/mission-dumplings-baycurrent-2026-09.pdf";
+const LINDA ={ name: CUSTOMER.contactName, company: CUSTOMER.name, email: CUSTOMER.contactEmail, password: "noodles-on-stage" };
 
 async function signUp(page: Page, who: typeof LINDA) {
   await page.goto(`${BASE}/signup`);
@@ -66,6 +68,9 @@ async function checkLinda(page: Page) {
   const seconds = (Date.now() - started) / 1000;
   assert.ok(seconds < 30, `sign-up and connect took ${seconds}s`);
   assert.equal(await page.getByTestId("start-audit").isEnabled(), true);
+  // Above the fold at 1920x1080: the presenter never scrolls on stage.
+  const box = await page.getByTestId("start-audit").boundingBox();
+  assert.ok(box && box.y + box.height <= VIEWPORT.height && (await page.evaluate<number>("window.scrollY")) === 0, `Start my audit is below the fold: ${JSON.stringify(box)}`);
   await shot(page, "onboarding-connected-1920");
   console.info(`ok linda: signed up, linked to the seeded customer, BayCurrent connected in ${seconds.toFixed(1)}s of script time`);
 
@@ -96,25 +101,44 @@ async function checkStart(page: Page) {
 }
 
 /**
- * A new customer uploads a seed PDF. It parses from the cache, but its account is the demo customer's, so it is held for review
- * rather than filed: two customers on one account makes Intake stop the demo run.
+ * A new customer sees no one else's audit. A demo PDF parses from the cache but is held for review: two customers on one account
+ * makes Intake stop the demo run. The committed sample business's bill is filed and shown on Bills, and the audit is queued.
  */
 async function checkNewCustomer(page: Page) {
   const email = `sam+${Date.now()}@missiondumplings.example`;
   await signUp(page, { name: "Sam Lee", company: "Mission Dumplings", email, password: "dumplings-2026" });
   assert.equal(await page.getByTestId("demo-login").count(), 0, "a new customer was offered the demo login");
 
-  const bill = readdirSync("data/bills").filter((f) => f.endsWith(".pdf")).sort()[0]!;
+  for (const path of ["/overview", "/findings", "/money", "/agents"]) {
+    await page.goto(`${BASE}${path}`);
+    await page.getByTestId("no-audit").getByText("No audit yet").waitFor({ timeout: 15_000 });
+    if (path === "/overview") await shot(page, "no-audit-overview-1920");
+  }
+  const live = (await (await page.request.get(`${BASE}/api/live`)).json()) as { run: unknown; ledger: unknown[] };
+  assert.equal(live.run, null, "a new customer's live feed carries another customer's run");
+  assert.deepEqual(live.ledger, []);
+  await page.goto(`${BASE}/onboarding`);
+
+  const seedBill = readdirSync("data/bills").filter((f) => f.endsWith(".pdf")).sort()[0]!;
   await page.getByTestId("upload-tab").click();
-  await page.getByTestId("upload-input").setInputFiles(join("data/bills", bill));
+  await page.getByTestId("upload-input").setInputFiles(join("data/bills", seedBill));
   await page.getByTestId("upload-list").getByText("Reading your bill…").waitFor();
   await page.locator('[data-status="needs_review"]').getByText("already linked to another Clawback customer").waitFor({ timeout: 30_000 });
   assert.equal(await page.getByTestId("start-audit").isEnabled(), false, "Start was enabled with nothing connected or filed");
+
+  await page.getByTestId("upload-input").setInputFiles(SAMPLE_BILL);
+  await page.locator('[data-status="saved"]').waitFor({ timeout: 30_000 });
   await shot(page, "onboarding-upload-1920");
+  await page.getByTestId("start-audit").click();
+  await page.getByTestId("audit-queued").waitFor();
+  await shot(page, "onboarding-queued-1920");
 
   await page.goto(`${BASE}/bills`);
-  await page.getByText("No bills yet").waitFor({ timeout: 15_000 });
-  console.info(`ok new customer: ${bill} parsed from the cache and held for review, not filed under a second customer`);
+  await page.getByTestId("bills-site").first().waitFor({ timeout: 15_000 });
+  assert.equal(await page.locator("[data-bill]").count(), 1, "the new customer should see exactly their one uploaded bill");
+  await page.getByText("Account BE-8801").waitFor();
+  await shot(page, "bills-new-customer-1920");
+  console.info(`ok new customer: no audit shown on four pages; ${seedBill} held for review; the sample bill filed, on Bills, audit queued`);
 }
 
 const browser = await chromium.launch();
@@ -129,7 +153,15 @@ try {
   await narrow.goto(`${BASE}/signup`);
   assert.ok((await narrow.evaluate<number>("document.documentElement.scrollWidth")) <= 390, "sign-up scrolls sideways at 390 px");
   await shot(narrow, "signup-390");
-  console.info("ok narrow: sign-up fits 390 px");
+  await signUp(narrow, { name: "Ana Ruiz", company: "Taqueria Ruiz", email: `ana+${Date.now()}@taqueriaruiz.example`, password: "tacos-2026" });
+  assert.ok((await narrow.evaluate<number>("document.documentElement.scrollWidth")) <= 390, "onboarding scrolls sideways at 390 px");
+  // By position on screen, not DOM order: CSS order puts step 1 first.
+  const headings = await narrow.getByRole("heading", { level: 2 }).all();
+  const placed = await Promise.all(headings.map(async (h) => ({ text: await h.innerText(), y: (await h.boundingBox())?.y ?? 0 })));
+  const steps = placed.filter((h) => /^\d\./.test(h.text)).sort((a, b) => a.y - b.y).map((h) => h.text);
+  assert.deepEqual(steps, ["1. Your business", "2. Connect your bills", "3. Start your audit"], `narrow step order: ${steps.join(", ")}`);
+  await shot(narrow, "onboarding-390");
+  console.info("ok narrow: sign-up and onboarding fit 390 px, steps in order");
 } finally {
   await browser.close();
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { GAS_SUPPLIER, type Provider } from "@bill-fighter/shared/fixtures";
-import { useActionState, useState } from "react";
+import { type ReactNode, useActionState, useState } from "react";
 import { Field, FormError } from "../../../components/ui/field.tsx";
 import { Card } from "../../../components/ui/kit.tsx";
 import { type ConnectState, connectPortalAction, type StartState, startAuditAction } from "./actions.ts";
@@ -139,7 +139,8 @@ function UploadBills({ onSaved }: { onSaved: () => void }) {
   );
 }
 
-export function ConnectBills({ demo, queued: initiallyQueued }: { demo: boolean; queued: boolean }) {
+/** Two columns on a wide screen, so "Start my audit" sits above the fold at 1920x1080 next to the connect step. One column when narrow. */
+export function ConnectBills({ demo, queued: initiallyQueued, business }: { demo: boolean; queued: boolean; business: ReactNode }) {
   const [tab, setTab] = useState<"portal" | "upload">("portal");
   const [connected, setConnected] = useState<Provider[]>([]);
   const [billsAdded, setBillsAdded] = useState(0);
@@ -150,8 +151,8 @@ export function ConnectBills({ demo, queued: initiallyQueued }: { demo: boolean;
     `min-h-11 cursor-pointer border-b-[3px] px-3 font-semibold ${tab === id ? "border-action text-ink" : "border-transparent text-faded hover:text-ink"}`;
 
   return (
-    <>
-      <Card title="2. Connect your bills">
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
+      <Card title="2. Connect your bills" className="lg:order-1">
         <div role="tablist" aria-label="How to add bills" className="mb-6 flex gap-2 border-b border-line">
           <button type="button" role="tab" aria-selected={tab === "portal"} className={tabClass("portal")} onClick={() => setTab("portal")}>
             Sign in to your provider
@@ -178,26 +179,29 @@ export function ConnectBills({ demo, queued: initiallyQueued }: { demo: boolean;
         )}
       </Card>
 
-      <Card title="3. Start your audit">
-        {start.queued ? (
-          <div className="grid gap-2" data-testid="audit-queued" role="status">
-            <p className="text-[1.375rem] font-semibold">Audit queued</p>
-            <p className="max-w-[60ch] text-faded">
-              Your bills are in and your audit is waiting its turn. Your bills page shows what we have read so far. Nothing changes on your accounts without your
-              approval.
-            </p>
-          </div>
-        ) : (
-          <form action={startAction} className="grid justify-items-start gap-3">
-            <p className="max-w-[60ch] text-faded">The agents fetch a year of bills, check every line, and come back with one approval for you. You can watch them work.</p>
-            <FormError>{start.error}</FormError>
-            <button type="submit" disabled={!ready || starting} className={primary} data-testid="start-audit">
-              {starting ? "Starting the agents…" : "Start my audit"}
-            </button>
-            {!ready && <p className="text-base text-faded">Connect a provider or add a bill first.</p>}
-          </form>
-        )}
-      </Card>
-    </>
+      {/* Narrow: contents, so step 1 sorts first and the order reads 1, 2, 3. Wide: the right-hand column. */}
+      <div className="contents lg:order-2 lg:grid lg:gap-6">
+        <div className="order-first lg:order-none">{business}</div>
+        <Card title="3. Start your audit">
+          {start.queued ? (
+            <div className="grid gap-2" data-testid="audit-queued" role="status">
+              <p className="text-[1.375rem] font-semibold">Audit queued</p>
+              <p className="text-faded">
+                Your bills are in and your audit is waiting its turn. Your bills page shows what we have read so far. Nothing changes on your accounts without your approval.
+              </p>
+            </div>
+          ) : (
+            <form action={startAction} className="grid justify-items-start gap-3">
+              <p className="text-faded">The agents fetch a year of bills, check every line, and come back with one approval for you. You can watch them work.</p>
+              <FormError>{start.error}</FormError>
+              <button type="submit" disabled={!ready || starting} className={primary} data-testid="start-audit">
+                {starting ? "Starting the agents…" : "Start my audit"}
+              </button>
+              {!ready && <p className="text-base text-faded">Connect a provider or add a bill first.</p>}
+            </form>
+          )}
+        </Card>
+      </div>
+    </div>
   );
 }
