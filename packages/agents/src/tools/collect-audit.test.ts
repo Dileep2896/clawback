@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { runAudit } from "@bill-fighter/core/rules/index";
 import type { Db } from "@bill-fighter/db/client";
-import { accounts, billLines, bills, customers, findings, locations, usageIntervals } from "@bill-fighter/db/schema";
+import { accounts, actions, billLines, bills, customers, findings, locations, usageIntervals } from "@bill-fighter/db/schema";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { createAudit } from "@bill-fighter/platform/local/audit";
 import type { Browser, BrowserSession, ToolDef } from "@bill-fighter/platform/types";
@@ -370,6 +370,51 @@ describe("auditor", () => {
       expect(await auditor(db, "parse_bill").handler(INPUT, CTX)).toMatchObject({ needsReview: ["b1"] });
       await expect(auditor(db, "run_audit").handler(INPUT, CTX)).rejects.toThrow("b1: no cached parse");
       expect(await db.select().from(findings)).toEqual([]);
+    }));
+
+  it.each([
+    ["has no cached parse", fileBill],
+    ["was never filed", () => {}],
+    ["cannot be read", () => mkdirSync(join(runPaths(RUN, root).storedBills, "b1.pdf"), { recursive: true })],
+  ])("clears an earlier parse when a bill %s, so the audit refuses it", (_name, arrange) =>
+    withCustomer(async (db) => {
+      await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));
+      arrange();
+      await expect(auditor(db, "parse_bill").handler(INPUT, CTX)).rejects.toThrow("parse_bill:");
+      const [row] = await db.select().from(bills).where(eq(bills.id, "b1"));
+      expect(row?.parsedJson).toBeNull();
+      await expect(auditor(db, "run_audit").handler(INPUT, CTX)).rejects.toThrow("b1: no cached parse");
+      expect(await db.select().from(findings)).toEqual([]);
+    }),
+  );
+
+  it("moves only this customer's proposed findings out of proposed once the audit stops reporting them", () =>
+    withCustomer(async (db) => {
+      await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));
+      await auditor(db, "run_audit").handler(INPUT, CTX);
+      const [live] = await db.select().from(findings).where(eq(findings.type, "arithmeticCheck"));
+      await db.insert(actions).values({ id: "act1", findingId: live!.id, kind: "letter", status: "pending" });
+      await db.insert(customers).values({ id: "c2", name: "Other", contactName: "O", contactEmail: "o@x.local", contactPhone: "+15550001112" });
+      await db.insert(findings).values([
+        { ...live!, id: "stale" },
+        { ...live!, id: "kept-approved", status: "approved" },
+        { ...live!, id: "kept-filed", status: "filed" },
+        { ...live!, id: "kept-won", status: "won" },
+        { ...live!, id: "kept-rejected", status: "rejected" },
+        { ...live!, id: "other-customer", customerId: "c2" },
+      ]);
+      const statuses = async () => Object.fromEntries((await db.select().from(findings)).map((row) => [row.id, row.status]));
+      const untouched = { "kept-approved": "approved", "kept-filed": "filed", "kept-won": "won", "kept-rejected": "rejected", "other-customer": "proposed" };
+
+      await auditor(db, "run_audit").handler(INPUT, CTX);
+      expect(await statuses()).toMatchObject({ ...untouched, stale: "rejected", [live!.id]: "proposed" });
+
+      // Corrected: the total now equals the lines, so arithmeticCheck has nothing to report.
+      await db.update(bills).set({ parsedJson: { ...PARSED, totalCents: 5000 } }).where(eq(bills.id, "b1"));
+      const output = (await auditor(db, "run_audit").handler(INPUT, CTX)) as { findings: { type: string }[] };
+      expect(output.findings.map(({ type }) => type)).not.toContain("arithmeticCheck");
+      expect(await statuses()).toMatchObject({ ...untouched, stale: "rejected", [live!.id]: "rejected" });
+      expect(await db.select().from(actions)).toMatchObject([{ id: "act1", findingId: live!.id }]);
     }));
 
   it("saves findings exactly as core reports them, with their bill and line ids", () =>

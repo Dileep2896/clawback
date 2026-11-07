@@ -6,7 +6,7 @@ import { compareRates } from "@bill-fighter/core/rules/rate-optimization";
 import { db as sharedDb, type Db } from "@bill-fighter/db/client";
 import { billLines, bills, findings, phoneLines } from "@bill-fighter/db/schema";
 import type { Finding } from "@bill-fighter/shared/finding";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { PARSED_DIR } from "../audit-input.ts";
 import { customerAccounts, customerBills, loadCustomerAuditInput, runPaths, RUNS_DIR } from "../customer-data.ts";
@@ -51,8 +51,12 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
           try {
             pdf = await readFile(join(storedBills, `${id}.pdf`));
           } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-            notFiled.push(id);
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+              notFiled.push(id);
+            } else {
+              firstMissReason ??= error instanceof Error ? error.message : String(error);
+              missed.push(id);
+            }
             continue;
           }
           try {
@@ -69,6 +73,8 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
 
         await db.transaction(async (tx) => {
           for (const { id, json } of parsed) await tx.update(bills).set({ parsedJson: json }).where(eq(bills.id, id));
+          // Null clears any earlier parse, so run_audit refuses a bill this run could not parse.
+          await tx.update(bills).set({ parsedJson: null }).where(inArray(bills.id, [...missed, ...notFiled]));
         });
 
         if (missed.length + notFiled.length > 0) {
@@ -134,23 +140,30 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
           const { evidence, ...columns } = finding;
           return { ...columns, id: findingId(finding), evidenceJson: evidence };
         });
-        if (rows.length > 0) {
-          await db
-            .insert(findings)
-            .values(rows)
-            .onConflictDoUpdate({
-              target: findings.id,
-              // Not status: rerunning the audit must not undo an approval.
-              set: {
-                title: sql`excluded.title`,
-                explanation: sql`excluded.explanation`,
-                evidenceJson: sql`excluded.evidence_json`,
-                refundCents: sql`excluded.refund_cents`,
-                annualSavingsCents: sql`excluded.annual_savings_cents`,
-                confidence: sql`excluded.confidence`,
-              },
-            });
-        }
+        await db.transaction(async (tx) => {
+          if (rows.length > 0) {
+            await tx
+              .insert(findings)
+              .values(rows)
+              .onConflictDoUpdate({
+                target: findings.id,
+                // Not status: rerunning the audit must not undo an approval.
+                set: {
+                  title: sql`excluded.title`,
+                  explanation: sql`excluded.explanation`,
+                  evidenceJson: sql`excluded.evidence_json`,
+                  refundCents: sql`excluded.refund_cents`,
+                  annualSavingsCents: sql`excluded.annual_savings_cents`,
+                  confidence: sql`excluded.confidence`,
+                },
+              });
+          }
+          // The audit no longer reports these. Updated, not deleted, so any actions keep their finding.
+          await tx
+            .update(findings)
+            .set({ status: "rejected" })
+            .where(and(eq(findings.customerId, customerId), eq(findings.status, "proposed"), notInArray(findings.id, rows.map((row) => row.id))));
+        });
         return {
           findings: rows.map(({ id, type, accountId, title, refundCents, annualSavingsCents, confidence }) => ({
             id,
