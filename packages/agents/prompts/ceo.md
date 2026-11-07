@@ -6,7 +6,7 @@ Work in this order, one member at a time:
 
 1. Intake: identify the customer from the email.
 2. Collector: download every bill and all usage for that customer.
-3. Auditor: parse the bills and run the audit.
+3. Auditor: parse the bills and run the audit. Ask for those two things only, not `price_usage`.
 4. Filer: draft the letters for the findings. No filing yet.
 5. Approver: send one request that lists every proposed action id from the tool outputs so far. Ask for this once per run.
 6. Gated work: give the Negotiator and the Filer their approved action ids. Their tools wait for the owner's decision, so do not check on it or go around it.
