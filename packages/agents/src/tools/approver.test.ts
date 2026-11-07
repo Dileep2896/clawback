@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Db } from "@bill-fighter/db/client";
 import { accounts, actions, approvals, findings, phoneLines, runs, smsMessages } from "@bill-fighter/db/schema";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
@@ -12,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ALARM_NUMBER, FAX_NUMBER, run as runTool, seedFindings } from "../test-fixtures.ts";
 import { wrapTool } from "../tool-wrapper.ts";
 import { approverTools } from "./approver.ts";
-import { letterActionId } from "./filer.ts";
+import { filerTools, letterActionId } from "./filer.ts";
 
 const RUN = "run";
 const SUMMARY = "Please approve the claim, the rate changes and the cancellations.";
@@ -113,8 +116,8 @@ describe("request_approval", () => {
     const other = await seedFindings(db, `${RUN}-2`);
     const foreign = letterActionId(`${RUN}-2`, other.id("meter"));
     await db.insert(actions).values([
-      { id: letterActionId(RUN, id("meter")), findingId: id("meter"), kind: "claim", status: "proposed" },
-      { id: letterActionId(RUN, id("rate")), findingId: id("rate"), kind: "plan_change", status: "proposed" },
+      { id: letterActionId(RUN, id("meter")), findingId: id("meter"), kind: "claim", status: "proposed", payloadJson: { letterPath: "l", evidencePath: "e" } },
+      { id: letterActionId(RUN, id("rate")), findingId: id("rate"), kind: "plan_change", status: "proposed", payloadJson: { letterPath: "l", evidencePath: "e" } },
       // This run's id is a prefix of that run's id, so a prefix match would take it.
       { id: foreign, findingId: other.id("meter"), kind: "claim", status: "proposed" },
     ]);
@@ -182,6 +185,77 @@ describe("request_approval", () => {
     await expect(request([], "Save $20,000 a year!")).rejects.toThrow(/\$20,000/);
     await expect(request(["no-such-action"])).rejects.toThrow(/not actions of this run/);
     expect(await db.select().from(approvals)).toEqual([]);
+  });
+});
+
+describe("request_approval with the Filer's letters", () => {
+  const WORDING = "We ask you to act on this request under Rule 17.1 as the facts below show.";
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "letters-"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true }));
+
+  async function setupBoth(db: Db, filerGate?: () => Promise<ReturnType<typeof createApprovalGate>>) {
+    const { id } = await seedFindings(db, RUN, dir);
+    const { gate, request, tools: approver } = setup(db);
+    const filer = filerTools({ db, gate: filerGate ?? (async () => gate), lettersDir: dir });
+    const call = (name: string, input: unknown) => runTool(filer, name, input, RUN) as Promise<unknown>;
+    const letters = ["meter", "rate"].map((name) => ({ findingId: id(name), wording: WORDING }));
+    return { id, gate, approver, request, call, letters };
+  }
+
+  test("refuses, naming each letter with no evidence and writing nothing, and the Filer can attach and retry", async (db) => {
+    const { id, gate, request, call, letters } = await setupBoth(db);
+    await call("draft_letter", { letters });
+    const meter = letterActionId(RUN, id("meter"));
+    const rate = letterActionId(RUN, id("rate"));
+    await call("attach_evidence", { actionIds: [meter] });
+    const before = await db.select().from(actions);
+
+    const refused = request([meter, rate]);
+    await expect(refused).rejects.toThrow(rate);
+    await expect(refused).rejects.not.toThrow(meter);
+    expect(await gate.get(RUN)).toBeNull();
+    expect(await db.select().from(actions)).toEqual(before);
+
+    await call("attach_evidence", { actionIds: [rate] });
+    const { actionIds } = await request([meter, rate]);
+    expect(actionIds).toEqual(expect.arrayContaining([meter, rate]));
+
+    await gate.decide({ runId: RUN, status: "approved", channel: "dashboard", approvedBy: "Linda" });
+    await expect(call("submit_claim", { actionId: meter })).resolves.toMatchObject({ status: "done" });
+    await expect(call("change_rate_plan", { actionId: rate })).resolves.toMatchObject({ status: "done" });
+  });
+
+  test("a request waits for a running attach_evidence, so it bundles the finished document", async (db) => {
+    const real = createApprovalGate(db);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let hold = false;
+    const { id, gate, approver, call, letters } = await setupBoth(db, async () => {
+      if (hold) await held;
+      return real;
+    });
+    await call("draft_letter", { letters: letters.slice(0, 1) });
+    const meter = letterActionId(RUN, id("meter"));
+
+    // attach_evidence stops at its first step and stays there until released.
+    hold = true;
+    const attaching = call("attach_evidence", { actionIds: [meter] });
+    // request_approval's first step is reading the gate, so this spy shows whether it has started.
+    const started = vi.spyOn(gate, "get");
+    const requesting = runTool(approver, "request_approval", { actionIds: [meter], summary: SUMMARY }, RUN) as Promise<Bundle>;
+    for (let turn = 0; turn < 5; turn++) await new Promise(setImmediate);
+    expect(started).not.toHaveBeenCalled();
+
+    release();
+    await attaching;
+    expect((await requesting).actionIds).toContain(meter);
+    const [action] = await db.select().from(actions).where(eq(actions.id, meter));
+    expect(action!.payloadJson).toMatchObject({ evidencePath: expect.any(String) });
   });
 });
 

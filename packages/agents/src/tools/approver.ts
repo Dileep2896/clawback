@@ -9,7 +9,7 @@ import { z } from "zod";
 import { cancellableLines, customerOfRun } from "../findings.ts";
 import { amountsIn, assertNoOwnNumbers } from "../letters/numbers.ts";
 import { defineTool } from "../tool-wrapper.ts";
-import { letterActionId } from "./filer.ts";
+import { letterActionId, oneAtATime } from "./filer.ts";
 
 type Deps = {
   db: Db;
@@ -35,7 +35,7 @@ export function approverTools({
         "Ask the owner once to approve everything in this run. Give every action id and a plain summary with no digits or amounts: the tool adds the totals. It also creates the call, cancel and invoice actions. A second call returns the same request.",
       inputSchema: z.object({ actionIds: z.array(z.string().min(1)), summary: z.string().min(1).max(2000) }),
       targets: () => [],
-      async handler({ actionIds, summary }, { runId }) {
+      handler: oneAtATime(async ({ actionIds, summary }, { runId }) => {
         const approvals = await gate();
         const existing = await approvals.get(runId);
         if (existing) return view(existing);
@@ -88,16 +88,19 @@ export function approverTools({
 
         // A run gets one approval, so a letter the model forgot to list could never be filed.
         // The LIKE only narrows: run "run" also matches run "run-2", so the exact id decides.
-        const letters = (await db.select({ id: actions.id, findingId: actions.findingId }).from(actions).where(like(actions.id, `letter-${runId}-%`)))
+        const letters = (await db.select({ id: actions.id, findingId: actions.findingId, payloadJson: actions.payloadJson }).from(actions).where(like(actions.id, `letter-${runId}-%`)))
           .filter((letter) => letter.findingId && letter.id === letterActionId(runId, letter.findingId));
         const own = [...created.map((action) => action.id!), ...letters.map((letter) => letter.id)];
         const foreign = actionIds.filter((id) => !own.includes(id));
         if (foreign.length > 0) throw new Error(`Run ${runId}: not actions of this run: ${foreign.join(", ")}`);
+        // Approval freezes the letters and filing needs evidence, so a bundled letter without it could never be filed.
+        const unattached = letters.filter((letter) => !(letter.payloadJson as { evidencePath?: string } | null)?.evidencePath).map((letter) => letter.id);
+        if (unattached.length > 0) throw new Error(`Run ${runId}: nothing was requested. Call attach_evidence for these letters, then request approval again: ${unattached.join(", ")}`);
 
         if (created.length > 0) await db.insert(actions).values(created).onConflictDoNothing({ target: actions.id });
         const figures = `Refund to claim: ${dollars(totals.refundCents)}. Yearly savings: ${dollars(totals.annualSavingsCents)}.`;
         return view(await approvals.createBundle({ runId, actionIds: own, summary: `${summary}\n\n${figures}` }));
-      },
+      }),
     }),
 
     defineTool({

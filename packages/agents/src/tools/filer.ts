@@ -21,6 +21,25 @@ type LetterPayload = { letterPath: string; evidencePath?: string };
 
 export const letterActionId = (runId: string, findingId: string) => `letter-${runId}-${findingId}`;
 
+const runQueues = new Map<string, Promise<unknown>>();
+
+/** Handlers wrapped in this run one at a time per run, so a bundle can't form while a document is being written. */
+// shortcut: covers one process, and a run is one process; move to a database lock if a run ever spans processes.
+export const oneAtATime =
+  <I, C extends { runId: string }, O>(handler: (input: I, ctx: C) => Promise<O>) =>
+  (input: I, ctx: C): Promise<O> => {
+    const { runId } = ctx;
+    const result = (runQueues.get(runId) ?? Promise.resolve()).then(() => handler(input, ctx));
+    // A refusal goes to its caller and must not stop the next call in the queue.
+    const tail: Promise<unknown> = result
+      .catch(() => {})
+      .finally(() => {
+        if (runQueues.get(runId) === tail) runQueues.delete(runId);
+      });
+    runQueues.set(runId, tail);
+    return result;
+  };
+
 export function filerTools({
   db = sharedDb,
   gate = () => getPlatform().approvalGate(),
@@ -71,7 +90,7 @@ export function filerTools({
         letters: z.array(z.object({ findingId: z.string().min(1), wording: z.string().min(1).max(4000) })).min(1),
       }),
       targets: () => [],
-      async handler({ letters }, { runId }) {
+      handler: oneAtATime(async ({ letters }, { runId }) => {
         // What the owner approved must stay what gets filed.
         if (await (await gate()).get(runId)) throw new Error(`Run ${runId} has already asked for approval, so its letters can no longer change`);
         const customer = await customerOfRun(db, runId);
@@ -114,7 +133,7 @@ export function filerTools({
             return { actionId, findingId, kind, path };
           }),
         );
-      },
+      }),
     }),
 
     defineTool({
@@ -122,7 +141,7 @@ export function filerTools({
       description: "Attach the bills that prove each finding to its drafted letter. Takes every letter action id at once. Safe to repeat.",
       inputSchema: z.object({ actionIds: z.array(z.string().min(1)).min(1) }),
       targets: () => [],
-      async handler({ actionIds }, { runId }) {
+      handler: oneAtATime(async ({ actionIds }, { runId }) => {
         // What the owner was asked to approve must stay what gets filed, so check before any file is written.
         const bundled = (await (await gate()).get(runId))?.actionIds ?? [];
         const frozen = actionIds.filter((actionId) => bundled.includes(actionId));
@@ -158,7 +177,7 @@ export function filerTools({
             return { actionId, evidencePath, billIds };
           }),
         );
-      },
+      }),
     }),
 
     fileTool("submit_claim", "claim", "File an approved Rule 17.1 claim. Records it on our own tables and contacts nobody."),
