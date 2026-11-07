@@ -1,3 +1,4 @@
+import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
 import { z } from "zod";
 import { CLOSING_LINE, MENU_LINE, REP_LINES } from "./script.ts";
 
@@ -52,7 +53,14 @@ export function checkLineCall(messages: CallMessage[]): string[] {
   const keypad = messages.findIndex((m) => isKeypadEntry(m) && (m.message ?? "").endsWith(": 2"));
 
   if (firstBot === -1) return ["the assistant never spoke"];
+  // Joined because the transcriber may split the disclosure across messages.
+  const opening = messages
+    .slice(0, firstBot)
+    .filter((m) => m.role === "user" && !isKeypadEntry(m))
+    .map((m) => m.message ?? "")
+    .join(" ");
   if (firstSpeech === -1 || firstSpeech > firstBot) problems.push("the assistant spoke before the caller");
+  else if (!normalize(opening).startsWith(normalize(DISCLOSURE_LINE))) problems.push("the caller did not open with the full disclosure");
   if (!normalize(messages[firstBot]?.message ?? "").includes(normalize(MENU_LINE))) {
     problems.push("the first thing said was not the menu");
   }

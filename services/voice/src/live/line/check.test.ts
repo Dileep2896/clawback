@@ -14,7 +14,8 @@ const speech = (message: string): CallMessage => ({
 const keypad = (digit: string): CallMessage => ({ role: "user", message: `User's Keypad Entry: ${digit}`, time: 7, endTime: 7 });
 const bot = (message: string): CallMessage => ({ role: "bot", message, time: 8, endTime: 9, duration: 1 });
 
-const disclosure = speech("Hi. This is an AI assistant calling.");
+// Vapi's real transcript of the spike's disclosure: only the punctuation differs from DISCLOSURE_LINE.
+const disclosure = speech("Hi. This is an AI assistant calling on behalf of Golden Gate Noodle Company. This call is being recorded.");
 const goodCall = [
   disclosure,
   // Vapi logged the spike's menu twice though the audio has it once.
@@ -68,6 +69,27 @@ describe("checkLineCall", () => {
     expect(checkLineCall([bot(MENU_LINE), disclosure, keypad("2"), bot(REP_LINES.greeting)])).toEqual([
       "the assistant spoke before the caller",
     ]);
+  });
+
+  it.each([
+    ["a greeting with no disclosure", [speech("Hello")]],
+    ["a disclosure cut short", [speech("Hi, this is an AI assistant calling on behalf of Golden Gate Noodle Company.")]],
+    ["a disclosure without the AI statement", [speech("Hi, this is calling on behalf of Golden Gate Noodle Company. This call is being recorded.")]],
+    ["words before the disclosure", [speech("Hello."), disclosure]],
+  ])("fails on %s", (_, opening) => {
+    expect(checkLineCall([...opening, bot(MENU_LINE), keypad("2"), bot(REP_LINES.greeting)])).toContain(
+      "the caller did not open with the full disclosure",
+    );
+  });
+
+  it("accepts a disclosure the transcriber split across messages", () => {
+    const split = [speech("Hi, this is an AI assistant calling on behalf of Golden Gate Noodle Company."), speech("This call is being recorded.")];
+    expect(checkLineCall([...split, bot(MENU_LINE), keypad("2"), bot(REP_LINES.greeting)])).toEqual([]);
+  });
+
+  it("does not count disclosure words said after the menu", () => {
+    const problems = checkLineCall([speech("Hello"), bot(MENU_LINE), disclosure, keypad("2"), bot(REP_LINES.greeting)]);
+    expect(problems).toContain("the caller did not open with the full disclosure");
   });
 
   it("fails if the rep never answers", () => {
