@@ -10,6 +10,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { customerAccounts, customerBills, runPaths, RUNS_DIR } from "../customer-data.ts";
 import { assertRunCustomer } from "../findings.ts";
+import { isPortalTimeout, reportProblem, RETRY_ATTEMPTS, withRetry } from "../retry.ts";
 import { defineTool, type Target } from "../tool-wrapper.ts";
 
 const testId = (id: string) => `[data-testid="${id}"]`;
@@ -129,9 +130,15 @@ export function createCollectorTools({ db, browser, root = RUNS_DIR }: { db: Db;
 
   // One provider failing must not hide what the others collected, so each reports for itself.
   // A session has one page, so operations on the same run and provider queue rather than navigate under each other.
+  // A retry repeats a whole step, which is safe: a login starts a new session, and a download overwrites its file.
   async function perProvider<T>(runId: string, providers: Provider[], work: (provider: Provider) => Promise<T>) {
     const unique = [...new Set(providers)];
-    const settled = await Promise.allSettled(unique.map((provider) => oneAtATime(keyOf(runId, provider), () => work(provider))));
+    const settled = await Promise.allSettled(unique.map((provider) => oneAtATime(keyOf(runId, provider), () => withRetry(() => work(provider), { retryIf: isPortalTimeout }))));
+    for (const [index, result] of settled.entries()) {
+      if (result.status === "rejected" && isPortalTimeout(result.reason)) {
+        await reportProblem(db, runId, `The ${unique[index]} portal did not answer after ${RETRY_ATTEMPTS} tries, so its bills or usage may be missing.`);
+      }
+    }
     return {
       done: settled.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])),
       failed: settled.flatMap((result, index) =>

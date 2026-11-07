@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { runAudit } from "@bill-fighter/core/rules/index";
 import type { Db } from "@bill-fighter/db/client";
-import { accounts, actions, approvals, billLines, bills, customers, findings, locations, phoneLines, runs, usageIntervals } from "@bill-fighter/db/schema";
+import { accounts, actions, approvals, billLines, bills, boardCards, customers, findings, locations, phoneLines, runs, usageIntervals } from "@bill-fighter/db/schema";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { createApprovalGate } from "@bill-fighter/platform/local/approval-gate";
 import { createAudit } from "@bill-fighter/platform/local/audit";
@@ -233,6 +233,53 @@ describe("collector", () => {
       });
       expect(closed).toHaveBeenCalledOnce();
     }));
+
+  describe("a portal that times out", () => {
+    const LATE = "page.goto: Timeout 30000ms exceeded.";
+    /** The fake portal, whose goto fails this many times. */
+    const flaky = (db: Db, failures: number, message = LATE) => {
+      const { browser } = fakeBrowser({});
+      const open = vi.fn(async () => {
+        const session = await browser.open();
+        return {
+          ...session,
+          goto: async (url: string) => {
+            if (failures-- > 0) throw new Error(message);
+            return session.goto(url);
+          },
+        };
+      });
+      const { tools } = createCollectorTools({ db, browser: async () => ({ open }), root });
+      return { open, tool: (name: string) => pick(tools, name) };
+    };
+    const runCards = (db: Db) => db.select().from(boardCards).where(eq(boardCards.agent, "run"));
+
+    it("retries once with a new session, and says nothing if that works", () =>
+      withCustomer(async (db) => {
+        const { open, tool } = flaky(db, 1);
+        expect(await login(tool)).toMatchObject({ loggedIn: [{ provider: "bayconnect" }], failed: [] });
+        expect(open).toHaveBeenCalledTimes(2);
+        expect(await runCards(db)).toEqual([]);
+      }));
+
+    it("after a second timeout reports it to the agent and shows one card, however often the model tries", () =>
+      withCustomer(async (db) => {
+        const { open, tool } = flaky(db, Infinity);
+        expect(await login(tool)).toEqual({ loggedIn: [], failed: [{ provider: "bayconnect", reason: LATE }] });
+        await login(tool);
+        expect(open).toHaveBeenCalledTimes(4);
+        expect(await runCards(db)).toMatchObject([{ status: "blocked", title: expect.stringContaining("bayconnect portal did not answer after 2 tries") }]);
+      }), 15_000);
+
+    it("does not retry a refused login, which is not a timeout", () =>
+      withCustomer(async (db) => {
+        const open = vi.fn(fakeBrowser({ loginError: "Wrong password" }).browser.open);
+        const { tools } = createCollectorTools({ db, browser: async () => ({ open }), root });
+        await login((name) => pick(tools, name));
+        expect(open).toHaveBeenCalledOnce();
+        expect(await runCards(db)).toEqual([]);
+      }));
+  });
 
   it("refuses an off-allowlist portal before any browser opens", () =>
     withCustomer(async (db) => {
