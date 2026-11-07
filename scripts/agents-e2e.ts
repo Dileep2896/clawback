@@ -21,7 +21,7 @@ import { Provider } from "@bill-fighter/shared/fixtures";
 import { isGatedTool } from "@bill-fighter/shared/gated-tools";
 import { portalVaultName } from "@bill-fighter/shared/portal";
 import { createInboundServer, WEBHOOK_PORT } from "@bill-fighter/webhooks/server";
-import { abandonRun, assertNotSharedDatabase, stopProblems } from "./stop-check.ts";
+import { abandonRun, acceptedCost, assertNotSharedDatabase, firstApprovalRequest, stopProblems } from "./stop-check.ts";
 
 const HOLD_MS = Number(process.env.E2E_HOLD_SECONDS || 60) * 1000;
 const PARK_TIMEOUT_MS = 15 * 60_000;
@@ -168,16 +168,16 @@ try {
   const browsers = children.filter(({ command }) => /--headless|chrome-headless-shell/.test(command) && !/--type=/.test(command)).length;
 
   // Only the audit row has a time: approvals has no created_at.
-  const requested = auditRows.find((row) => row.tool === "request_approval")?.createdAt.getTime();
+  const requested = firstApprovalRequest(auditRows)?.createdAt.getTime();
   const toApproval = requested === undefined ? null : (requested - run!.startedAt.getTime()) / 1000;
 
   // A parked run has no SDK result, so denying is the only way to get the SDK's figure without an experimental API.
-  let costUsd: number | null = result ? (result as { costUsd: number }).costUsd : null;
+  let costUsd = acceptedCost(result);
   if (!finished() && !timedOut) {
     await realGate.decide({ runId: id, status: "denied", channel: "dashboard", approvedBy: "agents-e2e" });
     const deadline = Date.now() + WRAP_UP_TIMEOUT_MS;
     while (!finished() && Date.now() < deadline) await sleep(1000);
-    costUsd = result ? (result as { costUsd: number }).costUsd : null;
+    costUsd = acceptedCost(result);
     const gatedRows = (await audit.list(id)).filter((row) => isGatedTool(row.tool));
     const ran = gatedRows.filter((row) => !(row.outputJson as { denied?: unknown } | null)?.denied);
     if (ran.length > 0) problems.push(`gated tools ran after the denial: ${ran.map((row) => row.tool).join(", ")}`);
@@ -186,7 +186,7 @@ try {
     if (result && gatedRows.length !== gatedCalls) problems.push(`${gatedCalls} gated calls, but ${gatedRows.length} audit rows after the decision`);
   }
   const cap = Number(process.env.RUN_BUDGET_USD || 5);
-  if (costUsd === null) problems.push("no cost reported");
+  if (costUsd === null) problems.push("no successful result, so no cost accepted");
   else if (costUsd > cap) problems.push(`estimated cost $${costUsd.toFixed(4)} is over RUN_BUDGET_USD $${cap}`);
 
   await rm(join(RUNS_DIR, id), { recursive: true, force: true });

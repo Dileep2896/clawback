@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { abandonRun, assertNotSharedDatabase, type AuditRow, EXPECTED_REFUND_CENTS, EXPECTED_SAVINGS_CENTS, type StopSnapshot, stopProblems } from "./stop-check.ts";
+import { abandonRun, acceptedCost, assertNotSharedDatabase, type AuditRow, EXPECTED_REFUND_CENTS, EXPECTED_SAVINGS_CENTS, firstApprovalRequest, type StopSnapshot, stopProblems } from "./stop-check.ts";
 
 const row = (tool: string, agent: string, outputJson: unknown = {}, inputJson: unknown = {}): AuditRow => ({ agent, tool, inputJson, outputJson });
 const actions = (kind: string, n: number) => Array.from({ length: n }, (_, i) => ({ id: `${kind}-${i}`, kind, findingId: `${kind}-finding-${i}` as string | null, payloadJson: null as unknown }));
@@ -103,6 +103,23 @@ describe("stopProblems", () => {
     snapshot.audit.push(row("submit_claim", "filer", { denied: "not in an approved bundle" }));
     snapshot.toolCalls.push({ agent: "filer", tool: "submit_claim" });
     expect(stopProblems(snapshot)).toEqual([]);
+  });
+});
+
+describe("acceptedCost", () => {
+  it("accepts a cost only from a successful result", () => {
+    expect(acceptedCost({ status: "success", costUsd: 0.3 })).toBe(0.3);
+    expect(acceptedCost({ status: "error", costUsd: 0 })).toBeNull();
+    expect(acceptedCost(null)).toBeNull();
+  });
+});
+
+describe("firstApprovalRequest", () => {
+  it("skips a failed attempt and takes the retry that succeeded", () => {
+    const failed = row("request_approval", "approver", { error: "attach evidence first" });
+    const succeeded = row("request_approval", "approver", { approvalId: "a1", status: "pending" });
+    expect(firstApprovalRequest([failed, succeeded])).toBe(succeeded);
+    expect(firstApprovalRequest([failed])).toBeUndefined();
   });
 });
 

@@ -52,6 +52,16 @@ export async function abandonRun(runId: string, finished: boolean, gate: Pick<Ap
   }
 }
 
+/** A crashed wrap-up reports costUsd 0, so only a successful result's figure counts. */
+export function acceptedCost(result: { status: string; costUsd: number } | null): number | null {
+  return result?.status === "success" ? result.costUsd : null;
+}
+
+/** Failed attempts have audit rows too, so only a row that returned an approval counts. Rows must be oldest first. */
+export function firstApprovalRequest<T extends Pick<AuditRow, "tool" | "outputJson">>(rows: T[]): T | undefined {
+  return rows.find((row) => row.tool === "request_approval" && (row.outputJson as { approvalId?: unknown } | null)?.approvalId);
+}
+
 /** Every way the run is not stopped at one pending approval. Empty means it is. */
 export function stopProblems(s: StopSnapshot): string[] {
   const problems: string[] = [];
