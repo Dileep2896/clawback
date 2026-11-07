@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { parseBill, type Extract } from "@bill-fighter/core/parser/parse-bill";
 import { PARSED_BILL_SCHEMA } from "@bill-fighter/core/parser/prompt";
 import type { Llm } from "@bill-fighter/platform/types";
@@ -35,16 +35,20 @@ function readEntry(path: string): CachedParse | null {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
+  let entry: CachedParse;
   try {
-    return CachedParse.parse(JSON.parse(text));
+    entry = CachedParse.parse(JSON.parse(text));
   } catch (cause) {
     throw new Error(`Corrupt parse cache entry ${path}`, { cause });
   }
+  if (`${entry.pdfSha256}.${entry.schemaHash}.json` !== basename(path)) throw new Error(`Corrupt parse cache entry ${path}: its metadata disagrees with its file name`);
+  return entry;
 }
 
+// Older schema versions stay on disk after a reparse. Reading them would duplicate bills, or abort on a shape that no longer parses.
 export const readParsedDir = (dir: string): CachedParse[] =>
   readdirSync(dir)
-    .filter((file) => file.endsWith(".json"))
+    .filter((file) => file.endsWith(`.${SCHEMA_HASH}.json`))
     .map((file) => readEntry(join(dir, file))!);
 
 /** Without an llm, for the stage run, a miss throws instead of spending. */

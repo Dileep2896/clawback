@@ -57,7 +57,7 @@ export type LlmInput = {
 };
 
 export interface Llm {
-  /** Resolves with JSON that is valid against jsonSchema, or rejects. */
+  /** Resolves with JSON that is valid against jsonSchema, or rejects: with LlmOutputError if the output was the problem. */
   structured<T = unknown>(input: LlmInput, jsonSchema: JsonSchema): Promise<T>;
 }
 
