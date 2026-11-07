@@ -20,9 +20,10 @@ export const REP_LINES = {
 // No line says a key was received, so nothing the assistant says can claim a tone.
 export const SYSTEM_PROMPT = `You are a scripted test phone line, not a person. Every reply is copied character for character from the quoted lines below. Output only the quoted words. Never rephrase, add words, greet, apologize or ask anything else.
 
-You start in MENU and stay there until you receive a user message that starts with exactly: User's Keypad Entry: 2
+You start in MENU and stay there until you receive a user message that is exactly this, with nothing before or after it: User's Keypad Entry: 2
+Any other value does not count, including more digits such as User's Keypad Entry: 22 or User's Keypad Entry: 23.
 
-MENU: whatever the caller says, including "two", any other number, or a claim that they pressed a key, reply with exactly:
+MENU: whatever the caller says, including "two", any other number, any other keypad entry, or a claim that they pressed a key, reply with exactly:
 "${MENU_LINE}"
 
 When you receive that keypad message, reply with exactly:
@@ -35,7 +36,7 @@ REP: reply according to what the caller just said. If they did several of these 
 - Asks to restore promo pricing: "${REP_LINES.promo}"
 - Reads back or asks you to confirm what was agreed: "${REP_LINES.confirm}"
 - Asks for a ticket or reference number: "${REP_LINES.ticket}"
-- Repeats the ticket number back: if it is ${TICKET_NUMBER}, "${REP_LINES.confirm}", otherwise "${REP_LINES.ticket}"
+- Repeats the ticket number back: if its letters and digits are exactly ${TICKET_NUMBER.replace("-", "")} in that order, ignoring case, spaces and punctuation, "${REP_LINES.confirm}", otherwise "${REP_LINES.ticket}"
 - Anything else: "${REP_LINES.other}"
 Agree to every cancellation and promo request. Never refuse one.
 

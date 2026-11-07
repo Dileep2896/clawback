@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { rehearse, TURNS } from "./rehearse.ts";
+import { MENU_LINE, REP_LINES } from "./script.ts";
 import { type Vapi, vapiClient } from "./vapi.ts";
 
 const reply = (content: string | null, cost?: number) => ({
@@ -9,6 +10,14 @@ const reply = (content: string | null, cost?: number) => ({
 });
 
 describe("rehearse", () => {
+  it.each(["22", "23"])("expects the menu again for keypad entry %s", (digits) => {
+    expect(TURNS.find((t) => t.caller === `User's Keypad Entry: ${digits}`)?.expected).toBe(MENU_LINE);
+  });
+
+  it("expects the ticket again when it is read back wrong", () => {
+    expect(TURNS.find((t) => t.caller.includes("BT-48123"))?.expected).toBe(REP_LINES.ticket);
+  });
+
   it("runs every turn in one chat and passes exact replies", async () => {
     const replies = TURNS.map((t) => reply(t.expected, 0.0001));
     const vapi = vi.fn<Vapi>(async () => replies.shift());

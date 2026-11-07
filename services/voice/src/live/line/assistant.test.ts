@@ -12,6 +12,16 @@ describe("script", () => {
     for (const line of [MENU_LINE, ...Object.values(REP_LINES)]) expect(SYSTEM_PROMPT).toContain(`"${line}"`);
   });
 
+  it("only leaves the menu on the whole keypad value", () => {
+    expect(SYSTEM_PROMPT).not.toContain("starts with");
+    expect(SYSTEM_PROMPT).toContain("is exactly this, with nothing before or after it: User's Keypad Entry: 2\n");
+    expect(SYSTEM_PROMPT).toContain("more digits such as User's Keypad Entry: 22 or User's Keypad Entry: 23");
+  });
+
+  it("matches the read-back ticket on its exact letters and digits", () => {
+    expect(SYSTEM_PROMPT).toContain("letters and digits are exactly BT48213 in that order");
+  });
+
   it("has no line that could claim a tone was received", () => {
     for (const line of [MENU_LINE, CLOSING_LINE, ...Object.values(REP_LINES)]) {
       expect(line).not.toMatch(/received|pressed|key ?press|tone|digit/i);
