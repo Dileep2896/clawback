@@ -48,7 +48,7 @@ describe("viewOf", () => {
   it("shows the disclosure first and the fallback row only as the label", () => {
     const view = viewOf(call({ transcriptJson: [disclosure, FALLBACK, menu, press] }));
     expect(view.state).toBe("transcript");
-    expect(view.fallback).toBe(FALLBACK.content);
+    expect(view.fallback).toBe("Live call failed, so this call is simulated: Retell GET /v2/get-call/the call: HTTP 500: down");
     expect(view.rows).toEqual([disclosure, menu, press]);
     expect(isDisclosure(view.rows[0]!)).toBe(true);
   });
@@ -67,7 +67,13 @@ describe("viewOf", () => {
 
   it("keeps a failed attempt's partial transcript out when no sim call replaced it", () => {
     const view = viewOf(call({ mode: "live", endedAt: AT, transcriptJson: [disclosure, menu, ENDED, FAILED] }));
-    expect(view).toEqual({ state: "failed", fallback: null, failure: FAILED.content, rows: [] });
+    expect(view).toEqual({ state: "failed", fallback: null, failure: "Live call failed: Retell call the call: the call ended with no ticket number: user_hangup", rows: [] });
+  });
+
+  it("replaces every Retell id in the fallback and failure text", () => {
+    const twoIds = row("system", "status", "Live call failed: call_abc1 then call_DEF_2.");
+    expect(viewOf(call({ mode: "live", endedAt: AT, transcriptJson: [twoIds] })).failure).toBe("Live call failed: the call then the call.");
+    expect(viewOf(call({ transcriptJson: [disclosure, FALLBACK] })).fallback).not.toContain("call_");
   });
 
   it("keeps refused rows, as system rows", () => {

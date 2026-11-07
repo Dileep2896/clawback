@@ -12,6 +12,9 @@ const SHOWN_KINDS = ["speech", "keypress", "refused"];
 // The live engine's own words, and the only marker a failed live row has.
 const LIVE_FAILED = "Live call failed";
 
+// Fallback and failure rows carry the provider's raw error text, and a Retell id must never reach the screen.
+const withoutRetellId = (text: string | undefined) => text?.replace(/call_\w+/g, "the call") ?? null;
+
 const rowsOf = (call: Call): Row[] => {
   const parsed = z.array(Row).safeParse(call.transcriptJson);
   return parsed.success ? parsed.data : [];
@@ -31,8 +34,8 @@ export type CallView = {
 
 export function viewOf(call: Call): CallView {
   const all = rowsOf(call);
-  const fallback = all.find((row) => row.kind === "fallback")?.content ?? null;
-  const failure = all.findLast((row) => row.kind === "status" && row.content.startsWith(LIVE_FAILED))?.content ?? null;
+  const fallback = withoutRetellId(all.find((row) => row.kind === "fallback")?.content);
+  const failure = withoutRetellId(all.findLast((row) => row.kind === "status" && row.content.startsWith(LIVE_FAILED))?.content);
   // A failed attempt may hold a partial transcript. It never reaches the screen.
   if (failure) return { state: "failed", fallback, failure, rows: [] };
   // The provider only gives the transcript once the call ends.
