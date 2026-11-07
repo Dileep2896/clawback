@@ -1,5 +1,5 @@
 import { decideApproval } from "@bill-fighter/db/approvals";
-import { accounts, actions, approvals, auditLog, boardCards, findings, locations, runs } from "@bill-fighter/db/schema";
+import { accounts, actions, approvals, auditLog, boardCards, findings, locations, runs, scheduledChecks } from "@bill-fighter/db/schema";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -102,6 +102,20 @@ describe("liveSnapshot", () => {
         { ...finding, id: "no-account" },
       ]);
       expect((await liveSnapshot(db)).findingSites).toEqual({ "fremont-1-electric": "Fremont #1" });
+    });
+  });
+
+  it("shows the customer's scheduled checks in date order, and no other customer's", async () => {
+    await withTestDb("dash_checks", async (db) => {
+      await seedRun(db, "old");
+      await db.update(runs).set({ startedAt: LONG_AGO }).where(eq(runs.id, "old"));
+      const { customerId } = await seedRun(db, "new");
+      await db.insert(scheduledChecks).values([
+        { id: "later", customerId, runAt: new Date("2027-01-01T16:00:00Z"), status: "pending" },
+        { id: "sooner", customerId, runAt: new Date("2026-12-01T16:00:00Z"), status: "fired" },
+        { id: "not-theirs", customerId: "customer-old", runAt: new Date("2026-12-01T16:00:00Z"), status: "pending" },
+      ]);
+      expect((await liveSnapshot(db)).scheduledChecks.map((check) => check.id)).toEqual(["sooner", "later"]);
     });
   });
 

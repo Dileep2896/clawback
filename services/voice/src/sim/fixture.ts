@@ -15,9 +15,9 @@ export const SEED_PLAN: CallPlan = {
 export const ALARM_LINES = STORES.flatMap((store) => store.pots.filter((pots) => pots.purpose === "alarm").map((pots) => pots.number));
 
 /** Inserts what a call reads, plus the call action. */
-export async function seedCallData(db: Db, actionId: string) {
+export async function seedCallData(db: Db, actionId: string, plan?: CallPlan) {
   await db.insert(customers).values(CUSTOMER);
-  await db.insert(actions).values({ id: actionId, kind: "call", status: "approved" });
+  await db.insert(actions).values({ id: actionId, kind: "call", status: "approved", ...(plan ? { payloadJson: plan } : {}) });
   for (const store of STORES) {
     const telecomId = `${store.id}-telecom`;
     await db.insert(locations).values({ id: store.id, customerId: CUSTOMER.id, name: store.name, address: store.address, city: store.city });

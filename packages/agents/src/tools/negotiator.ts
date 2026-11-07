@@ -2,6 +2,7 @@ import { db as sharedDb, type Db } from "@bill-fighter/db/client";
 import { accounts, actions, calls, findings, phoneLines } from "@bill-fighter/db/schema";
 import { getPlatform } from "@bill-fighter/platform/factory";
 import type { Budget } from "@bill-fighter/platform/types";
+import { runLiveCall } from "@bill-fighter/voice/live/caller/engine";
 import { LINE_NUMBER } from "@bill-fighter/voice/live/line/script";
 import { type CallOutcome, extractOutcome } from "@bill-fighter/voice/outcome";
 import { type CallPlan, lineKey, runSimCall } from "@bill-fighter/voice/sim/engine";
@@ -143,8 +144,5 @@ export default negotiatorTools({
   db: sharedDb,
   budget: () => getPlatform().budget(),
   sim: async (call) => runSimCall({ db: sharedDb, llm: await getPlatform().llm(), ...call }),
-  // shortcut: no live engine yet, so VOICE_MODE=live gives a sim call labelled as a fallback. voice-live-caller replaces this.
-  live: async () => {
-    throw new Error("The live caller is not built yet");
-  },
+  live: (call) => runLiveCall({ db: sharedDb, ...call }),
 });

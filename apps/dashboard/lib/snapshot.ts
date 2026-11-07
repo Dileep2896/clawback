@@ -12,6 +12,7 @@ import {
   ledger,
   locations,
   runs,
+  scheduledChecks,
   smsMessages,
 } from "@bill-fighter/db/schema";
 
@@ -36,6 +37,7 @@ export type LiveData = {
   // No input or output: those columns can hold tool data, so they never reach the browser.
   auditLog: Pick<Row<typeof auditLog>, "id" | "agent" | "tool" | "costUsd" | "createdAt">[];
   auditTotal: number;
+  scheduledChecks: Row<typeof scheduledChecks>[];
 };
 
 /** What the browser receives: JSON turns every Date into a string. */
@@ -56,6 +58,7 @@ const NO_RUN: LiveData = {
   sms: [],
   auditLog: [],
   auditTotal: 0,
+  scheduledChecks: [],
 };
 
 /** Everything on the screen, for the most recently started run. Every list has a fixed order, so unchanged data serializes the same. */
@@ -84,7 +87,7 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
 
   const siteAccountIds = customerFindings.flatMap((f) => f.accountId ?? []);
 
-  const [sites, humanActions, cards, runCalls, ledgerRows, sms, audit, auditTotal] = await Promise.all([
+  const [sites, humanActions, cards, runCalls, ledgerRows, sms, audit, auditTotal, checks] = await Promise.all([
     db
       .select({ accountId: accounts.id, name: locations.name })
       .from(accounts)
@@ -105,6 +108,7 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
       .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
       .limit(AUDIT_ROW_LIMIT),
     db.$count(auditLog, eq(auditLog.runId, run.id)),
+    db.select().from(scheduledChecks).where(eq(scheduledChecks.customerId, run.customerId)).orderBy(asc(scheduledChecks.runAt)),
   ]);
 
   return {
@@ -121,5 +125,6 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
     sms,
     auditLog: audit,
     auditTotal,
+    scheduledChecks: checks,
   };
 }

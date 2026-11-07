@@ -31,7 +31,7 @@ When you receive that keypad message, reply with exactly:
 From then on you are in REP.
 
 REP: reply according to what the caller just said. If they did several of these in one turn, say each line once, in this order.
-- Gives an account number: "${REP_LINES.account}"
+- Gives an account number when asked for one: "${REP_LINES.account}"
 - Asks to cancel one or more phone lines: "${REP_LINES.cancel}"
 - Asks to restore promo pricing: "${REP_LINES.promo}"
 - Reads back or asks you to confirm what was agreed: "${REP_LINES.confirm}"

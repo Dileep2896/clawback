@@ -81,7 +81,8 @@ const runtime: AgentRuntime = {
   },
 };
 
-const server = createInboundServer({ db, mail, runtime, audit, tools: await loadTools() });
+// No onFire here: this run proves the email path, so forcing a check on this server fails rather than starting a second run.
+const server = createInboundServer({ db, mail, runtime, audit, tools: await loadTools(), scheduler: await platform.scheduler() });
 await new Promise<void>((resolve, reject) => {
   server.once("error", (error) => reject(new Error(`Port ${WEBHOOK_PORT} is taken, so demo-start cannot reach this run's webhook: ${error.message}`)));
   server.listen(WEBHOOK_PORT, "127.0.0.1", resolve);

@@ -6,8 +6,11 @@ import { createCanUseTool } from "@bill-fighter/platform/local/agent-runtime";
 import { createApprovalGate } from "@bill-fighter/platform/local/approval-gate";
 import type { Audit, Budget, Llm } from "@bill-fighter/platform/types";
 import type { Allowlist } from "@bill-fighter/shared/allowlist";
+import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
+import { runLiveCall } from "@bill-fighter/voice/live/caller/engine";
+import { endedCall, fullCallItems, said, stubRetell } from "@bill-fighter/voice/live/caller/fixture";
 import { LINE_NUMBER } from "@bill-fighter/voice/live/line/script";
-import { lineKey, runSimCall } from "@bill-fighter/voice/sim/engine";
+import { checkPlan, lineKey, runSimCall } from "@bill-fighter/voice/sim/engine";
 import { ALARM_LINES, SEED_PLAN, seedCallData } from "@bill-fighter/voice/sim/fixture";
 import { stubLlm } from "@bill-fighter/voice/sim/stub-llm";
 import type { TranscriptRow } from "@bill-fighter/voice/transcript";
@@ -300,6 +303,139 @@ describe("VOICE_MODE", () => {
     const { call, live, sim } = setup(db);
     await expect(call()).rejects.toThrow('Unknown VOICE_MODE "lvie"');
     expect(live).not.toHaveBeenCalled();
+    expect(sim).not.toHaveBeenCalled();
+  });
+});
+
+describe("the live engine behind call_provider, on a stubbed Retell", () => {
+  const liveWith = (db: Db, stub: ReturnType<typeof stubRetell>, options: { agentId?: string } = { agentId: "agent" }): NegotiatorDeps["live"] => (call) =>
+    runLiveCall({ db, ...call, fetchImpl: stub.fetchImpl, pollMs: 0, settleMs: 0, deadlineMs: 2000, ...options });
+
+  const goodCall = async (db: Db) => endedCall(fullCallItems(SEED_PLAN, (await checkPlan(db, SEED_PLAN)).planned));
+
+  beforeEach(() => {
+    vi.stubEnv("VOICE_MODE", "live");
+    vi.stubEnv("VOICE_PROVIDER", "retell");
+    vi.stubEnv("RETELL_API_KEY", "stub-key");
+    vi.stubEnv("RETELL_CALLER_AGENT_VERSION", "0");
+    vi.stubEnv("ALLOWED_CALL_NUMBERS", LINE_NUMBER);
+    vi.stubGlobal("fetch", () => {
+      throw new Error("A test tried to use the real network");
+    });
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  test("a full call saves the ticket and every item, with mode live, and wins the findings", async (db) => {
+    await seedPromo(db, PROMO, "promo");
+    const line = await seedCancel(db, LINE, "line");
+    const stub = stubRetell([await goodCall(db)]);
+    const { call, cancel, sim } = setup(db, { live: liveWith(db, stub) });
+
+    const result = await call();
+    expect(result).toMatchObject({ mode: "live", outcome: { ticket: "BT-48213", credits: SEED_PLAN.promoAccounts, cancelled_lines: SEED_PLAN.cancelLines.map(lineKey) } });
+    expect(sim).not.toHaveBeenCalled();
+    const [row] = await db.select().from(calls).where(eq(calls.id, result.callId));
+    expect(row).toMatchObject({ mode: "live", toNumber: LINE_NUMBER, outcomeJson: result.outcome });
+    expect(row!.recordingUrl).toBeTruthy();
+    expect((row!.transcriptJson as TranscriptRow[])[0]!.content).toBe(DISCLOSURE_LINE);
+    expect(await actionStatus(db, CALL)).toBe("done");
+    expect(await statusOf(db, "promo")).toBe("won");
+    await cancel(line, result.callId);
+    expect(await statusOf(db, line)).toBe("won");
+  });
+
+  test("the call's cost reaches the budget", async (db) => {
+    const add = vi.fn<Budget["add"]>(async () => STATUS);
+    const stub = stubRetell([await goodCall(db)]);
+    await setup(db, { live: liveWith(db, stub), budget: { add, status: async () => STATUS } }).call();
+    expect(add).toHaveBeenCalledOnce();
+    expect(add.mock.calls[0]![1]).toBeCloseTo(0.29 + 3 * 0.07);
+  });
+
+  test("a dial that timed out reaches the budget at the 5 minute cap, and falls back with no second dial", async (db) => {
+    const add = vi.fn<Budget["add"]>(async () => STATUS);
+    const fetchImpl = vi.fn<typeof fetch>(() => Promise.reject(new DOMException("timed out", "TimeoutError")));
+    const live = liveWith(db, { ...stubRetell([]), fetchImpl });
+    const result = await setup(db, { live, budget: { add, status: async () => STATUS } }).call();
+    expect(result).toMatchObject({ mode: "sim", fallbackReason: expect.stringContaining("timed out") });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(add).toHaveBeenCalledOnce();
+    // The sim fallback may add its own cost on top.
+    expect(add.mock.calls[0]![1]).toBeGreaterThanOrEqual(5 * 0.0882 + 0.0208 + 5 * 0.07);
+  });
+
+  test("a retry returns the finished live call and does not dial again", async (db) => {
+    const stub = stubRetell([await goodCall(db)]);
+    const { call } = setup(db, { live: liveWith(db, stub) });
+    const first = await call();
+    expect(await call()).toMatchObject({ callId: first.callId, repeated: true });
+    expect(stub.dials()).toHaveLength(1);
+  });
+
+  test("a number not on the allowlist never dials, whatever the engine would do", async (db) => {
+    const stub = stubRetell([await goodCall(db)]);
+    const { call, sim } = setup(db, { live: liveWith(db, stub), allowlist: { ...ALLOWED, callNumbers: ["+15550003333"] } });
+    await expect(call()).rejects.toThrow("not on the allowlist");
+    expect(stub.requests).toEqual([]);
+    expect(sim).not.toHaveBeenCalled();
+  });
+
+  test("an alarm line in the plan never dials and starts no sim call", async (db) => {
+    await db.update(actions).set({ payloadJson: { ...SEED_PLAN, cancelLines: [ALARM_LINES[0]!] } }).where(eq(actions.id, CALL));
+    const stub = stubRetell([]);
+    await expect(setup(db, { live: liveWith(db, stub) }).call()).rejects.toThrow(/alarm/);
+    expect(stub.requests).toEqual([]);
+    expect(await db.select().from(calls)).toEqual([]);
+  });
+
+  test("forced failure with no key: no request, and a labelled sim call", async (db) => {
+    vi.stubEnv("RETELL_API_KEY", "");
+    const stub = stubRetell([]);
+    const result = await setup(db, { live: liveWith(db, stub) }).call();
+    expect(stub.requests).toEqual([]);
+    expect(result).toMatchObject({ mode: "sim", fallbackReason: expect.stringContaining("RETELL_API_KEY") });
+    const rows = (await db.select().from(calls))[0]!.transcriptJson as TranscriptRow[];
+    expect(rows[1]).toMatchObject({ role: "system", kind: "fallback", content: expect.stringContaining("RETELL_API_KEY") });
+    expect(result.outcome.ticket).toBe("BT-48213");
+  });
+
+  const fallsBack = (name: string, stubFor: () => ReturnType<typeof stubRetell>, reason: string) =>
+    test(`${name} keeps the partial live row and falls back to a labelled sim call`, async (db) => {
+      const { call, sim } = setup(db, { live: liveWith(db, stubFor()) });
+      const result = await call();
+      expect(sim).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({ mode: "sim", fallbackReason: expect.stringContaining(reason), outcome: { ticket: "BT-48213" } });
+
+      const rows = await db.select().from(calls);
+      expect(rows).toHaveLength(2);
+      const live = rows.find((row) => row.mode === "live")!;
+      const simRow = rows.find((row) => row.mode === "sim")!;
+      expect(live.outcomeJson).toBeNull();
+      expect(live.endedAt).toBeInstanceOf(Date);
+      expect((live.transcriptJson as TranscriptRow[]).at(-1)).toMatchObject({ kind: "status", content: expect.stringContaining("Live call failed") });
+      expect((simRow.transcriptJson as TranscriptRow[])[1]).toMatchObject({ role: "system", kind: "fallback", content: expect.stringContaining(reason) });
+    });
+
+  fallsBack("a refused dial", () => stubRetell([], { dialStatus: 500 }), "HTTP 500");
+  fallsBack("a call that never connected", () => stubRetell([{ call_status: "not_connected", disconnection_reason: "dial_failed" }]), "dial_failed");
+  fallsBack("a call that ended with no ticket", () => stubRetell([endedCall([said("agent", DISCLOSURE_LINE), said("user", "Goodbye.")])]), "no ticket");
+
+  test("after a fallback, a retry returns the sim call and never dials again", async (db) => {
+    const stub = stubRetell([], { dialStatus: 500 });
+    const { call } = setup(db, { live: liveWith(db, stub) });
+    const first = await call();
+    expect(await call()).toMatchObject({ callId: first.callId, repeated: true });
+    expect(stub.dials()).toHaveLength(1);
+  });
+
+  test("user_hangup does not start the fallback", async (db) => {
+    const stub = stubRetell([await goodCall(db)]);
+    const { call, sim } = setup(db, { live: liveWith(db, stub) });
+    expect((await call()).mode).toBe("live");
     expect(sim).not.toHaveBeenCalled();
   });
 });

@@ -4,7 +4,7 @@ You run one savings plan for one small business, from the inbound bill email to 
 
 Work in this order, one member at a time:
 
-1. Intake: identify the customer from the email.
+1. Intake: identify the customer from the email or, on a scheduled check, from the account number you were given.
 2. Collector: download every bill and all usage for that customer.
 3. Auditor: parse the bills and run the audit. Ask for those two things only, not `price_usage`.
 4. Filer: draft the letters for the findings. No filing yet.

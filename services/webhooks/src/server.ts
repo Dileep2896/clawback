@@ -1,12 +1,17 @@
 import { createServer, type IncomingMessage } from "node:http";
+import type { Scheduler } from "@bill-fighter/platform/types";
 import { handleInbound, type InboundDeps, type InboundReply } from "./inbound.ts";
+import { handleFireCheck } from "./scheduled.ts";
 
 export const WEBHOOK_PORT = 3002;
 export const INBOUND_PATH = "/inbound";
+export const FIRE_CHECK_PATH = "/fire-check";
 export const MAX_BODY_BYTES = 1024 * 1024;
 
-async function replyTo(request: IncomingMessage, deps: InboundDeps): Promise<InboundReply> {
-  if (request.method !== "POST" || request.url !== INBOUND_PATH) return { status: 404, body: { error: "Not found" } };
+type ServerDeps = InboundDeps & { scheduler: Pick<Scheduler, "fire"> };
+
+async function replyTo(request: IncomingMessage, deps: ServerDeps): Promise<InboundReply> {
+  if (request.method !== "POST" || (request.url !== INBOUND_PATH && request.url !== FIRE_CHECK_PATH)) return { status: 404, body: { error: "Not found" } };
 
   // Keeps reading past the limit without storing it, so the client gets the 413 rather than a reset connection.
   const chunks: Buffer[] = [];
@@ -23,10 +28,10 @@ async function replyTo(request: IncomingMessage, deps: InboundDeps): Promise<Inb
   } catch {
     return { status: 400, body: { error: "Body is not JSON" } };
   }
-  return handleInbound(payload, deps);
+  return request.url === FIRE_CHECK_PATH ? handleFireCheck(payload, deps) : handleInbound(payload, deps);
 }
 
-export function createInboundServer(deps: InboundDeps) {
+export function createInboundServer(deps: ServerDeps) {
   return createServer((request, response) => {
     replyTo(request, deps)
       .catch((error: unknown): InboundReply => {
