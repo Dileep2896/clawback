@@ -2,7 +2,7 @@ import type { BillFixture } from "@bill-fighter/shared/fixtures";
 import { Tariff } from "@bill-fighter/shared/tariff";
 import { describe, expect, it } from "vitest";
 import { arithmeticCheck } from "./arithmetic-check.ts";
-import type { AuditInput } from "./input.ts";
+import { billsOf, type AuditInput } from "./input.ts";
 import { meterMultiplierJump } from "./meter-multiplier.ts";
 import { promoExpiry } from "./promo-expiry.ts";
 import { thirdPartySupplier } from "./third-party-supplier.ts";
@@ -88,6 +88,32 @@ const swapped = (after: number, multiple = 2) => [
   bill(1),
   ...Array.from({ length: after }, (_, i) => billedAt(i + 2, multiple, "NEW")),
 ];
+
+describe("billsOf", () => {
+  const dated = (id: string, periodStart: string, periodEnd: string) => ({ ...bill(0), id, periodStart, periodEnd });
+  const ids = (bills: BillFixture[]) => billsOf(input(bills), ACCOUNT).map((b) => b.id);
+  const jan = dated("jan", "2023-01-01", "2023-01-31");
+
+  it("keeps adjacent bills and bills either side of a gap, oldest first", () => {
+    expect(ids([dated("apr", "2023-04-01", "2023-04-30"), dated("feb", "2023-02-01", "2023-02-28"), jan])).toEqual(["jan", "feb", "apr"]);
+  });
+
+  it.each([
+    ["the same period", "2023-01-01", "2023-01-31"],
+    ["part of the period", "2023-01-15", "2023-02-14"],
+    ["one shared day", "2023-01-31", "2023-02-28"],
+    ["a period inside it", "2023-01-10", "2023-01-20"],
+  ])("leaves out both bills when they share %s, in either input order", (_, start, end) => {
+    const other = dated("other", start, end);
+    const clean = dated("mar", "2023-03-01", "2023-03-31");
+    expect(ids([jan, other, clean])).toEqual(["mar"]);
+    expect(ids([clean, other, jan])).toEqual(["mar"]);
+  });
+
+  it("only looks within one account", () => {
+    expect(ids([jan, { ...jan, id: "elsewhere", accountId: "a-other" }])).toEqual(["jan"]);
+  });
+});
 
 describe("meterMultiplierJump", () => {
   it("claims the overbill by hand on 14 bills, with exact evidence", () => {
@@ -223,12 +249,43 @@ describe("meterMultiplierJump", () => {
       expect(finding!.annualSavingsCents).toBe(0);
     });
 
-    it("claims a reissued bill for the same period once", () => {
-      const bills = swapped(2);
-      const [finding] = meterMultiplierJump(input([...bills, { ...bills.at(-1)!, id: "reissued" }]));
-      expect(finding!.refundCents).toBe(2 * OVERBILLED_AT_2X);
-      expect(finding!.evidence.billIds).not.toContain("reissued");
+  });
+
+  describe("excludes reissued bills, whichever order they arrive in", () => {
+    const corrected = (i: number) => ({ ...bill(i, { meterNumber: "NEW" }), id: "corrected" });
+    const bothOrders = (first: BillFixture, second: BillFixture) => [
+      [first, second],
+      [second, first],
+    ];
+
+    it.each(bothOrders(billedAt(1, 2, "NEW"), corrected(1)))("leaves no stale claim on a corrected bill", (first, second) => {
+      expect(meterMultiplierJump(input([bill(0), first, second], { intervals: { [ACCOUNT]: intervalsFor(2) } }))).toEqual([]);
+    });
+
+    it.each(bothOrders(billedAt(3, 2, "NEW"), corrected(3)))("claims neither version of a reissued latest bill", (first, second) => {
+      const bills = swapped(1);
+      const [finding] = meterMultiplierJump(input([...bills, first, second], { intervals: { [ACCOUNT]: intervalsFor(4) } }));
+      expect(finding!.refundCents).toBe(OVERBILLED_AT_2X);
+      expect(finding!.evidence.billIds).toEqual([bills[2]!.id]);
       expect(finding!.annualSavingsCents).toBe(0);
+      expect(finding!.explanation).toMatch(/does not confirm/);
+    });
+
+    it("does not call bills correct again when a newer reissue is unresolved", () => {
+      const bills = [...swapped(1), bill(3, { meterNumber: "NEW" }), billedAt(4, 2, "NEW"), corrected(4)];
+      const [finding] = meterMultiplierJump(input(bills, { intervals: { [ACCOUNT]: intervalsFor(5) } }));
+      expect(finding!.explanation).not.toMatch(/correct again/);
+    });
+
+    it("needs an adjacent baseline, so a reissue right before the jump gives no finding", () => {
+      const bills = [bill(0), bill(1), { ...bill(1), id: "reissued" }, billedAt(2, 2, "NEW")];
+      expect(meterMultiplierJump(input(bills, { intervals: { [ACCOUNT]: intervalsFor(3) } }))).toEqual([]);
+    });
+
+    it("still counts the claim window back from a reissued latest bill", () => {
+      const bills = [...swapped(40), billedAt(42, 2, "NEW"), corrected(42)];
+      const [finding] = meterMultiplierJump(input(bills));
+      expect(finding!.refundCents).toBe(35 * OVERBILLED_AT_2X);
     });
   });
 
@@ -331,6 +388,37 @@ describe("promoExpiry", () => {
     expect(promoExpiry(input([flat(0, from), flat(1, to)]))).toEqual([]);
   });
 
+  describe("only compares truly consecutive bills", () => {
+    const reissue = (i: number, totalCents: number) => flat(i, totalCents, { id: `reissue-${totalCents}` });
+
+    it.each([
+      [9_500, 18_500],
+      [18_500, 9_500],
+    ])("ignores two versions of one bill, %i then %i", (first, second) => {
+      expect(promoExpiry(input([reissue(0, first), reissue(0, second)]))).toEqual([]);
+    });
+
+    it("ignores a rise across a missing month", () => {
+      expect(promoExpiry(input([flat(0, 9_500), flat(2, 18_500)]))).toEqual([]);
+    });
+
+    it("ignores a rise across a reissued month", () => {
+      expect(promoExpiry(input([flat(0, 9_500), reissue(1, 9_500), reissue(1, 18_500), flat(2, 18_500)]))).toEqual([]);
+    });
+
+    it.each([
+      [9_500, 18_500],
+      [18_500, 9_500],
+    ])("claims no savings when the latest bill is reissued, %i then %i", (first, second) => {
+      expect(promoExpiry(input([flat(0, 9_500), flat(1, 18_500), reissue(2, first), reissue(2, second)]))).toEqual([]);
+    });
+
+    it("still finds a rise when an older reissue has been left out", () => {
+      const bills = [reissue(0, 9_500), reissue(0, 9_600), flat(1, 9_500), flat(2, 18_500)];
+      expect(promoExpiry(input(bills)).map((f) => f.annualSavingsCents)).toEqual([108_000]);
+    });
+  });
+
   describe("with several lines", () => {
     const line = (id: string, description: string) =>
       ({ id, description, quantity: 1, unit: "month", rate: null, amountCents: 0, lineType: "internet" }) as const;
@@ -380,6 +468,14 @@ describe("thirdPartySupplier", () => {
     expect(finding!.refundCents).toBe(0);
     expect(finding!.annualSavingsCents).toBe(0);
     expect(`${finding!.title} ${finding!.explanation}`).not.toMatch(/switch|cancel|cheaper|save/i);
+  });
+
+  it("cites no reissued bill as evidence, and reads the plan from a clean bill", () => {
+    const reissued = { ...gasBill, id: "g-2", periodStart: monthStart(1), periodEnd: monthEnd(1) };
+    const bills = [gasBill, reissued, { ...reissued, id: "g-3", planCode: "OTHER" }];
+    const [finding] = thirdPartySupplier(input(bills, { accounts: [electric, { ...gas, provider: "supplier" }] }));
+    expect(finding!.evidence.billIds).toEqual(["g-1"]);
+    expect(finding!.evidence.detail.planCode).toBe("FIXED");
   });
 
   it("does not flag gas from the location's utility", () => {

@@ -1,6 +1,6 @@
 import type { BillFixture } from "@bill-fighter/shared/fixtures";
 import { Finding } from "@bill-fighter/shared/finding";
-import { billsOf, dollars, type AuditInput } from "./input.ts";
+import { billsOf, dollars, followsOn, latestPeriodEnd, type AuditInput } from "./input.ts";
 
 // Sorted, not a set: the order a bill prints its lines in is not usage, but a repeated line is.
 const unordered = (entries: unknown[]) => entries.map((e) => JSON.stringify(e)).sort();
@@ -19,10 +19,12 @@ export function promoExpiry(input: AuditInput): Finding[] {
   return input.accounts.flatMap((account) => {
     const bills = billsOf(input, account.id);
     const latest = bills.at(-1);
+    // Savings are measured from the latest bill, and a newer left-out reissue may have corrected the price.
+    if (latest?.periodEnd !== latestPeriodEnd(input, account.id)) return [];
     for (let i = 1; i < bills.length; i++) {
       const before = bills[i - 1]!;
       const after = bills[i]!;
-      if (before.planCode === null || before.planCode !== after.planCode) continue;
+      if (!followsOn(before, after) || before.planCode === null || before.planCode !== after.planCode) continue;
       if (!upOver30Percent(before, after) || usage(before) !== usage(after)) continue;
       // Savings come from the latest bill, so it must still be the same deal at the higher price.
       if (latest!.planCode !== before.planCode || usage(latest!) !== usage(before) || !upOver30Percent(before, latest!)) continue;

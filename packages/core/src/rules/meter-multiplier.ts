@@ -2,12 +2,11 @@ import type { BillFixture } from "@bill-fighter/shared/fixtures";
 import { Finding } from "@bill-fighter/shared/finding";
 import { RateSchedule, type Tariff } from "@bill-fighter/shared/tariff";
 import { priceUsage, type Interval } from "../tariff/price-usage.ts";
-import { billsOf, dollars, type AuditInput } from "./input.ts";
+import { billsOf, dollars, followsOn, latestPeriodEnd, type AuditInput } from "./input.ts";
 
 const CLAIM_MONTHS = 36;
 const SAVINGS_MONTHS = 12;
 const NEAR = 0.01;
-const MS_PER_DAY = 86_400_000;
 
 const threeDecimals = (value: number) => Number(value.toFixed(3));
 const isNear = (ratio: number, whole: number) => Math.abs(ratio - whole) <= whole * NEAR;
@@ -19,10 +18,6 @@ function monthsBefore(date: string, months: number) {
   lastDay.setUTCDate(Math.min(from.getUTCDate(), lastDay.getUTCDate()));
   return lastDay.toISOString().slice(0, 10);
 }
-
-// Period ends are inclusive, so the next bill starts the day after.
-const followsOn = (earlier: BillFixture, later: BillFixture) =>
-  new Date(Date.parse(earlier.periodEnd) + MS_PER_DAY).toISOString().slice(0, 10) === later.periodStart;
 
 // shortcut: a gap of exactly half a bill's intervals would look like a doubled bill, so check interval counts if real meter feeds are ever loaded.
 function compare(bill: BillFixture, intervals: Interval[], tariff: Tariff) {
@@ -59,8 +54,9 @@ export function meterMultiplierJump(input: AuditInput): Finding[] {
       return row && row.intervalKwh > 0 ? row : null;
     });
     const rows = slots.filter((r) => r !== null);
-    const latest = slots.at(-1);
-    const anchor = bills.at(-1)!.periodEnd;
+    const anchor = latestPeriodEnd(input, account.id);
+    // Null when a left-out reissue is newer than every bill here, so nothing can speak for the current bill.
+    const latest = bills.at(-1)!.periodEnd === anchor ? slots.at(-1) : null;
     const claimFrom = monthsBefore(anchor, CLAIM_MONTHS);
     const savingsFrom = monthsBefore(anchor, SAVINGS_MONTHS);
 
@@ -73,20 +69,19 @@ export function meterMultiplierJump(input: AuditInput): Finding[] {
         before.bill.meterNumber !== null && jump.bill.meterNumber !== null && before.bill.meterNumber !== jump.bill.meterNumber;
       if (!meterChanged || !isNear(before.ratio, 1) || multiple < 2 || !isNear(jump.ratio, multiple)) continue;
 
-      // A later bill is checked on its own numbers, so it can join across a skipped bill, but only on the same
-      // meter and only if it does not overlap (a reissued bill would claim one period twice).
+      // A later bill is checked on its own numbers, so it can join across a skipped bill, but only on the same meter.
       const run = [jump];
       let end = i;
       for (let next = i + 1; next < slots.length; next++) {
         const row = slots[next];
         if (!row) continue;
         const sameMeter = row.bill.meterNumber === jump.bill.meterNumber;
-        if (!sameMeter || row.bill.periodStart <= run.at(-1)!.bill.periodEnd || !isNear(row.ratio, multiple)) break;
+        if (!sameMeter || !isNear(row.ratio, multiple)) break;
         run.push(row);
         end = next;
       }
       // Only the actual latest bill can show the overbilling is still going on.
-      const stillBilling = end === slots.length - 1;
+      const stillBilling = run.at(-1) === latest;
       i = end;
 
       const claimable = run.filter((r) => r.bill.periodStart >= claimFrom);
