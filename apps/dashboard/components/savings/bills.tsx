@@ -11,10 +11,10 @@ type Bill = Snapshot["bills"][number];
 // Only an uploaded PDF goes through the parser; a bill with no confidence came in as data, so the cell stays empty.
 const confidence = (value: number | null) => (value === null ? "" : `${Math.round(value * 100)}%`);
 
-/** Rows arrive ordered by site, then account, so grouping keeps that order. */
-function bySite(bills: Bill[]) {
+/** Rows arrive ordered by site, then account, so grouping keeps that order. By id: two locations can share a name. */
+export function bySite(bills: Bill[]) {
   const sites = new Map<string, Bill[]>();
-  for (const bill of bills) sites.set(bill.site, [...(sites.get(bill.site) ?? []), bill]);
+  for (const bill of bills) sites.set(bill.locationId, [...(sites.get(bill.locationId) ?? []), bill]);
   return [...sites];
 }
 
@@ -35,10 +35,10 @@ export function Bills() {
         </EmptyState>
       )}
       <div className="grid gap-10">
-        {bySite(bills).map(([site, siteBills]) => (
-          <section key={site} data-testid="bills-site" aria-labelledby={`site-${site}`}>
-            <h2 id={`site-${site}`} className="mb-3 text-[1.75rem] leading-tight font-semibold">
-              {site} <span className="text-[1.125rem] font-normal text-faded">{siteBills[0]!.city}</span>
+        {bySite(bills).map(([locationId, siteBills]) => (
+          <section key={locationId} data-testid="bills-site" aria-labelledby={`site-${locationId}`}>
+            <h2 id={`site-${locationId}`} className="mb-3 text-[1.75rem] leading-tight font-semibold">
+              {siteBills[0]!.site} <span className="text-[1.125rem] font-normal text-faded">{siteBills[0]!.city}</span>
             </h2>
             <Table
               head={[

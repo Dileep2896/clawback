@@ -160,7 +160,7 @@ describe("liveSnapshot", () => {
         { ...bill, id: "theirs-jan", accountId: "theirs-electric" },
       ]);
       const snapshot = await liveSnapshot(db);
-      expect(snapshot.bills.map((b) => [b.id, b.site, b.totalCents])).toEqual([["mine-jan", "Fremont #1", 12345]]);
+      expect(snapshot.bills.map((b) => [b.id, b.locationId, b.site, b.totalCents])).toEqual([["mine-jan", "mine", "Fremont #1", 12345]]);
       expect(JSON.stringify(snapshot)).not.toContain("not-sent-to-browser");
     });
   });

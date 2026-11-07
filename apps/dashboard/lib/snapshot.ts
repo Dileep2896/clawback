@@ -44,7 +44,7 @@ export type LiveData = {
 };
 
 type BillRow = Pick<Row<typeof bills>, "id" | "periodStart" | "periodEnd" | "totalCents" | "parseConfidence"> &
-  Pick<Row<typeof accounts>, "provider" | "accountNumber" | "serviceType"> & { accountId: string; site: string; city: string };
+  Pick<Row<typeof accounts>, "provider" | "accountNumber" | "serviceType"> & { accountId: string; locationId: string; site: string; city: string };
 
 /** What the browser receives: JSON turns every Date into a string. */
 type Wire<T> = T extends Date ? string : T extends (infer U)[] ? Wire<U>[] : T extends object ? { [K in keyof T]: Wire<T[K]> } : T;
@@ -117,6 +117,7 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
         provider: accounts.provider,
         accountNumber: accounts.accountNumber,
         serviceType: accounts.serviceType,
+        locationId: locations.id,
         site: locations.name,
         city: locations.city,
       })
@@ -124,7 +125,7 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
       .innerJoin(accounts, eq(bills.accountId, accounts.id))
       .innerJoin(locations, eq(accounts.locationId, locations.id))
       .where(eq(locations.customerId, run.customerId))
-      .orderBy(asc(locations.name), asc(accounts.id), desc(bills.periodStart), asc(bills.id)),
+      .orderBy(asc(locations.name), asc(locations.id), asc(accounts.id), desc(bills.periodStart), asc(bills.id)),
     // shortcut: sms_messages has no run or customer id, so a run's thread is found by time. Add a run_id if runs ever overlap.
     db.select().from(smsMessages).where(gte(smsMessages.createdAt, run.startedAt)).orderBy(asc(smsMessages.createdAt), asc(smsMessages.id)),
     db
