@@ -42,10 +42,14 @@ export function createLlm(query: Query = sdkQuery as Query, login: () => Promise
   return {
     async structured<T>(input: LlmInput, jsonSchema: JsonSchema): Promise<T> {
       const validate = compile(jsonSchema);
+      // The CLI rejects the 2020-12 $schema URL that z.toJSONSchema emits. Ajv above still validates to that draft.
+      const sentSchema = { ...jsonSchema };
+      delete sentSchema.$schema;
       const abortController = new AbortController();
       const messages: SDKMessage[] = [];
       const thrown: unknown[] = [];
       let output: unknown;
+      let costUsd: number | undefined;
       try {
         await login();
         const stream = query({
@@ -54,13 +58,14 @@ export function createLlm(query: Query = sdkQuery as Query, login: () => Promise
             ...loginOptions(),
             abortController,
             tools: [],
-            outputFormat: { type: "json_schema", schema: jsonSchema },
+            outputFormat: { type: "json_schema", schema: sentSchema },
             ...(input.system ? { systemPrompt: input.system } : {}),
           },
         });
         for await (const message of stream) {
           messages.push(message);
           if (message.type === "system" && message.subtype === "init") assertInit(message, ALLOWED_INIT);
+          if (message.type === "result") costUsd = message.total_cost_usd;
           if (message.type === "result" && message.subtype === "success") output = message.structured_output;
         }
       } catch (error) {
@@ -68,6 +73,7 @@ export function createLlm(query: Query = sdkQuery as Query, login: () => Promise
       } finally {
         abortController.abort();
       }
+      if (costUsd !== undefined) input.onCost?.(costUsd);
       const { finished, reason } = runOutcome(messages, ALLOWED_INIT, thrown);
       if (!finished) throw new Error(`Llm.structured failed: ${reason}`);
       if (output === undefined) throw new Error("Llm.structured failed: the result had no structured output");

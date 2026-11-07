@@ -52,6 +52,8 @@ export type LlmInput = {
   system?: string;
   // The parser retries with page images.
   images?: { mediaType: string; base64: string }[];
+  // Told what the call cost, as an SDK estimate and not a bill, even if the call then fails.
+  onCost?: (usd: number) => void;
 };
 
 export interface Llm {
