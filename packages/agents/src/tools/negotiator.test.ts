@@ -446,6 +446,8 @@ describe("the live engine behind call_provider, on a stubbed Retell", () => {
       },
     };
     const { call } = setup(db, { live: liveWith(db, stub), llm: down });
+    // setup's approved bundle feeds the caller's fact sheet, so only a new approval would be wrong.
+    const approvalsBefore = await db.$count(approvals);
     await expect(call()).rejects.toThrow("did not answer");
     await expect(call()).rejects.toThrow("did not answer");
     expect(stub.dials()).toHaveLength(1);
@@ -453,7 +455,7 @@ describe("the live engine behind call_provider, on a stubbed Retell", () => {
     const cards = await db.select().from(boardCards).where(eq(boardCards.agent, "run"));
     expect(cards).toMatchObject([{ status: "blocked", title: expect.stringContaining("provider call could not be completed") }]);
     expect(cards[0]!.title).not.toContain("HTTP 500");
-    expect(await db.$count(approvals)).toBe(0);
+    expect(await db.$count(approvals)).toBe(approvalsBefore);
   });
 
   test("user_hangup does not start the fallback", async (db) => {
