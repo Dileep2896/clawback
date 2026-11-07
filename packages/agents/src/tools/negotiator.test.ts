@@ -18,6 +18,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadTools } from "../registry.ts";
 import { wrapTool } from "../tool-wrapper.ts";
+import { letterActionId } from "./filer.ts";
 import { negotiatorTools, type NegotiatorDeps } from "./negotiator.ts";
 
 const CALL = "call-action";
@@ -453,6 +454,23 @@ describe("cancel_service", () => {
     await expect(cancel(id, callId)).resolves.toEqual({ recorded: LINE });
     expect(await statusOf(db, id)).toBe("won");
     expect(await actionStatus(db, id)).toBe("done");
+  });
+
+  test("closes this run's letter for a confirmed line, and a refused line's letter stays open", async (db) => {
+    const won = await seedCancel(db, SEED_PLAN.cancelLines[1]!, "won-line");
+    const refused = await seedCancel(db, LINE, "refused-line");
+    const letter = (findingId: string, runId = CTX.runId) => ({ id: letterActionId(runId, findingId), findingId, kind: "letter" as const, status: "proposed" });
+    await db.insert(actions).values([letter(won), letter(refused), letter(won, "other-run")]);
+    const { call, cancel } = setup(db, { refuse: [LINE] });
+    const { callId } = await call();
+
+    await cancel(won, callId);
+    await cancel(won, callId);
+    await expect(cancel(refused, callId)).rejects.toThrow("does not confirm");
+
+    expect(await actionStatus(db, letterActionId(CTX.runId, won))).toBe("done");
+    expect(await actionStatus(db, letterActionId(CTX.runId, refused))).toBe("proposed");
+    expect(await actionStatus(db, letterActionId("other-run", won))).toBe("proposed");
   });
 
   test("never records an alarm line, even when a tampered outcome lists it", async (db) => {
