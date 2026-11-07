@@ -7,7 +7,7 @@ import { createApprovalGate } from "@bill-fighter/platform/local/approval-gate";
 import type { Audit, Budget, Llm } from "@bill-fighter/platform/types";
 import type { Allowlist } from "@bill-fighter/shared/allowlist";
 import { LINE_NUMBER } from "@bill-fighter/voice/live/line/script";
-import { runSimCall } from "@bill-fighter/voice/sim/engine";
+import { lineKey, runSimCall } from "@bill-fighter/voice/sim/engine";
 import { ALARM_LINES, SEED_PLAN, seedCallData } from "@bill-fighter/voice/sim/fixture";
 import { stubLlm } from "@bill-fighter/voice/sim/stub-llm";
 import type { TranscriptRow } from "@bill-fighter/voice/transcript";
@@ -161,7 +161,7 @@ describe("call_provider", () => {
   test("a full call saves the outcome, and marks the action done and the promo won", async (db) => {
     await seedPromo(db, PROMO, "promo");
     const result = await setup(db).call();
-    expect(result.outcome.cancelled_lines).toEqual(SEED_PLAN.cancelLines);
+    expect(result.outcome.cancelled_lines).toEqual(SEED_PLAN.cancelLines.map(lineKey));
     expect(result.outcome.credits).toEqual(SEED_PLAN.promoAccounts);
     expect(result.outcome.ticket).toBe("BT-48213");
     const [row] = await db.select().from(calls).where(eq(calls.id, result.callId));
@@ -178,7 +178,7 @@ describe("call_provider", () => {
     const { call, cancel } = setup(db, { refuse: [LINE, PROMO] });
 
     const { callId, outcome } = await call();
-    expect(outcome.cancelled_lines).not.toContain(LINE);
+    expect(outcome.cancelled_lines).not.toContain(lineKey(LINE));
     expect(outcome.cancelled_lines).toHaveLength(6);
     expect(outcome.credits).not.toContain(PROMO);
     expect(outcome.credits).toHaveLength(2);
@@ -198,6 +198,14 @@ describe("call_provider", () => {
     const second = await call();
     expect(second).toMatchObject({ callId: first.callId, repeated: true, outcome: first.outcome });
     expect(sim).toHaveBeenCalledOnce();
+    expect(await db.select().from(calls)).toHaveLength(1);
+  });
+
+  test("two overlapping uses for one action start the engine once and return the same outcome", async (db) => {
+    const { call, sim } = setup(db);
+    const [first, second] = await Promise.all([call(), call()]);
+    expect(sim).toHaveBeenCalledOnce();
+    expect(second).toEqual(first);
     expect(await db.select().from(calls)).toHaveLength(1);
   });
 

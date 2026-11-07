@@ -1,9 +1,10 @@
 import { REP_LINES } from "./live/line/script.ts";
+import { lineKey } from "./sim/engine.ts";
 import type { TranscriptRow } from "./transcript.ts";
 
 export type CallOutcome = { cancelled_lines: string[]; credits: string[]; ticket: string | null };
 
-const PHONE_NUMBER = /\(?\d{3}\)?[ .-]?\d{3}[ .-]?\d{4}/g;
+const PHONE_NUMBER = /(?<!\d)(?:\+?1[ .-]?)?\(?\d{3}\)?[ .-]?\d{3}[ .-]?\d{4}(?!\d)/g;
 const PROMO_ACCOUNT = /\bBC-\d+\b/g;
 
 // Speech-to-text punctuates and spells freely, so only the words are compared.
@@ -31,7 +32,7 @@ export function extractOutcome(rows: TranscriptRow[]): CallOutcome {
     const answer = rows[index + 1];
     if (!isSpeech(row, "agent") || !isSpeech(answer, "provider")) return;
     const heard = words(answer!.content);
-    if (heard === words(REP_LINES.cancel)) for (const [line] of row.content.matchAll(PHONE_NUMBER)) cancelled.add(line);
+    if (heard === words(REP_LINES.cancel)) for (const [line] of row.content.matchAll(PHONE_NUMBER)) cancelled.add(lineKey(line));
     if (heard === words(REP_LINES.promo)) for (const [account] of row.content.matchAll(PROMO_ACCOUNT)) credits.add(account);
   });
   const ticket = rows.filter((row) => isSpeech(row, "provider")).map(ticketIn).find(Boolean) ?? null;

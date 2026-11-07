@@ -41,6 +41,47 @@ export function negotiatorTools({ db, budget, sim, live }: NegotiatorDeps) {
     }
   }
 
+  async function callOnce(actionId: string, runId: string) {
+    const [action] = await db.select().from(actions).where(eq(actions.id, actionId));
+    // The gate only proves the id is in an approved bundle, not that a call is what was approved.
+    if (action?.kind !== "call") throw new Error(`call_provider needs a call action, and ${actionId} is not one`);
+
+    // A retry returns the finished call, so a repeated tool use cannot place a second one.
+    const [finished] = await db
+      .select()
+      .from(calls)
+      .where(and(eq(calls.actionId, actionId), isNotNull(calls.outcomeJson)));
+    if (finished) return { callId: finished.id, mode: finished.mode, outcome: finished.outcomeJson, repeated: true };
+
+    const plan = CALL_PLAN.parse(action.payloadJson);
+    let costUsd = 0;
+    try {
+      const placed = await place({ actionId, plan, onCost: (usd) => (costUsd += usd) });
+      const [call] = await db.select().from(calls).where(eq(calls.id, placed.callId));
+      const outcome = extractOutcome(call!.transcriptJson as TranscriptRow[]);
+      // Only accounts the owner approved can be won, whatever was said on the call.
+      const restored = outcome.credits.filter((account) => plan.promoAccounts.includes(account));
+      await db.transaction(async (tx) => {
+        await tx.update(calls).set({ outcomeJson: outcome }).where(eq(calls.id, placed.callId));
+        await tx.update(actions).set({ status: "done" }).where(eq(actions.id, actionId));
+        if (restored.length === 0) return;
+        // shortcut: account numbers are matched across customers, like the sim's line lookup. Scope by customer if the demo ever has two.
+        const accountIds = tx.select({ id: accounts.id }).from(accounts).where(inArray(accounts.accountNumber, restored));
+        await tx
+          .update(findings)
+          .set({ status: "won" })
+          .where(and(eq(findings.type, "promoExpiry"), inArray(findings.accountId, accountIds)));
+      });
+      return { ...placed, outcome };
+    } finally {
+      // A failed budget write is only logged: it must not hide a call that happened, or the error of one that failed.
+      if (costUsd > 0) await budget().then((b) => b.add(runId, costUsd)).catch((error) => console.warn(`Call cost not recorded: ${textOf(error)}`));
+    }
+  }
+
+  // shortcut: covers one process, and the run is one process. Claim in the database if calls ever start from two.
+  const running = new Map<string, ReturnType<typeof callOnce>>();
+
   return [
     defineTool({
       name: "call_provider",
@@ -49,42 +90,13 @@ export function negotiatorTools({ db, budget, sim, live }: NegotiatorDeps) {
       inputSchema: z.object({ actionId: z.string().min(1) }),
       // Fixed in code, so the model cannot choose who is dialled.
       targets: () => [{ kind: "phone", value: LINE_NUMBER }],
-      async handler({ actionId }, { runId }) {
-        const [action] = await db.select().from(actions).where(eq(actions.id, actionId));
-        // The gate only proves the id is in an approved bundle, not that a call is what was approved.
-        if (action?.kind !== "call") throw new Error(`call_provider needs a call action, and ${actionId} is not one`);
-
-        // A retry returns the finished call, so a repeated tool use cannot place a second one.
-        const [finished] = await db
-          .select()
-          .from(calls)
-          .where(and(eq(calls.actionId, actionId), isNotNull(calls.outcomeJson)));
-        if (finished) return { callId: finished.id, mode: finished.mode, outcome: finished.outcomeJson, repeated: true };
-
-        const plan = CALL_PLAN.parse(action.payloadJson);
-        let costUsd = 0;
-        try {
-          const placed = await place({ actionId, plan, onCost: (usd) => (costUsd += usd) });
-          const [call] = await db.select().from(calls).where(eq(calls.id, placed.callId));
-          const outcome = extractOutcome(call!.transcriptJson as TranscriptRow[]);
-          // Only accounts the owner approved can be won, whatever was said on the call.
-          const restored = outcome.credits.filter((account) => plan.promoAccounts.includes(account));
-          await db.transaction(async (tx) => {
-            await tx.update(calls).set({ outcomeJson: outcome }).where(eq(calls.id, placed.callId));
-            await tx.update(actions).set({ status: "done" }).where(eq(actions.id, actionId));
-            if (restored.length === 0) return;
-            // shortcut: account numbers are matched across customers, like the sim's line lookup. Scope by customer if the demo ever has two.
-            const accountIds = tx.select({ id: accounts.id }).from(accounts).where(inArray(accounts.accountNumber, restored));
-            await tx
-              .update(findings)
-              .set({ status: "won" })
-              .where(and(eq(findings.type, "promoExpiry"), inArray(findings.accountId, accountIds)));
-          });
-          return { ...placed, outcome };
-        } finally {
-          // A failed budget write is only logged: it must not hide a call that happened, or the error of one that failed.
-          if (costUsd > 0) await budget().then((b) => b.add(runId, costUsd)).catch((error) => console.warn(`Call cost not recorded: ${textOf(error)}`));
-        }
+      handler({ actionId }, { runId }) {
+        // No await between the lookup and the set, so two overlapping uses cannot both start a call.
+        const shared = running.get(actionId);
+        if (shared) return shared;
+        const call = callOnce(actionId, runId).finally(() => running.delete(actionId));
+        running.set(actionId, call);
+        return call;
       },
     }),
 

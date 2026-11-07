@@ -8,6 +8,7 @@ import { transcriptRow, type TranscriptRow } from "./transcript.ts";
 const agent = (content: string) => transcriptRow("agent", "speech", content);
 const rep = (content: string) => transcriptRow("provider", "speech", content);
 const LINE = "(415) 555-0102";
+const LINE_KEY = "4155550102";
 const OTHER_LINE = "(510) 555-0133";
 const NONE = { cancelled_lines: [], credits: [], ticket: null };
 
@@ -21,7 +22,15 @@ describe("extractOutcome", () => {
       agent(WORDS.askTicket),
       rep(REP_LINES.ticket),
     ];
-    expect(extractOutcome(rows)).toEqual({ cancelled_lines: [LINE], credits: ["BC-7002"], ticket: "BT-48213" });
+    expect(extractOutcome(rows)).toEqual({ cancelled_lines: [LINE_KEY], credits: ["BC-7002"], ticket: "BT-48213" });
+  });
+
+  it.each(["+14155550102", "+1 415 555 0102", "1-415-555-0102", "+1 (415) 555-0102", LINE, LINE_KEY])("reads %s as the complete line", (spoken) => {
+    expect(extractOutcome([agent(WORDS.cancel(spoken, "BT-7001")), rep(REP_LINES.cancel)]).cancelled_lines).toEqual([LINE_KEY]);
+  });
+
+  it("counts one line once, however it was written", () => {
+    expect(extractOutcome([agent(`Cancel +14155550102 and ${LINE}.`), rep(REP_LINES.cancel)]).cancelled_lines).toEqual([LINE_KEY]);
   });
 
   it("leaves out items the rep refused or did not agree to", () => {
@@ -62,7 +71,7 @@ describe("extractOutcome", () => {
   });
 
   it("accepts a transcribed yes that differs only in punctuation, case or spelling", () => {
-    expect(extractOutcome([agent(WORDS.cancel(LINE, "BT-7001")), rep("yes. That is canceled")]).cancelled_lines).toEqual([LINE]);
+    expect(extractOutcome([agent(WORDS.cancel(LINE, "BT-7001")), rep("yes. That is canceled")]).cancelled_lines).toEqual([LINE_KEY]);
   });
 
   it("takes a ticket only from the rep, and only if shaped like one", () => {
