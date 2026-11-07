@@ -69,6 +69,15 @@ describe("runChecks", () => {
     expect(lines.at(-1)).toBe(`${Object.keys(ADAPTER_FILES).length} failed`);
   });
 
+  it("prints a not-available check as N/A, never PASS, without failing the run", async () => {
+    writeAllPassing();
+    write("sms.check.ts", `export default async () => ({ notAvailable: "Sms send (501)" });`);
+    expect(await run()).toBe(0);
+    expect(lines).toContain("N/A local/sms.check.ts: not available on local: Sms send (501)");
+    expect(lines).not.toContain("PASS local/sms.check.ts");
+    expect(lines.at(-1)).toBe("All checks passed (1 N/A)");
+  });
+
   it("finds checks in subfolders", async () => {
     writeAllPassing();
     mkdirSync(join(src, "local", "extra"));
