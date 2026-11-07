@@ -4,9 +4,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SCHEMA_HASH } from "@bill-fighter/agents/parse-cache";
 import { portalVaultName } from "@bill-fighter/shared/portal";
-import { afterAll, describe, expect, it } from "vitest";
+import type { Db } from "@bill-fighter/db/client";
+import { accounts, customers, locations, runs } from "@bill-fighter/db/schema";
+import { CUSTOMER } from "@bill-fighter/db/seed/customer";
+import { withTestDb } from "@bill-fighter/db/test-db";
+import { createAudit } from "@bill-fighter/platform/local/audit";
+import { createMail } from "@bill-fighter/platform/local/mail";
+import type { RunEvent } from "@bill-fighter/platform/types";
+import { sql } from "drizzle-orm";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { seedPortalCredentials } from "../../../scripts/seed-portal-credentials.ts";
-import { connectPortal, parseUpload } from "./dashboard.ts";
+import { BILL_ACCOUNT_NUMBER } from "./bill-email.ts";
+import { connectPortal, type DashboardDeps, parseUpload, START_GUARD_MINUTES, startBillRun } from "./dashboard.ts";
 
 const root = mkdtempSync(join(tmpdir(), "webhooks-dashboard-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -112,5 +121,51 @@ describe("parseUpload", () => {
     const reply = await parseUpload({ customerId: "c1", pdfBase64: pdf.toString("base64") }, { parsedDir, uploadsDir, llm });
     expect(reply).toMatchObject({ status: 200, body: { status: "needs_review", pdfPath: join(uploadsDir, "c1", `${sha}.pdf`) } });
     expect(readdirSync(join(uploadsDir, "c1"))).toEqual([`${sha}.pdf`]);
+  });
+});
+
+describe("startBillRun", () => {
+  // Migrates a fresh database on the shared Postgres, which is slow under load.
+  vi.setConfig({ testTimeout: 60_000 });
+
+  async function depsFor(db: Db) {
+    await db.insert(customers).values({ id: CUSTOMER.id, name: CUSTOMER.name, contactName: "Owner", contactEmail: "o@billfighter.local", contactPhone: "+15550001111" });
+    await db.insert(locations).values({ id: "loc", customerId: CUSTOMER.id, name: "Store", address: "1 Main St", city: "Oakland" });
+    await db.insert(accounts).values({ id: "acct", locationId: "loc", provider: "baycurrent", accountNumber: BILL_ACCOUNT_NUMBER, serviceType: "electric" });
+    let sent = 0;
+    const mail = createMail({});
+    const deps = {
+      db,
+      runtime: { run: async function* () { yield { type: "result", status: "success", costUsd: 0 } as RunEvent; } },
+      audit: createAudit(db),
+      tools: [],
+      identity: { get: async () => ({ email: "bills@billfighter.local" }) },
+      // Slow, like Mailpit under load: the dashboard gives up after 15 s while this start is still going.
+      mail: { parseInbound: mail.parseInbound, send: async () => { await new Promise((done) => setTimeout(done, 200)); return { id: `msg-${++sent}` }; } },
+      vault: fakeVault(),
+    } as unknown as DashboardDeps;
+    return { deps, sends: () => sent };
+  }
+
+  it("starts one run when starts race or a timed-out start is retried, and a new one only after the guard window", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await withTestDb("start_bill_run", async (db) => {
+      const { deps, sends } = await depsFor(db);
+      const replies = await Promise.all([1, 2, 3].map(() => startBillRun(deps)));
+      expect(replies.map((r) => r.status).sort()).toEqual([200, 200, 202]);
+      const runId = replies.find((r) => r.status === 202)!.body.runId;
+      expect(replies.every((r) => r.body.runId === runId)).toBe(true);
+      expect(sends()).toBe(1);
+
+      // The first run has finished, but a retry minutes later is still the same audit.
+      await vi.waitFor(async () => expect((await db.select().from(runs))[0]?.finishedAt).toBeTruthy(), 30_000);
+      expect(await startBillRun(deps)).toEqual({ status: 200, body: { runId, duplicate: true } });
+
+      // A replayed recording never blocks a real start.
+      await db.update(runs).set({ startedAt: sql`now() - make_interval(mins => ${START_GUARD_MINUTES + 1})` });
+      await db.insert(runs).values({ customerId: CUSTOMER.id, platform: "local", trigger: "email", status: "running", replay: {} });
+      expect((await startBillRun(deps)).status).toBe(202);
+      expect(sends()).toBe(2);
+    });
   });
 });

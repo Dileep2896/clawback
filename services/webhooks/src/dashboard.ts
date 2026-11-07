@@ -6,9 +6,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CachedParse, createParseCache, SCHEMA_HASH } from "@bill-fighter/agents/parse-cache";
+import { runs } from "@bill-fighter/db/schema";
+import { CUSTOMER } from "@bill-fighter/db/seed/customer";
 import type { Identity, Llm, Mail, Vault } from "@bill-fighter/platform/types";
 import { Provider } from "@bill-fighter/shared/fixtures";
 import { portalVaultName } from "@bill-fighter/shared/portal";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { readCredentials, verifyLogin } from "../../../apps/portal/lib/credentials.ts";
 import { billEmail } from "./bill-email.ts";
@@ -32,12 +35,37 @@ export type DashboardDeps = InboundDeps & {
   sampleParsedDir?: string;
 };
 
-/** What demo:start always did: the bill email goes to the company inbox, then into the same handler a webhook delivery reaches. */
+// A start this soon after another is a double click, a second tab or a retry after the dashboard's 15 s timeout, not a new audit.
+export const START_GUARD_MINUTES = 5;
+
+/**
+ * What demo:start always did: the bill email goes to the company inbox, then into the same handler a webhook delivery reaches.
+ * Each send has its own message id, so inbound deduplication cannot catch a second start: this refuses it, returning the run
+ * already going. The lock makes racing starts take turns, so the second sees the first one's run row.
+ */
 export async function startBillRun(deps: DashboardDeps): Promise<InboundReply> {
-  const { email: companyEmail } = await deps.identity.get();
-  const email = billEmail(companyEmail);
-  const { id } = await deps.mail.send(email);
-  return handleInbound({ messageId: id, ...email }, deps);
+  return deps.db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`start-bill-run:${CUSTOMER.id}`}))`);
+    const [recent] = await tx
+      .select({ id: runs.id })
+      .from(runs)
+      .where(
+        and(
+          eq(runs.customerId, CUSTOMER.id),
+          isNull(runs.replay),
+          or(eq(runs.status, "running"), sql`${runs.startedAt} > now() - make_interval(mins => ${START_GUARD_MINUTES})`),
+        ),
+      )
+      .orderBy(desc(runs.startedAt))
+      .limit(1);
+    if (recent) return { status: 200, body: { runId: recent.id, duplicate: true } };
+
+    const { email: companyEmail } = await deps.identity.get();
+    const email = billEmail(companyEmail);
+    const { id } = await deps.mail.send(email);
+    // handleInbound commits the run row on its own connection before the lock is released.
+    return handleInbound({ messageId: id, ...email }, deps);
+  });
 }
 
 const ConnectBody = z.union([
