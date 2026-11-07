@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { executeRun, scheduledRunPrompt } from "@bill-fighter/agents/run";
+import { runEventLog } from "@bill-fighter/agents/run-log";
 import { accounts, locations, runs, scheduledChecks } from "@bill-fighter/db/schema";
 import { platformName } from "@bill-fighter/platform/factory";
 import type { ScheduledCheck, Scheduler } from "@bill-fighter/platform/types";
@@ -36,7 +37,7 @@ export async function startScheduledRun(check: ScheduledCheck, { db, runtime, au
   if (!created) return;
 
   // shortcut: the run lives in this process, as an inbound one does, so a crash leaves its row "running". Upgrade when a run can be resumed.
-  void executeRun({ db, runId: created.id, prompt: scheduledRunPrompt(account.accountNumber), runtime, audit, tools }).catch((error: unknown) => {
+  void executeRun({ db, runId: created.id, prompt: scheduledRunPrompt(account.accountNumber), runtime, audit, tools, onEvent: runEventLog(created.id) }).catch((error: unknown) => {
     console.error(`Run ${created.id}: could not record its result:`, error);
   });
 }

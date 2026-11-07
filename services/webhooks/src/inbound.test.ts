@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
+import { join } from "node:path";
 import { defineTool } from "@bill-fighter/agents/tool-wrapper";
 import type { Db } from "@bill-fighter/db/client";
 import { accounts, actions, approvals, auditLog, customers, locations, runs } from "@bill-fighter/db/schema";
@@ -73,6 +74,25 @@ describe("handleInbound", () => {
       // parse_inbound_email takes the whole email, so the model must be given every field.
       const prompt = run.mock.calls[0]![0].prompt;
       for (const value of Object.values(email())) expect(prompt).toContain(JSON.stringify(value));
+    });
+  });
+
+  it("keeps the run's events in its log file, and no tool input", async () => {
+    await withTestDb(DB_NAME, async (db) => {
+      await addCustomer(db, "noodle", BILL_ACCOUNT_NUMBER);
+      vi.spyOn(console, "info").mockImplementation(() => {});
+      const { deps } = depsFor(db, async function* () {
+        yield { type: "tool_call", agent: "intake", tool: "get_customer", input: { secret: "tool-input" } };
+        yield success;
+      });
+      const reply = await handleInbound(email(), deps);
+      const runId = reply.body.runId as string;
+      await finished(db, runId);
+
+      const log = readFileSync(join(process.env.RUN_EVENT_LOG_DIR!, `${runId}.log`), "utf8");
+      expect(log).toContain("[intake] calls get_customer");
+      expect(log).toContain("Run ended: success");
+      expect(log).not.toContain("tool-input");
     });
   });
 
