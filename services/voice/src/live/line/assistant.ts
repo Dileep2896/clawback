@@ -27,6 +27,11 @@ export function lineAssistant() {
 
 type Json = Record<string, unknown>;
 
+// Any hook counts, not only a transfer action: nothing but this assistant should act on the call, and a new action type cannot slip past.
+function hasHooks(owner: Json): boolean {
+  return Array.isArray(owner.hooks) ? owner.hooks.length > 0 : Boolean(owner.hooks);
+}
+
 // Everything that could route a caller anywhere but this assistant. No call may reach a personal phone.
 export function forwardingProblems(assistant: Json, phone: Json): string[] {
   const problems: string[] = [];
@@ -36,7 +41,8 @@ export function forwardingProblems(assistant: Json, phone: Json): string[] {
   }
   if (model.toolIds?.length) problems.push("assistant has saved tools attached");
   if (assistant.forwardingPhoneNumber) problems.push("assistant has a forwarding number");
-  if (assistant.hooks) problems.push("assistant has hooks");
+  if (hasHooks(assistant)) problems.push("assistant has hooks");
+  if (hasHooks(phone)) problems.push("number has hooks");
   if (phone.fallbackDestination) problems.push("number has a fallback destination");
   if (phone.squadId) problems.push("number routes to a squad");
   if (phone.workflowId) problems.push("number routes to a workflow");

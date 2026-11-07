@@ -55,16 +55,28 @@ describe("forwardingProblems", () => {
       forwardingPhoneNumber: "+15555550100",
       hooks: [{ on: "call.ending" }],
     };
-    const phone = { fallbackDestination: { type: "number" }, squadId: "s", workflowId: "w" };
+    const phone = { fallbackDestination: { type: "number" }, squadId: "s", workflowId: "w", hooks: [{ on: "call.ringing" }] };
     expect(forwardingProblems(assistant, phone)).toEqual([
       "assistant has tool transferCall",
       "assistant has saved tools attached",
       "assistant has a forwarding number",
       "assistant has hooks",
+      "number has hooks",
       "number has a fallback destination",
       "number routes to a squad",
       "number routes to a workflow",
     ]);
+  });
+
+  it("applies the same hook rule to the assistant and the number", () => {
+    const transfer = [{ on: "call.ringing", do: [{ type: "transfer", destination: { type: "number", number: "+15555550100" } }] }];
+    expect(forwardingProblems({ hooks: transfer }, {})).toEqual(["assistant has hooks"]);
+    expect(forwardingProblems({}, { hooks: transfer })).toEqual(["number has hooks"]);
+    expect(forwardingProblems({ hooks: "unexpected" }, { hooks: "unexpected" })).toEqual(["assistant has hooks", "number has hooks"]);
+  });
+
+  it("accepts an empty hooks list, which is no route at all", () => {
+    expect(forwardingProblems({ hooks: [] }, { hooks: [] })).toEqual([]);
   });
 });
 

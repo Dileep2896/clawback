@@ -14,7 +14,7 @@ function lineProblems(config: Json, assistant: Json, phone: Json): string[] {
 }
 
 // shortcut: Vapi's schema types assistantId as a string, so null is unproven until a real run, hence the read-back and the loud failure.
-// Fallback, squad and workflow routes on the number are ours to report, not to clear, so they stay and the error names them.
+// Fallback, squad, workflow and hook routes on the number are ours to report, not to clear, so they stay and the error names them.
 // Only ever clears this lane's assistant: the number is read first, so a failed attach cannot disconnect another one.
 // shortcut: Vapi has no conditional update, so a change between this read and the detach would be lost; provision is run by hand, so this is unlikely.
 async function detach(vapi: Vapi, phoneId: string, ours: string): Promise<string> {

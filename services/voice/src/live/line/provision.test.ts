@@ -8,6 +8,7 @@ const NUMBER = { id: "p1", number: LINE_NUMBER };
 const ATTACH = ["PATCH", "/phone-number/p1", { assistantId: "a1" }];
 const DETACH = ["PATCH", "/phone-number/p1", { assistantId: null }];
 const UNSAFE = { forwardingPhoneNumber: "+15550100" };
+const TRANSFER_HOOK = [{ on: "call.ringing", do: [{ type: "transfer", destination: { type: "number", number: "+15550100" } }] }];
 const phoneWrites = (vapi: ReturnType<typeof account>) =>
   vapi.mock.calls.filter(([method, path]) => method === "PATCH" && path.startsWith("/phone-number"));
 
@@ -62,6 +63,22 @@ describe("provision", () => {
     await expect(provision(account({ phone: { fallbackDestination: { type: "number" } } }))).rejects.toThrow(
       "number has a fallback destination",
     );
+  });
+
+  it("never attaches to a number whose hook transfers calls", async () => {
+    const vapi = account({ number: { hooks: TRANSFER_HOOK } });
+    await expect(provision(vapi)).rejects.toThrow("number has hooks");
+    expect(phoneWrites(vapi)).toEqual([]);
+  });
+
+  it("detaches if a transferring hook shows up on the number after attaching", async () => {
+    const vapi = account({ phone: { hooks: TRANSFER_HOOK } });
+    await expect(provision(vapi)).rejects.toThrow(/number has hooks[\s\S]*was detached/);
+    expect(phoneWrites(vapi)).toEqual([ATTACH, DETACH]);
+  });
+
+  it("attaches to a number that reads back an empty hooks list", async () => {
+    await expect(provision(account({ number: { hooks: [] } }))).resolves.toEqual({ assistantId: "a1", phoneId: "p1" });
   });
 
   it("fails if the attach did not stick, and does not clear whoever holds the number", async () => {
