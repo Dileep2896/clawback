@@ -132,6 +132,7 @@ const NO_RUN = {
   sms: [],
   auditLog: [],
   auditTotal: 0,
+  scheduledChecks: [],
 };
 
 assertNotSharedDb();
