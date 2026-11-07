@@ -137,6 +137,8 @@ All checked with stubbed tests only. No call, chat rehearsal or `provision` was 
 - **`provision.ts` no longer attaches an unproven assistant.** The assistant's read-back must pass before the number is touched. Any later failure, or a failed update to an assistant already on the number, detaches it and reads the number back. If the assistant is still on the number, the error says `STILL ATTACHED`. A number on some other assistant is left alone.
 - **`check.ts` needs real proof of reaching the rep.** The scripted greeting must appear after the key press. An empty message, the closing line alone, another rep line, or a greeting from before the key press all fail.
 - **`check.ts` needs real proof of a tone.** A keypad entry must have both timestamps, present and equal.
+- **`provision.ts` only detaches this lane's assistant.** Cleanup reads the number first and leaves it alone if anything else holds it. If that read fails, nothing is detached and the error says `CHECK BY HAND`.
+- **`check.ts` needs the full disclosure first.** The caller's speech before the menu must start with `DISCLOSURE_LINE`, ignoring case and punctuation. A missing, partial or late disclosure fails.
 
 ### What the spike's data showed, with no new call
 
@@ -150,6 +152,8 @@ All checked with stubbed tests only. No call, chat rehearsal or `provision` was 
 - **The prompt has not run on the model, and won't before the first full test.** The menu and rep lines still come from the LLM (`gpt-6-luna`, temperature 0), so word-for-word delivery is unproven. Text rehearsal is built but NOT RUN: `POST /chat` returned `402 payment_method_missing` because Vapi chat needs a card on file, and the human decided not to add one. If the first full test finds the rep off script, try a stronger model.
 - **The detach in `provision.ts` has not run against Vapi.** It sends `assistantId: null`, but Vapi's public schema types that field as a string and does not document null. If Vapi rejects it, the error says `STILL ATTACHED` and the number must be detached by hand.
 - **Detaching leaves other routes on the number.** A fallback, squad or workflow route stays until cleared by hand, so a call could still follow it. The error names it.
+- **A successful attach replaces whatever held the number, and a later failure does not restore it.** Cleanup detaches our assistant and leaves the number with none, so the previous assistant must be re-attached by hand.
+- **The disclosure check allows no word differences.** A mis-heard word on a real call shows as a problem in `readback`, and needs a human to compare it with the recording. The spike's one Vapi transcript passes, but one sample doesn't show how often this happens.
 - **The updated `provision.ts` has not run against Vapi at all.** The assistant on the number is unchanged, because these fixes change no assistant config.
 - **`gpt-6-luna` may ignore temperature.** Vapi accepted and returned the setting, which doesn't show the model honors it.
 - **Rep replies are not verified against the request.** The rep agrees to whatever line it is asked about, so the caller side must keep alarm lines out.
