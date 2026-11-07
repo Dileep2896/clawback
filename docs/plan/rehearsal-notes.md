@@ -16,27 +16,38 @@ The slot is 3 to 4 minutes; target 3:30. Sim mode only until the human decides o
 
 | Step | What the presenter does | Rehearsed |
 |---|---|---|
-| 1 | Get started, sign up the sample business (Sam Lee, Mission Dumplings, any `@missiondumplings.example` email), Upload, pick `data/sample-bills/mission-dumplings-baycurrent-2026-09.pdf`, wait for it to read | 0:06 to 0:07 scripted, about 0:30 by hand |
-| 2 | Log out, Log in as Linda. Overview shows Approval needed | 0:03 scripted, about 0:15 by hand |
+| 1 | Get started, sign up the sample business (Sam Lee, Mission Dumplings, any `@missiondumplings.example` email), Upload, pick `data/sample-bills/mission-dumplings-baycurrent-2026-09.pdf`, wait for it to read | 0:06 to 0:07 scripted, 0:24 at hand speed |
+| 2 | Log out, Log in as Linda. Overview shows Approval needed | 0:03 scripted, 0:14 at hand speed |
 | 3 | Approve, then "Watch your agents work" (`/agents`) | under 1 s |
-| 4 | Talk over the board, the BayTel call and the ledger filling in, until Run status says Success | 2:22 to 2:36 |
+| 4 | Talk over the board, the BayTel call and the ledger filling in, until Run status says Success | 2:22 to 2:36 sim, 3:05 live |
 | 5 | Overview: refund $12,606.06, yearly savings $18,319.32, fee $9,277.61, you keep $21,647.77 | under 1 s |
 
-On stage it is 2:33 to 2:46 scripted; with hand typing and talking, about 3:20 to 3:30 (estimated, not yet timed by a person).
+On stage it is 2:33 to 2:46 in sim at script speed, and **3:49** in the one live run at hand speed (step 1 0:24, step 2 0:14, step 4 3:05).
 
-`pnpm exec tsx --env-file-if-exists=.env scripts/rehearse-stage.ts [screenshot-folder]` plays all of the above in a browser, types at about presenter speed, prints each step's time, and fails unless the run ends in success with the three numbers. It starts one real sim run.
+`pnpm exec tsx --env-file-if-exists=.env scripts/rehearse-stage.ts [screenshot-folder] [--hand] [--live]` plays all of the above in a browser, prints each step's time, then checks the Money page outside the stage clock. It fails unless the run ends in success with the three numbers on both the Overview and Money. It starts one real run. `--hand` types and clicks at a person's pace. `--live` needs `VOICE_MODE=live` on both the script and `pnpm dev:webhooks`, and places a real call.
 
 ## Rehearsal runs, product UI (2026-11-07)
 
 Own database `clawback_rehearsal`, `VOICE_MODE=sim`, `scripts/rehearse-stage.ts`. Approved on the Overview each time.
 
-| Run | Start to approval (before the talk) | Sample sign-up and upload | Log out, log in | Approve to Success | On stage total | Numbers | Cost |
-|---|---|---|---|---|---|---|---|
-| Sim 1 | 1:59 | 0:06 | 0:03 | 2:22 | 2:33 | $12,606.06 / $18,319.32 / $9,277.61 | about $0.41 |
-| Sim 2 | 1:53 | 0:07 | 0:03 | 2:31 | 2:43 | same | about $0.41 |
-| Sim 3 | 1:50 | 0:06 | 0:03 | 2:36 | 2:46 | same | $0.41 |
+| Run | Start to approval (before the talk) | Sample sign-up and upload | Log out, log in | Approve to Success | On stage total | Overview numbers | Money page | Cost |
+|---|---|---|---|---|---|---|---|---|
+| Sim 1 | 1:59 | 0:06 | 0:03 | 2:22 | 2:33 | $12,606.06 / $18,319.32 / $9,277.61 | Money not checked | about $0.41 |
+| Sim 2 | 1:53 | 0:07 | 0:03 | 2:31 | 2:43 | same | Money not checked | about $0.41 |
+| Sim 3 | 1:50 | 0:06 | 0:03 | 2:36 | 2:46 | same | Money not checked | $0.41 |
+| **Live 1** (hand speed) | 1:44 | 0:24 | 0:14 | 3:05 | **3:49** | same | same three amounts | run $0.76; call $0.3911 |
 
-Every run ended in success with the same three numbers on the Overview. Sim 3's database showed 13 ledger rows.
+Sim runs typed at about 60 ms a character with no pauses. Every run ended in success with the same three numbers on the Overview. Sim 3's database showed 13 ledger rows.
+
+**Live 1** (2026-11-07, `scripts/rehearse-stage.ts --hand --live`, typing at 200 ms a character with a 1.5 s pause before each click; the file picker counts double):
+
+- One call, to the allowlisted Vapi line only. Retell `call_1464114e1fb2df0d96955a6ba4d`, Vapi `01a1b7ea-45a3-7000-979c-5eb62487a4a5`.
+- The call lasted 2:19 (140 s) and ended `agent_hangup`, a normal end. `calls.mode` is `live` and a ticket was saved, so it **did not fall back** to sim.
+- Cost from read-back: Retell $0.2266, Vapi $0.1645, call **$0.3911**. The run's own cost was $0.755772.
+- Credit left (estimated from the figures before): Retell about $8.95, Vapi about $4.25.
+- Live, approve to Success took 3:05, against 2:22 to 2:36 in sim. That puts on stage at **3:49**: inside the 4-minute slot but over the 3:30 target. To get back to 3:30, shorten the talk over the sample-business sign-up (0:24) or skip the log-out and log-in by using a second browser profile already signed in as Linda (0:14).
+- Overview and Money both showed refund $12,606.06, yearly savings $18,319.32 and fee $9,277.61, with 13 ledger rows.
+- No agents were re-provisioned. The webhook service ran with `VOICE_MODE=live` only for this run and was stopped right after; `.env` stays `VOICE_MODE=sim`.
 
 ## Backup: the replay at 1.4×
 

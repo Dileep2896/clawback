@@ -236,6 +236,7 @@ The transcripts ran locally, so the audio went to no outside service.
 | 2026-11-07 | Full test 1, 160.9 s: Retell $0.2575, Vapi $0.19, both from read-back | **$0.4475** |
 | 2026-11-07 | Rehearsal live run 1, 184 s, old script: Retell $0.2913, Vapi $0.2145, from read-back | **$0.5058** |
 | 2026-11-07 | Rehearsal live run 2, 144 s, Option A (no promos, no ticket repeat-back): Retell $0.2325, Vapi $0.1681, from read-back | **$0.4006** |
+| 2026-11-07 | Product-UI rehearsal live run, 140 s, stage flow D: Retell $0.2266, Vapi $0.1645, from read-back | **$0.3911** |
 
 ### Commands
 
