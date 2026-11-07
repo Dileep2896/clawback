@@ -140,6 +140,32 @@ Content (use these numbers exactly, labelled as estimates):
 
 **parallel with:** rehearsal-product
 
+### `landing-redesign`
+
+**Goal:** Redesign the landing page at `/` so it looks designed by a senior product designer, not generated. Human, 2026-11-07: "The landing page is too generic AI created page. We need to make it professional with really good UI and should look like designed by a professional UI".
+
+Use the `hallmark` skill (anti-generic design) first, then `frontend-design`. Study 3 to 5 real fintech or B2B landing pages you admire as references and name them in the lane notes; do not copy any. Concretely:
+- A real point of view: one strong typographic idea, a deliberate grid, real product imagery (render actual Clawback screens, such as the Overview with the refund and the approval card, or a bill with the overcharge marked), not icon rows or generic gradient blobs.
+- Show the product working: a bill line, the finding, the call transcript line, the money landing. Motion only where it explains something, and respect `prefers-reduced-motion`.
+- Keep the copy honest and specific (numbers from the demo; the market section from `landing-tam`, same numbers and source note). No "AI-powered", "revolutionize", "seamless", emoji, or stock-style claims.
+- Keep "Get started" and "Log in" working, the demo-data disclaimer, the existing design tokens where they work (you may evolve them; update `docs/plan/design.md` if you do), and accessibility (contrast, keyboard, alt text).
+- Only the landing page and its components change; the app pages and `/agents` stay as they are.
+
+**Estimate:** 2 hours
+
+**Acceptance checks:**
+- Screenshots at 1920x1080 (full page) and 390x844 in `.fleet-lane/`, plus a short note on the design decisions.
+- Run the `hallmark` audit on the result and fix what it flags; include its verdict in the notes.
+- `scripts/dashboard-shell-check.ts` passes; `pnpm test`, lint and typecheck pass.
+
+**Likely files:**
+- `apps/dashboard/app/page.tsx` and landing components
+- `docs/plan/design.md`
+
+**depends on:** landing-tam
+
+**parallel with:** naive lanes
+
 ### `rehearsal-product`
 
 **Goal:** Rehearse the new stage flow in sim mode: `demo:reset`, sign up, connect BayCurrent, start, watch `/agents`, approve, end on the Overview. Time it against the 3 to 4 minute slot, recapture the replay if the screens changed, and update `docs/plan/rehearsal-notes.md`. No live calls; the human decides on a live rehearsal afterwards.
