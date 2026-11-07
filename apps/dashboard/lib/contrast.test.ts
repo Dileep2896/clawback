@@ -47,6 +47,7 @@ const TEXT_PAIRS = [
   ["band-text", "band"],
   ["band-faded", "band"],
   ["band-money", "band"],
+  ["band-alert", "band"],
 ] as const;
 
 describe("theme contrast", () => {

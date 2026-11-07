@@ -1,6 +1,6 @@
-/* Hallmark · genre: modern-minimal · macrostructure: Narrative Workflow · design-system: docs/plan/design.md · nav: N1a · footer: Ft5 Statement
- * pre-emit critique: P4 H5 E4 S5 R4 V4 */
-import { Statement } from "../components/landing/statement.tsx";
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench (live run hero) → Narrative Workflow · design-system: docs/plan/design.md · nav: N1a · footer: Ft5 Statement
+ * pre-emit critique: P5 H5 E4 S5 R4 V4 */
+import { LiveRun } from "../components/landing/live-run.tsx";
 import { Trail } from "../components/landing/trail.tsx";
 import { ButtonLink, Wordmark } from "../components/ui/kit.tsx";
 
@@ -18,13 +18,12 @@ const MARKET = [
 
 // Buttons on the dark band take the band's colours; `!` beats the kit's own colour classes.
 const BAND_PRIMARY = "bg-band-money! text-band! hover:brightness-110";
-const BAND_SECONDARY = "border-band-faded! bg-transparent! text-band-text! hover:bg-band-line!";
 
 export default function Landing() {
   return (
     <div className="min-h-dvh overflow-x-clip">
-      <div className="band bg-band text-band-text">
-        <header className="mx-auto flex max-w-[1320px] flex-wrap items-center gap-3 px-4 py-4 sm:px-6">
+      <div className="band flex min-h-dvh flex-col bg-band text-band-text">
+        <header className="mx-auto flex w-full max-w-[1320px] flex-wrap items-center gap-3 px-4 py-4 sm:px-6">
           <span className="text-[1.5rem] [&_svg]:text-band-money">
             <Wordmark />
           </span>
@@ -38,35 +37,33 @@ export default function Landing() {
           </nav>
         </header>
 
-        <section className="mx-auto grid max-w-[1320px] items-center gap-12 px-4 pt-8 pb-16 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,36rem)] lg:gap-16 lg:pt-12 lg:pb-24">
+        {/* The run first, then the claim it proves: the page opens on software working, not on a promise. */}
+        <section className="mx-auto grid w-full max-w-[1320px] flex-1 content-center gap-10 px-4 pt-4 pb-12 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:items-end lg:gap-x-16">
+          <div className="min-w-0 lg:col-span-2">
+            <LiveRun />
+          </div>
+          <h1 className="min-w-0 text-[clamp(2.5rem,5.2vw,5.5rem)] leading-[1.02] font-bold tracking-[-0.025em] [overflow-wrap:anywhere]">
+            Your bills are wrong. Agents fix them.
+          </h1>
           <div className="min-w-0">
-            <h1 className="max-w-[13ch] text-[clamp(2.75rem,5.6vw,5.75rem)] leading-[1.02] font-bold tracking-[-0.025em] [overflow-wrap:anywhere]">
-              Your bills are wrong. We get the money back.
-            </h1>
-            <p className="mt-6 max-w-[48ch] text-[1.25rem] text-band-faded">
+            <p className="text-[1.125rem] text-band-faded">
               Clawback reads every utility and phone bill your business pays, finds the overcharges, calls the provider and files the claims. You approve once.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <ButtonLink href="/signup" className={`min-h-13 px-6 text-[1.125rem] ${BAND_PRIMARY}`}>
-                Get started
-              </ButtonLink>
-              <ButtonLink href="/login" variant="secondary" className={`min-h-13 px-6 text-[1.125rem] ${BAND_SECONDARY}`}>
-                Log in
-              </ButtonLink>
-            </div>
+            <ButtonLink href="/signup" className={`mt-6 min-h-13 px-6 text-[1.125rem] ${BAND_PRIMARY}`}>
+              Start my audit
+            </ButtonLink>
           </div>
-          <Statement refund={REFUND} yearly={YEARLY} />
         </section>
       </div>
 
       <main>
         <section aria-labelledby="run" className="mx-auto max-w-[1320px] px-4 py-20 sm:px-6 lg:py-28">
           <h2 id="run" className="max-w-[22ch] text-[clamp(2rem,3.2vw,2.75rem)] leading-[1.1] font-bold tracking-[-0.015em]">
-            One audit of one noodle shop, start to finish
+            Follow one overcharge, start to finish
           </h2>
           <p className="mt-4 max-w-[60ch] text-[1.25rem] text-faded">
-            You connect your bills in about 30 seconds: upload the PDFs, or sign in to your provider’s portal and the agents fetch them. Here is what one run
-            found in a year of a noodle shop’s electricity and phone bills, shown on the screens it produced.
+            Connect your bills in about 30 seconds: upload the PDFs, or sign in to your provider’s portal and the agents fetch them. These are the screens the
+            run above produced.
           </p>
           <Trail />
         </section>
@@ -103,7 +100,7 @@ export default function Landing() {
               The refund is claimed, not yet granted, and the savings are projected for the first year. Clawback is paid only from what is actually recovered: 30% of the refund and the first year’s savings.
             </p>
             <ButtonLink href="/signup" className="mt-8 min-h-13 px-6 text-[1.125rem]">
-              Start with your bills
+              Start my audit
             </ButtonLink>
           </div>
           {/* Set as the bottom of a statement: lines, then the total under a heavy rule. */}
