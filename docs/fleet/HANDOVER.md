@@ -6,12 +6,11 @@ The orchestrator rewrites this before it stops, and reads it first when it start
 Picked up 2026-11-06, still running 2026-11-07 about 02:30.
 
 ## Running
-- 40 of 42 lanes on main. Main: 1615 tests pass, 1 skipped.
-- demo-replay: in review after fix round 7 (gitignore for rejected captures). Ship conflicts on main twice in apps/dashboard/lib/decisions.ts; the branch now contains main. Check `git merge-base --is-ancestor main HEAD` in its worktree before trusting a done.
-- rehearsal: studied, waiting. Runs nothing until demo-replay is on main. Then: merge main, `pnpm db:migrate` (demo-replay adds migration 0003), three sim runs, then provision both voice agents and ONE live call.
-- Lanes added beyond the plan: voice-caller-answers (human asked the caller to answer the rep's questions), approved-run-fixes (bugs demo-replay found). Both shipped.
-- Fresh fixer sessions can miss a `fleet send` sent right after `fleet fix`. Wait about 20 s, or check the lane screen, and resend.
-- Reviewers kept blocking on edge cases. Scope limits written into lane plan.md Known limits ("Orchestrator decision: ...") stopped the loops on run-resilience and demo-replay.
+- All 42 lanes on main (2026-11-07 04:23). Main: 1696 tests pass, 1 skipped. No lanes active. M0 to M9 done; M10 (naive) only when the human asks.
+- Rehearsal results and the stage runbook: docs/plan/rehearsal-notes.md. Stage script is option A: start the run before the talk, wait at approval, YES to ledger about 2:55, call about 2:23. Backup: replay at 1.4x, about 3:11.
+- Numbers now: refund $12,606.06, yearly savings $18,319.32 (3 promos, $3,240.00, found but not acted on), fee and invoice $9,277.61.
+- Voice credit estimate after 3 live calls: Retell about $9.18, Vapi about $4.41; option A call about $0.40. Read the dashboards before the talk.
+- A fresh worktree lacks .env, .vault/, data/bills/ and portal logins (all gitignored); see rehearsal-notes.md "Setting up a fresh worktree".
 
 ## Waiting on the human
 - 1080p projector check: when and where.
