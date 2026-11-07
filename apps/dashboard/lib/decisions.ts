@@ -17,11 +17,12 @@ class Refused extends Error {
 
 async function runOf(db: Db, runId: string) {
   const [found] = await db
-    .select({ startedAt: runs.startedAt, platform: runs.platform, approver: customers.contactName, status: runs.status })
+    .select({ startedAt: runs.startedAt, platform: runs.platform, approver: customers.contactName, status: runs.status, replay: runs.replay })
     .from(runs)
     .innerJoin(customers, eq(runs.customerId, customers.id))
     .where(eq(runs.id, runId));
   if (!found) throw new Refused(`Run ${runId} does not exist`, 404);
+  if (found.replay) throw new Refused("This run is a recording, so nothing on it can be decided", 409);
   // An approval here would count as a human action, and nothing is left to act on it.
   if (isStopped(found.status)) throw new Refused(STOPPED_TEXT, 409);
   return found;

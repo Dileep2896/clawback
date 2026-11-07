@@ -52,6 +52,8 @@ export const isDisclosure = (row: Row) => row.role === "agent" && row.kind === "
  * row, which is the disclosure.
  */
 export function nextToSpeak(calls: Call[], said: Map<string, number>, firstLook: boolean): Row[] {
+  // A reset or a new replay emptied the list. A replayed call keeps its id, so without this it would stay silent the second time.
+  if (calls.length === 0) said.clear();
   return calls.flatMap((call) => {
     if (call.mode !== "sim") return [];
     const lines = viewOf(call).rows.filter((row) => row.kind === "speech" && row.role !== "system");

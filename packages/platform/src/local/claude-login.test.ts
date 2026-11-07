@@ -23,8 +23,9 @@ describe("loginEnv", () => {
     expect(source.ANTHROPIC_API_KEY).toBe("key");
   });
 
-  it("switches off connectors, built-in agents and background subagents", () => {
+  it("switches off memory, connectors, built-in agents and background subagents", () => {
     expect(loginEnv({})).toMatchObject({
+      CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
       ENABLE_CLAUDEAI_MCP_SERVERS: "false",
       CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: "1",
       CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",

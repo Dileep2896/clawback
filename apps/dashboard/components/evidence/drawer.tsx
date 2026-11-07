@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect, useRef } from "react";
 import { parseEvidence } from "../../lib/evidence.ts";
+import { type ReplayInfo, replayLabel } from "../../lib/replay.ts";
 import type { Snapshot } from "../../lib/snapshot.ts";
 import { BillSnippet } from "./bill-snippet.tsx";
 import { KwhChart } from "./kwh-chart.tsx";
@@ -20,7 +21,17 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
  * A native modal dialog: it traps focus, closes on Esc and hands focus back to the button that opened it.
  * Title and explanation are the finding's claim. Every figure in a Section comes from evidence_json.
  */
-export function EvidenceDrawer({ finding, site, onClose }: { finding: Snapshot["findings"][number]; site?: string; onClose: () => void }) {
+export function EvidenceDrawer({
+  finding,
+  site,
+  replay,
+  onClose,
+}: {
+  finding: Snapshot["findings"][number];
+  site?: string;
+  replay?: ReplayInfo | null;
+  onClose: () => void;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     dialog.current?.showModal();
@@ -35,6 +46,12 @@ export function EvidenceDrawer({ finding, site, onClose }: { finding: Snapshot["
       data-testid="evidence-drawer"
       className="my-0 mr-0 ml-auto h-dvh max-h-none w-[min(1280px,100vw)] max-w-none overflow-y-auto border-l-4 border-drum bg-sheet p-5 text-ink backdrop:bg-black/60"
     >
+      {/* The modal sits above the page banner, so a replay repeats its label here, pinned while the drawer scrolls. */}
+      {replay && (
+        <p role="status" data-testid="drawer-replay-banner" className="sticky top-0 z-10 mb-3 rounded-[3px] border-4 border-stamp bg-sheet px-4 py-1 text-center font-display text-[2.125rem] leading-tight font-bold text-stamp">
+          {replayLabel(replay)}
+        </p>
+      )}
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
           {site && <p className="font-semibold text-faded">{site}</p>}

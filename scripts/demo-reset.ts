@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { RUNS_DIR } from "@bill-fighter/agents/customer-data";
 import { databaseHost, databaseUrl, db, type Db } from "@bill-fighter/db/client";
 
-const RUN_TABLES = ["runs", "findings", "actions", "approvals", "calls", "ledger", "board_cards", "audit_log", "sms_messages", "scheduled_checks"];
+export const RUN_TABLES = ["runs", "findings", "actions", "approvals", "calls", "ledger", "board_cards", "audit_log", "sms_messages", "scheduled_checks"];
 const SEED_TABLES = ["customers", "locations", "accounts", "authorizations", "bills", "bill_lines", "usage_intervals", "phone_lines"];
 const SEED_COUNTS = `select ${SEED_TABLES.map((table) => `(select count(*)::int from ${table}) as ${table}`).join(", ")}, (select count(*)::int from bills where parsed_json is not null) as parsed_bills`;
 const LOCAL_HOSTS = ["localhost", "127.0.0.1", "::1", "[::1]"];
@@ -14,13 +14,14 @@ const LOCAL_HOSTS = ["localhost", "127.0.0.1", "::1", "[::1]"];
 export type ResetOptions = {
   pool: Db["$client"];
   url: string;
-  mailpitApi: string;
+  /** Null leaves mail alone: replay must work with only Postgres up. */
+  mailpitApi: string | null;
   runsDir: string;
   allowNonlocal: boolean;
 };
 
 /** Before any connection, so a refused target is never touched. */
-function checkTarget({ url, mailpitApi, allowNonlocal }: ResetOptions) {
+export function checkTarget({ url, mailpitApi, allowNonlocal }: Pick<ResetOptions, "url" | "mailpitApi" | "allowNonlocal">) {
   const parsed = new URL(url);
   // Ask pg, because ?host=, its repeats and its encodings can all send it somewhere other than the URL's hostname.
   const host = databaseHost(url);
@@ -28,11 +29,11 @@ function checkTarget({ url, mailpitApi, allowNonlocal }: ResetOptions) {
     throw new Error(`Refusing to reset a database on "${host}", which is not local. Set DEMO_RESET_ALLOW_NONLOCAL=1 only if that really is the demo's database.`);
   }
   if (!decodeURIComponent(parsed.pathname.slice(1))) throw new Error("Refusing to reset: DATABASE_URL names no database.");
-  if (!LOCAL_HOSTS.includes(new URL(mailpitApi).hostname)) throw new Error(`Refusing to clear mail at ${mailpitApi}, which is not local Mailpit.`);
+  if (mailpitApi && !LOCAL_HOSTS.includes(new URL(mailpitApi).hostname)) throw new Error(`Refusing to clear mail at ${mailpitApi}, which is not local Mailpit.`);
 }
 
 /** Asks the server, because PGDATABASE or an encoded path can connect pg to a database the URL does not name. */
-async function checkConnected({ pool, url }: ResetOptions) {
+export async function checkConnected({ pool, url }: Pick<ResetOptions, "pool" | "url">) {
   const named = decodeURIComponent(new URL(url).pathname.slice(1));
   let connected: string;
   try {
@@ -82,7 +83,7 @@ export async function demoReset(options: ResetOptions) {
   await checkConnected(options);
 
   const seed = (await pool.query<Record<string, number>>(SEED_COUNTS)).rows[0]!;
-  const runRows = (await pool.query<{ id: string; status: string }>("select id, status from runs")).rows;
+  const runRows = (await pool.query<{ id: string; status: string; replayed: boolean }>("select id, status, replay is not null as replayed from runs")).rows;
   // Ids become folder names under a directory other lanes share.
   const unsafe = runRows.filter(({ id }) => !/^\w[\w.-]*$/.test(id)).map(({ id }) => JSON.stringify(id));
   if (unsafe.length > 0) throw new Error(`Refusing to reset: run ids that cannot name a folder: ${unsafe.join(", ")}`);
@@ -92,9 +93,10 @@ export async function demoReset(options: ResetOptions) {
     console.warn(`Clearing runs still marked running: ${running.join(", ")}. If one is alive, its agents will wrap up and can write into the next run, so restart \`pnpm dev:webhooks\`.`);
   }
 
-  await clearMailpit(mailpitApi);
+  if (mailpitApi) await clearMailpit(mailpitApi);
   // shortcut: a folder with no row stays on disk, which is harmless because every run gets a new id. Wiping the parent would delete other lanes' live runs.
-  await Promise.all(runRows.map(({ id }) => rm(join(runsDir, id), { recursive: true, force: true })));
+  // A replayed run keeps its recorded id, so its folder belongs to the database that captured it, maybe another lane's.
+  await Promise.all(runRows.filter(({ replayed }) => !replayed).map(({ id }) => rm(join(runsDir, id), { recursive: true, force: true })));
   await clearTables(pool, seed);
   return { runs: runRows.length, running, seed };
 }

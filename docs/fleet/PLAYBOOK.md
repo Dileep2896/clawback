@@ -9,7 +9,7 @@ House rules every agent reads before working. Edit freely.
 - Local services: `docker compose up -d --wait`, Mailpit inbox at http://localhost:8025
 - Database: `pnpm db:migrate`, `pnpm seed`
 - Run locally: `pnpm dev:dashboard`, `pnpm dev:portal`, `pnpm run:local`
-- Other scripts: `pnpm audit:local`, `pnpm check-platform`, `pnpm demo:start`, `pnpm demo:reset`, `pnpm demo:replay`, `pnpm parse:sample`
+- Other scripts: `pnpm audit:local`, `pnpm check-platform`, `pnpm demo:start`, `pnpm demo:reset`, `pnpm demo:replay [--speed N]` (`--capture` records a `VOICE_MODE=sim` run), `pnpm parse:sample`
 
 ## Node
 - The floor is Node 22.12, raised from the plan's "Node 20+" because vitest 5 requires it.

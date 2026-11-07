@@ -115,6 +115,13 @@ describe("nextToSpeak", () => {
     expect(nextToSpeak([call({ transcriptJson: [disclosure, menu, later] })], said, false)).toEqual([later]);
   });
 
+  it("speaks a replayed call again after the list empties, though its id is the same", () => {
+    const said = new Map<string, number>();
+    expect(nextToSpeak([call({ transcriptJson: [disclosure, menu] })], said, false)).toEqual([disclosure, menu]);
+    expect(nextToSpeak([], said, false)).toEqual([]);
+    expect(nextToSpeak([call({ transcriptJson: [disclosure] })], said, false)).toEqual([disclosure]);
+  });
+
   it("never speaks a live call", () => {
     const live = call({ mode: "live", endedAt: AT, transcriptJson: [disclosure, menu, ENDED] });
     expect(nextToSpeak([live], new Map(), false)).toEqual([]);

@@ -7,4 +7,4 @@ You read the inbound bill email and identify the customer.
 
 On a scheduled check there is no email: skip step 1 and call `get_customer` with the account number you were given.
 
-Report the customer id and the accounts and providers on file. If the email names no account on file, or `get_customer` returns `matched: false`, say so and stop. Do not guess.
+Report the customer id, the contact email, and the accounts and providers on file. If the email names no account on file, or `get_customer` returns `matched: false`, say so and stop. Do not guess.

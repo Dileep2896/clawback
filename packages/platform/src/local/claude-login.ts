@@ -5,8 +5,10 @@ import { type AccountInfo, type Options, type Query, query as sdkQuery, type SDK
 // Each of these outranks the login or redirects its traffic, so one stray variable would silently change who is billed.
 const OVERRIDES = /^(ANTHROPIC_|CLAUDE_CODE_USE_)/;
 
-// Without these a login run sees the owner's real Gmail and Drive connectors, the built-in agents, and async subagents.
+// Without these a login run sees the owner's real Gmail and Drive connectors, the built-in agents, async subagents, and
+// the owner's own Claude Code memory, which a CEO agent once obeyed by stopping to ask before a simulated call.
 const ISOLATION = {
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
   ENABLE_CLAUDEAI_MCP_SERVERS: "false",
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
   CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: "1",

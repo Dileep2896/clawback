@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { replayLabel, replayOf } from "../lib/replay.ts";
 import { runProblems } from "../lib/run-state.ts";
 import { useLive } from "../lib/use-live.tsx";
 import { MeterRegister } from "./meter-register.tsx";
@@ -49,6 +50,18 @@ function ThemeToggle() {
     >
       {dark ? "Light theme" : "Dark theme"}
     </button>
+  );
+}
+
+/** Above everything and pinned (sticky) so the stacked narrow layout cannot scroll it away. */
+export function ReplayBanner() {
+  const { snapshot } = useLive();
+  const replay = replayOf(snapshot?.run);
+  if (!replay) return null;
+  return (
+    <p role="status" data-testid="replay-banner" className="sticky top-0 z-10 m-3 mb-0 rounded-[3px] border-4 border-stamp bg-sheet px-4 py-1 text-center font-display text-[2.125rem] leading-tight font-bold text-stamp">
+      {replayLabel(replay)}
+    </p>
   );
 }
 

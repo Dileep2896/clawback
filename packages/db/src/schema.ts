@@ -161,6 +161,8 @@ export const runs = pgTable("runs", {
   finishedAt: timestamptz("finished_at"),
   status: text("status").notNull(),
   costUsd: costUsd(),
+  // Set only by scripts/replay.ts: { recordedAt, speed, startedAt }. Non-null means this run is a recording, and the dashboard labels it so.
+  replay: jsonb("replay"),
 });
 
 export const approvals = pgTable("approvals", {

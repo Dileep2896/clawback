@@ -41,7 +41,7 @@ export function createIntakeTools({ db, mail }: { db: Db; mail: () => Promise<Pi
 
         const customerId = matches[0]!.customerId;
         const [customer] = await db
-          .select({ id: customers.id, name: customers.name, contactName: customers.contactName })
+          .select({ id: customers.id, name: customers.name, contactName: customers.contactName, contactEmail: customers.contactEmail })
           .from(customers)
           .where(eq(customers.id, customerId));
         const rows = await db

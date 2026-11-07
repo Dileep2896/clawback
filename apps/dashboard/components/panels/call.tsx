@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { currentCalls, duration, isDisclosure, nextToSpeak, type Row, viewOf } from "../../lib/calls.ts";
+import { recordedNow, replayOf, type ReplayInfo, speechRate } from "../../lib/replay.ts";
 import type { Snapshot } from "../../lib/snapshot.ts";
 import { useFollow } from "../../lib/use-follow.ts";
 import { useLive } from "../../lib/use-live.tsx";
@@ -11,10 +12,11 @@ import { Panel } from "../panel.tsx";
 const PITCH: Record<string, number> = { agent: 1, provider: 0.7 };
 
 /** Browsers can lack speech, refuse it or fail mid-line. Each of those only costs the sound, never the transcript. */
-function speak(row: Row, onFail: () => void) {
+function speak(row: Row, rate: number, onFail: () => void) {
   try {
     const utterance = new SpeechSynthesisUtterance(row.content);
     utterance.pitch = PITCH[row.role] ?? 1;
+    utterance.rate = rate;
     utterance.onerror = (event) => {
       if (event.error !== "canceled" && event.error !== "interrupted") onFail();
     };
@@ -32,7 +34,7 @@ function stopSpeaking() {
   }
 }
 
-function Timer({ startedAt, endedAt }: { startedAt: string; endedAt: string | null }) {
+function Timer({ startedAt, endedAt, replay }: { startedAt: string; endedAt: string | null; replay: ReplayInfo | null }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (endedAt) return;
@@ -41,7 +43,7 @@ function Timer({ startedAt, endedAt }: { startedAt: string; endedAt: string | nu
   }, [endedAt]);
   return (
     <span data-testid="call-timer" className="font-display text-[2.125rem] leading-none font-semibold tabular-nums">
-      {duration(startedAt, endedAt ?? now)}
+      {duration(startedAt, endedAt ?? (replay ? recordedNow(replay, now) : now))}
     </span>
   );
 }
@@ -76,7 +78,7 @@ function TranscriptRow({ row }: { row: Row }) {
   );
 }
 
-function CallView({ call }: { call: Snapshot["calls"][number] }) {
+function CallView({ call, replay }: { call: Snapshot["calls"][number]; replay: ReplayInfo | null }) {
   const view = viewOf(call);
   return (
     <article data-call={call.id} className="grid gap-2">
@@ -84,7 +86,7 @@ function CallView({ call }: { call: Snapshot["calls"][number] }) {
         <span data-testid="call-mode" className="rounded-[3px] border-2 border-ink px-3 font-display text-[1.75rem] font-semibold">
           {call.mode}
         </span>
-        <Timer startedAt={call.startedAt} endedAt={call.endedAt} />
+        <Timer startedAt={call.startedAt} endedAt={call.endedAt} replay={replay} />
       </div>
       {view.fallback && (
         <p data-testid="call-fallback" className="rounded-[3px] border-2 border-stamp px-3 py-1 leading-tight font-semibold text-stamp">
@@ -113,13 +115,18 @@ export function Call() {
   const said = useRef(new Map<string, number>());
   const firstLook = useRef(true);
   const anchor = useFollow(calls.reduce((rows, call) => rows + viewOf(call).rows.length, 0));
+  const replay = replayOf(snapshot?.run);
+  const rate = speechRate(replay);
 
   useEffect(() => {
     if (!snapshot) return;
+    // Anything still queued belongs to a run that has gone.
+    if (snapshot.calls.length === 0) stopSpeaking();
     const lines = nextToSpeak(currentCalls(snapshot.calls), said.current, firstLook.current);
     firstLook.current = false;
-    for (const line of lines) speak(line, () => setSpeechFailed(true));
-  }, [snapshot]);
+    // Still called when silent, so the lines count as said.
+    if (rate !== null) for (const line of lines) speak(line, rate, () => setSpeechFailed(true));
+  }, [snapshot, rate]);
 
   useEffect(() => stopSpeaking, []);
 
@@ -132,8 +139,13 @@ export function Call() {
             Browser speech unavailable. Transcript only.
           </p>
         )}
+        {calls.length > 0 && rate === null && (
+          <p data-testid="sound-off" className="text-faded">
+            Sound off above 2× speed. Transcript only.
+          </p>
+        )}
         {calls.map((call) => (
-          <CallView key={call.id} call={call} />
+          <CallView key={call.id} call={call} replay={replay} />
         ))}
       </div>
     </Panel>

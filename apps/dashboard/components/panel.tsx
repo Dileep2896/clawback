@@ -8,8 +8,8 @@ export function Panel({ title, children }: { title: string; children: ReactNode 
       <h2 id={titleId} className="bg-drum px-4 py-1.5 font-display text-[1.75rem] leading-tight font-semibold text-drum-text">
         {title}
       </h2>
-      {/* Focusable so a scrolling panel can be scrolled by keyboard. */}
-      <div tabIndex={0} aria-labelledby={titleId} role="group" className="min-h-0 flex-1 overflow-y-auto p-4">
+      {/* Focusable so a scrolling panel can be scrolled by keyboard. Relative so sr-only text cannot stretch the page past this panel. */}
+      <div tabIndex={0} aria-labelledby={titleId} role="group" className="relative min-h-0 flex-1 overflow-y-auto p-4">
         {children}
       </div>
     </section>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { money } from "../../lib/evidence.ts";
+import { replayOf } from "../../lib/replay.ts";
 import { useLive } from "../../lib/use-live.tsx";
 import { EvidenceDrawer } from "../evidence/drawer.tsx";
 import { Panel } from "../panel.tsx";
@@ -40,7 +41,7 @@ export function Findings() {
         })}
       </ul>
       {open && (
-        <EvidenceDrawer finding={open} site={open.accountId ? sites[open.accountId] : undefined} onClose={() => setOpenId(null)} />
+        <EvidenceDrawer finding={open} site={open.accountId ? sites[open.accountId] : undefined} replay={replayOf(snapshot?.run)} onClose={() => setOpenId(null)} />
       )}
     </Panel>
   );
