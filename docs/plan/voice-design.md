@@ -175,6 +175,59 @@ All checked with stubbed tests only. No call, chat rehearsal or `provision` was 
 
 `pnpm exec tsx --env-file=.env services/voice/src/live/line/cli.ts provision | rehearse | readback <call id>`. None of them can place a call. With no card on Vapi, `rehearse` stops at its first request with a 402 message.
 
+## Live caller (`voice-live-caller`)
+
+Code is in `services/voice/src/live/caller/`. **Built and tested against stubs only. No call, `provision` or read-back has run against Retell or Vapi for this lane.**
+
+### Acceptance checks
+
+| Check | Result |
+|---|---|
+| A real call reaches the line and completes with no human on it | **NOT RUN** |
+| The disclosure is first, word for word, in recording and transcript | Tested on stubs for the transcript. **Not yet seen on a real call or recording.** |
+| `ALLOWED_CALL_NUMBERS` holds only the Vapi number, and any other number never dials | Met on stubs: zero requests for another number, an empty or wider list, or any other path that places a call. |
+| A ticket number is saved in `calls.outcome_json` with `calls.mode=live` | Tested on stubs. **NOT RUN for real.** |
+| The cost of each live call is logged, and calls are kept short | Logging tested on stubs. **No real cost yet.** |
+| A forced failure falls back to sim automatically, with the on-screen label | Met on stubs, including an empty `RETELL_API_KEY`, which sends no request. The label is proven on the row. `panels-action` has not shipped the panel that shows it. |
+
+### Human's decisions (2026-11-06, relayed by the orchestrator)
+
+- **During a call the screen shows an in-progress row, and the whole transcript when the call ends.** No tunnel. Retell only gives the transcript after the call ends (`get-call`), and its live webhook needs a public URL.
+- **The read-back is short:** it counts the lines and accounts. Each item already has the rep's own yes.
+- **A call that ends normally with no ticket is a failed live call.** The partial row stays, and sim takes over with the label.
+- **`recording_url` is stored plain.** Revisit before any non-demo use.
+
+### How it behaves
+
+- **One call per action, ever.** The row goes in before the dial, so a retry or crash cannot pay for a second call. `scripts/voice-live-test.ts` uses a throwaway database, so each run is a fresh call, and it needs `--place-real-call`.
+- **The row starts empty of speech.** It holds only `status` rows until the call ends, then Retell's own record, so it never claims speech that has not happened.
+- **The Retell call id is on the row** as a `status` row, for reading back by hand.
+- **A call is judged on content, not on why it ended.** `user_hangup` with a ticket is good. `max_duration_reached` with no ticket is not.
+- **`CALLER_AGENT_ID` in `agent.ts` is empty until `provision` runs**, and the engine refuses to dial while it is empty.
+
+### Open risks
+
+- **Nothing here has run for real**, including the Retell request bodies in `agent.ts` and the tool definitions. `provision` is the first test of those.
+- **The caller's prompt has never run, and neither has the rep's.** The first full test is the first time for both.
+- **`extractOutcome` needs the rep's exact words.** If Retell's speech-to-text turns "that is" into "that's", the item stays out, and with no ticket the call falls back.
+- **Normalising only handles single digits.** "Double five" or "seven thousand one" leaves the item out.
+- **Vapi's share of the run budget is an estimate** ($0.07 a minute). The real figure comes from `cli.ts readback`.
+- **The live agent uses `override_agent_version: 0` as in the spike.** Whether an updated draft stays on version 0 is not confirmed.
+- **Call length is unmeasured.** The estimate is about 3 minutes, and the demo script gives a call 50 s.
+
+### Cost log
+
+| Date | What | Cost |
+|---|---|---|
+| | Live calls in this lane | **0** |
+
+### Commands
+
+Each of these talks to a paid account. Run one only with the word for that exact step.
+
+- `pnpm exec tsx --env-file=.env services/voice/src/live/caller/cli.ts provision | readback <retell call id>`
+- `pnpm exec tsx --env-file=.env scripts/voice-live-test.ts --place-real-call` **places a real call**
+
 ## Sources (read 2026-11-06)
 
 - Retell: [create phone call](https://docs.retellai.com/api-references/create-phone-call), [get call](https://docs.retellai.com/api-references/get-call), [create agent](https://docs.retellai.com/api-references/create-agent), [create Retell LLM](https://docs.retellai.com/api-references/create-retell-llm), [press digit](https://docs.retellai.com/build/single-multi-prompt/press-digit), [versions](https://docs.retellai.com/agent/version), [pricing](https://www.retellai.com/pricing)
