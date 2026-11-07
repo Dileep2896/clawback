@@ -85,6 +85,8 @@ export function createBrowser(vault: Vault, getAllowlist: () => Allowlist = allo
         };
         let lastUrl = "about:blank";
         // A refusal can commit just after goto returned, leaving the error page or destroying the read in progress.
+        // shortcut: click and fill do not recover, so one hitting that error page times out and the next goto recovers.
+        // Upgrade if an agent tool ever clicks straight after a goto to a page that navigates by itself.
         const read = async <T>(fn: () => Promise<T>) => {
           try {
             if (!navFailed) return await fn();

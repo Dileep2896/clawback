@@ -124,6 +124,8 @@ export default async function check() {
       await session.click("#out");
       await session.goto(`${portal.origin}/refuses-once?delay=${delay}`);
       assert.deepEqual(await session.texts(".welcome"), ["Welcome"], `read straight after goto, delay ${delay}`);
+      // A read can beat this page's refusal. Let it land, or it hits the next round's click, which does not recover.
+      await sleep(200);
     }
     // The refusal has fully landed, so the page holds Chromium's error page, for both kinds of read.
     await session.goto(`${portal.origin}/refuses-once?delay=settled`);
