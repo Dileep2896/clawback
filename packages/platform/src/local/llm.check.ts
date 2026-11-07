@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import { checkLogin } from "./claude-login.ts";
 import { withFakeCredentials } from "./fake-credentials.ts";
 import llm from "./llm.ts";
 
@@ -24,5 +26,11 @@ export default async function check() {
       SCHEMA,
     );
     assert.equal(typeof withImage.total, "number");
+
+    // Settings stand in for a managed policy: env scrubbing cannot reach them, so only the account check can refuse.
+    await assert.rejects(
+      checkLogin((params) => query({ ...params, options: { ...params.options, settings: { env: { CLAUDE_CODE_USE_BEDROCK: "1" } } } })),
+      /Refusing to run/,
+    );
   });
 }

@@ -12,7 +12,7 @@ import { isGatedTool } from "@bill-fighter/shared/gated-tools";
 import { z } from "zod";
 import { getPlatform } from "../factory.ts";
 import type { AgentDef, AgentRuntime, ApprovalGate, Budget, RunEvent, RunSpec, ToolDef } from "../types.ts";
-import { assertIsolated, assertLogin, loginOptions } from "./claude-login.ts";
+import { assertIsolated, assertLogin, checkLogin, loginOptions } from "./claude-login.ts";
 
 const SERVER = "platform";
 const PREFIX = `mcp__${SERVER}__`;
@@ -20,7 +20,7 @@ const PREFIX = `mcp__${SERVER}__`;
 const SUBAGENT_TOOLS = ["Agent", "Task"];
 
 export type Query = (params: { prompt: string; options: Options }) => AsyncIterable<SDKMessage>;
-export type Deps = { gate: ApprovalGate; budget: Budget; query?: Query };
+export type Deps = { gate: ApprovalGate; budget: Budget; query?: Query; login?: () => Promise<void> };
 
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -136,12 +136,13 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
   let failure: string | undefined;
 
   try {
-    const { gate, budget, query = sdkQuery as Query } = await deps();
+    const { gate, budget, query = sdkQuery as Query, login = checkLogin } = await deps();
     const start = await budget.status(spec.runId);
     const remainingUsd = start.capUsd - start.totalUsd;
     if (remainingUsd <= 0) {
       over = true;
     } else {
+      await login();
       const ownTools = spec.tools.map((def) => PREFIX + def.name);
       const hasMembers = spec.members.length > 0;
       const allowedInit = {

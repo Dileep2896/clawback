@@ -38,9 +38,10 @@ type SetupOptions = {
   thenThrow?: string;
   gate?: Partial<ApprovalGate>;
   during?: (options: Options) => Promise<void>;
+  login?: () => Promise<void>;
 };
 
-function setup(messages: unknown[], { capUsd = 5, totalUsd = 0, thenThrow = "", gate = {}, during }: SetupOptions = {}) {
+function setup(messages: unknown[], { capUsd = 5, totalUsd = 0, thenThrow = "", gate = {}, during, login = async () => {} }: SetupOptions = {}) {
   const added: number[] = [];
   const captured: { options?: Options } = {};
   const budget: Budget = {
@@ -57,7 +58,7 @@ function setup(messages: unknown[], { capUsd = 5, totalUsd = 0, thenThrow = "", 
     yield* messages as SDKMessage[];
     if (thenThrow) throw new Error(thenThrow);
   };
-  const runtime = createAgentRuntime(async () => ({ gate: gate as ApprovalGate, budget, query }));
+  const runtime = createAgentRuntime(async () => ({ gate: gate as ApprovalGate, budget, query, login }));
   return { added, captured, runtime };
 }
 
@@ -308,6 +309,18 @@ describe("run", () => {
     const { last, text } = await collect(runtime.run(SPEC));
     expect(last.status).toBe("error");
     expect(text).toContain("Refusing to run");
+  });
+
+  it("refuses before calling the model when the login check fails", async () => {
+    const { captured, runtime } = setup([INIT, result(0)], {
+      login: async () => {
+        throw new Error("Refusing to run: not the login");
+      },
+    });
+    const { last, text } = await collect(runtime.run(SPEC));
+    expect(last.status).toBe("error");
+    expect(text).toContain("Refusing to run");
+    expect(captured.options).toBeUndefined();
   });
 
   it("refuses when a connector shows up in a later init", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { assertIsolated, assertLogin, loginEnv } from "./claude-login.ts";
+import { assertIsolated, assertLogin, assertLoginAccount, checkLogin, loginEnv } from "./claude-login.ts";
 
 describe("loginEnv", () => {
   it("removes every variable that can outrank or redirect the login, and keeps the rest", () => {
@@ -53,6 +53,57 @@ describe("assertLogin", () => {
       expect(() => assertLogin({ apiKeySource })).toThrow(/Refusing to run/);
     },
   );
+});
+
+describe("assertLoginAccount", () => {
+  const LOGIN = { apiProvider: "firstParty", subscriptionType: "Claude Ultra", email: "owner@example.test" } as const;
+
+  it("accepts a subscription login", () => {
+    expect(() => assertLoginAccount(LOGIN)).not.toThrow();
+  });
+
+  // The values the SDK reported for each of these in a live probe.
+  it.each([
+    ["Bedrock", { apiProvider: "bedrock" }],
+    ["Vertex", { apiProvider: "vertex" }],
+    ["a bearer token", { apiProvider: "firstParty", tokenSource: "ANTHROPIC_AUTH_TOKEN" }],
+    ["an OAuth token variable", { apiProvider: "firstParty", tokenSource: "CLAUDE_CODE_OAUTH_TOKEN" }],
+    ["an API key", { apiProvider: "firstParty", tokenSource: "claude.ai", apiKeySource: "ANTHROPIC_API_KEY" }],
+    ["a key helper", { apiProvider: "firstParty", tokenSource: "apiKeyHelper", apiKeySource: "apiKeyHelper" }],
+    ["a key alongside a subscription", { ...LOGIN, apiKeySource: "apiKeyHelper" }],
+    ["a provider with a subscription", { ...LOGIN, apiProvider: "gateway" }],
+    ["nothing reported", {}],
+  ] as const)("refuses %s, without printing the account", (_name, account) => {
+    expect(() => assertLoginAccount(account)).toThrow(/Refusing to run/);
+    expect(() => assertLoginAccount(account)).not.toThrow(/owner@example/);
+  });
+});
+
+describe("checkLogin", () => {
+  const probeWith = (accountInfo: () => Promise<object>) => {
+    const close = vi.fn();
+    return { close, query: () => ({ accountInfo, close }) };
+  };
+
+  it("passes on the login and closes the probe", async () => {
+    const { close, query } = probeWith(async () => ({ apiProvider: "firstParty", subscriptionType: "Claude Ultra" }));
+    await expect(checkLogin(query)).resolves.toBeUndefined();
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("refuses another provider and closes the probe", async () => {
+    const { close, query } = probeWith(async () => ({ apiProvider: "bedrock" }));
+    await expect(checkLogin(query)).rejects.toThrow(/Refusing to run/);
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("fails closed when the account cannot be read", async () => {
+    const { close, query } = probeWith(async () => {
+      throw new Error("no answer");
+    });
+    await expect(checkLogin(query)).rejects.toThrow(/no answer/);
+    expect(close).toHaveBeenCalledOnce();
+  });
 });
 
 describe("assertIsolated", () => {

@@ -2,7 +2,7 @@ import { type Options, query as sdkQuery, type SDKMessage, type SDKUserMessage }
 import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import type { JsonSchema, Llm, LlmInput } from "../types.ts";
-import { assertIsolated, assertLogin, loginOptions } from "./claude-login.ts";
+import { assertIsolated, assertLogin, checkLogin, loginOptions } from "./claude-login.ts";
 
 export type Query = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options: Options }) => AsyncIterable<SDKMessage>;
 
@@ -30,12 +30,12 @@ async function* withImages({ prompt, images = [] }: LlmInput): AsyncGenerator<SD
 // Validates against the schema itself: converting it to Zod silently drops constraints.
 // strictSchema stays on, so a keyword Ajv cannot enforce throws instead of being ignored.
 function compile(jsonSchema: JsonSchema) {
-  const ajv = new Ajv2020({ useDefaults: true, strictTypes: false, strictTuples: false });
+  const ajv = new Ajv2020({ strictTypes: false, strictTuples: false });
   addFormats(ajv);
   return ajv.compile(jsonSchema);
 }
 
-export function createLlm(query: Query = sdkQuery as Query): Llm {
+export function createLlm(query: Query = sdkQuery as Query, login: () => Promise<void> = checkLogin): Llm {
   return {
     async structured<T>(input: LlmInput, jsonSchema: JsonSchema): Promise<T> {
       const validate = compile(jsonSchema);
@@ -43,6 +43,7 @@ export function createLlm(query: Query = sdkQuery as Query): Llm {
       let output: unknown;
       let failure: string | undefined;
       try {
+        await login();
         const messages = query({
           prompt: input.images?.length ? withImages(input) : input.prompt,
           options: {
@@ -72,7 +73,6 @@ export function createLlm(query: Query = sdkQuery as Query): Llm {
       }
       if (failure) throw new Error(`Llm.structured failed: ${failure}`);
       if (output === undefined) throw new Error("Llm.structured failed: the result had no structured output");
-      // useDefaults fills defaults into output in place, so this returns the validated value.
       if (!validate(output)) throw new Error(`Llm.structured failed: output does not match the schema: ${JSON.stringify(validate.errors)}`);
       return output as T;
     },

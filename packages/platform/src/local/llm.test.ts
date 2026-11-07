@@ -12,7 +12,7 @@ const llmWith = (messages: unknown[], thenThrow = "") => {
     yield* messages as SDKMessage[];
     if (thenThrow) throw new Error(thenThrow);
   };
-  return createLlm(query);
+  return createLlm(query, async () => {});
 };
 const success = (structured_output: unknown) => ({ type: "result", subtype: "success", is_error: false, result: "", structured_output });
 
@@ -21,10 +21,28 @@ describe("Llm.structured", () => {
     await expect(llmWith([INIT, success({ total: 5 })]).structured({ prompt: "x" }, SCHEMA)).resolves.toEqual({ total: 5 });
   });
 
-  it("returns the validated value, with defaults filled in, and keeps properties the schema allows", async () => {
-    const withDefault = { type: "object", properties: { total: { type: "integer", default: 5 } }, required: ["total"] };
-    const llm = llmWith([INIT, success({ note: "kept" })]);
-    await expect(llm.structured({ prompt: "x" }, withDefault)).resolves.toEqual({ total: 5, note: "kept" });
+  it("returns the output unchanged, keeping properties the schema allows", async () => {
+    await expect(llmWith([INIT, success({ total: 5, note: "kept" })]).structured({ prompt: "x" }, SCHEMA)).resolves.toEqual({ total: 5, note: "kept" });
+  });
+
+  it("does not fill defaults, which could break a constraint already checked", async () => {
+    const schema = { type: "object", allOf: [{ properties: { total: { maximum: 10 } } }, { properties: { total: { default: 20 } } }] };
+    await expect(llmWith([INIT, success({})]).structured({ prompt: "x" }, schema)).resolves.toEqual({});
+  });
+
+  it("does not let a default satisfy required", async () => {
+    const schema = { type: "object", properties: { total: { type: "integer", default: 5 } }, required: ["total"] };
+    await expect(llmWith([INIT, success({})]).structured({ prompt: "x" }, schema)).rejects.toThrow(/does not match/);
+  });
+
+  it("refuses before calling the model when the login check fails", async () => {
+    const query: Query = async function* () {
+      throw new Error("the model was called");
+    };
+    const refuse = async () => {
+      throw new Error("Refusing to run: not the login");
+    };
+    await expect(createLlm(query, refuse).structured({ prompt: "x" }, SCHEMA)).rejects.toThrow(/Refusing to run/);
   });
 
   it.each([
@@ -56,7 +74,7 @@ describe("Llm.structured", () => {
     const query: Query = async function* () {
       throw new Error("the model was called");
     };
-    await expect(createLlm(query).structured({ prompt: "x" }, { type: "object", notAKeyword: 1 })).rejects.toThrow(/notAKeyword/);
+    await expect(createLlm(query, async () => {}).structured({ prompt: "x" }, { type: "object", notAKeyword: 1 })).rejects.toThrow(/notAKeyword/);
   });
 
   it("accepts the schema Zod emits for ParsedBill, the planned caller", async () => {

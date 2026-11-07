@@ -1,4 +1,4 @@
-import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import { type AccountInfo, type Options, type Query, query as sdkQuery, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 
 // Local mode is for the owner's own Claude Code login only: Anthropic does not allow offering claude.ai login in a product.
 
@@ -45,6 +45,34 @@ type Init = { apiKeySource: string; tools: string[]; agents?: string[] };
 export function assertLogin(init: Pick<Init, "apiKeySource">): void {
   if (init.apiKeySource !== "none") {
     throw new Error(`Refusing to run: Claude is using "${init.apiKeySource}" instead of the Claude Code login`);
+  }
+}
+
+/**
+ * apiKeySource is also "none" for a third-party provider or a bearer token, so init alone does not prove the login.
+ * Only a subscription login reports a subscriptionType. Probed: Bedrock, Vertex, tokens, keys and helpers all lack it.
+ * shortcut: ANTHROPIC_BASE_URL from managed settings still reads as the login, the SDK does not expose it. See plan.md.
+ */
+export function assertLoginAccount({ apiProvider, subscriptionType, tokenSource, apiKeySource }: AccountInfo): void {
+  if (apiProvider !== "firstParty" || !subscriptionType || apiKeySource) {
+    throw new Error(
+      `Refusing to run: not the Claude Code login (provider ${apiProvider}, token ${tokenSource}, key ${apiKeySource})`,
+    );
+  }
+}
+
+type AccountQuery = (params: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => Pick<Query, "accountInfo" | "close">;
+
+/** Runs before the real query, because a string prompt starts the model at once. The prompt never yields, so nothing is spent. */
+export async function checkLogin(query: AccountQuery = sdkQuery): Promise<void> {
+  const noPrompt = (async function* (): AsyncGenerator<SDKUserMessage> {
+    await new Promise(() => {});
+  })();
+  const probe = query({ prompt: noPrompt, options: { ...loginOptions(), tools: [] } });
+  try {
+    assertLoginAccount(await probe.accountInfo());
+  } finally {
+    probe.close();
   }
 }
 
