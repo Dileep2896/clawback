@@ -65,6 +65,7 @@ export function Phone() {
                 autoComplete="off"
                 maxLength={1000}
                 value={draft}
+                disabled={busy}
                 onChange={(event) => setDraft(event.target.value)}
                 className="min-h-11 min-w-0 flex-1 rounded-[3px] border-2 border-ink bg-sheet px-2"
               />
