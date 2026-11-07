@@ -1,11 +1,11 @@
 "use server";
 
 import { db } from "@bill-fighter/db/client";
-import { runs, users } from "@bill-fighter/db/schema";
+import { users } from "@bill-fighter/db/schema";
 import { Provider } from "@bill-fighter/shared/fixtures";
-import { desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { isDemoCustomer } from "../../../lib/accounts.ts";
+import { isDemoCustomer, startFirstRun } from "../../../lib/accounts.ts";
 import { requireUser } from "../../../lib/session.ts";
 import { callWebhook } from "../../../lib/webhook.ts";
 
@@ -40,10 +40,8 @@ export async function startAuditAction(): Promise<StartState> {
     await db.update(users).set({ auditRequestedAt: new Date() }).where(eq(users.id, user.id));
     return { queued: true };
   }
-  const [existing] = await db.select({ id: runs.id }).from(runs).where(eq(runs.customerId, user.customerId)).orderBy(desc(runs.startedAt)).limit(1);
-  if (!existing) {
-    const reply = await callWebhook("/start-audit", {});
-    if (!reply.ok) return { error: reply.status === 503 ? String(reply.body.error) : `The agents could not start: ${String(reply.body.error ?? reply.status)}` };
-  }
+  // Two tabs clicking at once must not start two runs: each send has its own message id, so inbound deduplication would not catch it.
+  const reply = await startFirstRun(db, user.customerId, () => callWebhook("/start-audit", {}));
+  if (reply && !reply.ok) return { error: reply.status === 503 ? String(reply.body.error) : `The agents could not start: ${String(reply.body.error ?? reply.status)}` };
   redirect("/overview");
 }

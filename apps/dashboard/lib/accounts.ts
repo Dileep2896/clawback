@@ -1,9 +1,9 @@
 import type { Db } from "@bill-fighter/db/client";
-import { accounts, billLines, bills, customers, locations, users } from "@bill-fighter/db/schema";
+import { accounts, billLines, bills, customers, locations, runs, users } from "@bill-fighter/db/schema";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
 import { Provider } from "@bill-fighter/shared/fixtures";
 import type { ParsedBill } from "@bill-fighter/shared/parsed-bill";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { hashPassword, verifyPassword } from "./auth.ts";
 
@@ -26,19 +26,43 @@ export const isDemoCustomer = (customerId: string) => customerId === CUSTOMER.id
  */
 export async function createUser(db: Db, input: SignUp): Promise<User | "taken"> {
   const passwordHash = await hashPassword(input.password);
+  try {
+    return await db.transaction(async (tx) => {
+      const [taken] = await tx.select({ id: users.id }).from(users).where(eq(users.email, input.email));
+      if (taken) return "taken";
+      const [existing] = await tx.select({ id: customers.id }).from(customers).where(eq(customers.contactEmail, input.email));
+      const customerId =
+        existing?.id ??
+        (await tx.insert(customers).values({ name: input.company, contactName: input.name, contactEmail: input.email, contactPhone: "" }).returning({ id: customers.id }))[0]!.id;
+      const [user] = await tx
+        .insert(users)
+        .values({ name: input.name, company: input.company, email: input.email, passwordHash, customerId, createdCustomer: !existing })
+        .onConflictDoNothing({ target: users.email })
+        .returning();
+      // A racing sign-up took the email: throwing rolls back the customer made above, which demo:reset could not find through users.
+      if (!user) throw new EmailTaken();
+      return user;
+    });
+  } catch (error) {
+    if (error instanceof EmailTaken) return "taken";
+    throw error;
+  }
+}
+
+class EmailTaken extends Error {}
+
+/** Holds a transaction-scoped Postgres lock, so racing requests for the same key take turns. */
+const lock = (tx: Pick<Db, "execute">, key: string) => tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
+
+/**
+ * Starts the customer's first run once. The lock makes two tabs take turns: the second sees the run the first started, because
+ * start() returns only after the webhook has committed the run row. Returns null when a run already exists.
+ */
+export async function startFirstRun<T>(db: Db, customerId: string, start: () => Promise<T>): Promise<T | null> {
   return db.transaction(async (tx) => {
-    const [taken] = await tx.select({ id: users.id }).from(users).where(eq(users.email, input.email));
-    if (taken) return "taken";
-    const [existing] = await tx.select({ id: customers.id }).from(customers).where(eq(customers.contactEmail, input.email));
-    const customerId =
-      existing?.id ??
-      (await tx.insert(customers).values({ name: input.company, contactName: input.name, contactEmail: input.email, contactPhone: "" }).returning({ id: customers.id }))[0]!.id;
-    const [user] = await tx
-      .insert(users)
-      .values({ name: input.name, company: input.company, email: input.email, passwordHash, customerId, createdCustomer: !existing })
-      .onConflictDoNothing({ target: users.email })
-      .returning();
-    return user ?? "taken";
+    await lock(tx, `start-audit:${customerId}`);
+    const [existing] = await tx.select({ id: runs.id }).from(runs).where(eq(runs.customerId, customerId)).orderBy(desc(runs.startedAt)).limit(1);
+    return existing ? null : start();
   });
 }
 
@@ -69,6 +93,9 @@ export async function saveParsedBill(db: Db, customerId: string, bill: ParsedBil
   if (!provider) return { status: "needs_review", reason: `We do not work with ${bill.providerName} yet` };
 
   return db.transaction(async (tx) => {
+    // Racing uploads take turns: one account has one owner, a bill period is filed once, an address is one location.
+    await lock(tx, `upload:${customerId}`);
+    await lock(tx, `account:${provider}:${bill.accountNumber}`);
     const [account] = await tx
       .select({ id: accounts.id })
       .from(accounts)
@@ -88,14 +115,19 @@ export async function saveParsedBill(db: Db, customerId: string, bill: ParsedBil
         .limit(1);
       if (owned) return { status: "needs_review" as const, reason: "This account is already linked to another Clawback customer" };
       const address = bill.serviceAddress ?? "Address not on the bill";
+      // Electricity and gas at one address are one location.
+      const [known] = await tx
+        .select({ id: locations.id })
+        .from(locations)
+        .where(and(eq(locations.customerId, customerId), sql`lower(trim(${locations.address})) = ${address.trim().toLowerCase()}`))
+        .limit(1);
       const parts = address.split(",").map((part) => part.trim());
-      const [location] = await tx
-        .insert(locations)
-        .values({ customerId, name: parts[0] || address, address, city: parts[1] ?? "" })
-        .returning({ id: locations.id });
+      const locationId =
+        known?.id ??
+        (await tx.insert(locations).values({ customerId, name: parts[0] || address, address, city: parts[1] ?? "" }).returning({ id: locations.id }))[0]!.id;
       const [created] = await tx
         .insert(accounts)
-        .values({ locationId: location!.id, provider, accountNumber: bill.accountNumber, serviceType: bill.serviceType, rateSchedule: bill.rateSchedule, meterNumber: bill.meterNumber })
+        .values({ locationId, provider, accountNumber: bill.accountNumber, serviceType: bill.serviceType, rateSchedule: bill.rateSchedule, meterNumber: bill.meterNumber })
         .returning({ id: accounts.id });
       accountId = created!.id;
     }
