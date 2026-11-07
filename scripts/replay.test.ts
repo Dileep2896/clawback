@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -256,6 +256,16 @@ describe("replay", () => {
       await replay(await options(db, recordingOf(GOOD_EVENTS)));
       expect(await rows()).toEqual(first);
       expect(without(first.ledger)).toEqual(["l1"]);
+    }));
+
+  it("leaves the captured run's folder alone when replaying over a replay", () =>
+    withTestDb("replay_keeps_folder", async (db) => {
+      await seedCustomer(db);
+      const runsDir = mkdtempSync(join(root, "runs-"));
+      mkdirSync(join(runsDir, RUN));
+      await replay(await options(db, recordingOf(GOOD_EVENTS), { runsDir }));
+      await replay(await options(db, recordingOf(GOOD_EVENTS), { runsDir }));
+      expect(existsSync(join(runsDir, RUN))).toBe(true);
     }));
 
   it("refuses a database that is not local, before touching anything", () =>

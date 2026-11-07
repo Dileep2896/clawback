@@ -83,7 +83,7 @@ export async function demoReset(options: ResetOptions) {
   await checkConnected(options);
 
   const seed = (await pool.query<Record<string, number>>(SEED_COUNTS)).rows[0]!;
-  const runRows = (await pool.query<{ id: string; status: string }>("select id, status from runs")).rows;
+  const runRows = (await pool.query<{ id: string; status: string; replayed: boolean }>("select id, status, replay is not null as replayed from runs")).rows;
   // Ids become folder names under a directory other lanes share.
   const unsafe = runRows.filter(({ id }) => !/^\w[\w.-]*$/.test(id)).map(({ id }) => JSON.stringify(id));
   if (unsafe.length > 0) throw new Error(`Refusing to reset: run ids that cannot name a folder: ${unsafe.join(", ")}`);
@@ -95,7 +95,8 @@ export async function demoReset(options: ResetOptions) {
 
   if (mailpitApi) await clearMailpit(mailpitApi);
   // shortcut: a folder with no row stays on disk, which is harmless because every run gets a new id. Wiping the parent would delete other lanes' live runs.
-  await Promise.all(runRows.map(({ id }) => rm(join(runsDir, id), { recursive: true, force: true })));
+  // A replayed run keeps its recorded id, so its folder belongs to the database that captured it, maybe another lane's.
+  await Promise.all(runRows.filter(({ replayed }) => !replayed).map(({ id }) => rm(join(runsDir, id), { recursive: true, force: true })));
   await clearTables(pool, seed);
   return { runs: runRows.length, running, seed };
 }
