@@ -1,0 +1,50 @@
+{
+  "source": "sf-1-telecom-2026-03",
+  "pdfSha256": "09db3ac69c5a983621212d582718de78eacf1e49f32688ddac7d4a570f6c799d",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BT-7001",
+    "serviceAddress": "412 Clement St, San Francisco, CA 94118",
+    "providerName": "BayTel",
+    "serviceType": "telecom",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BT-BIZ-VOICE",
+    "periodStart": "2026-03-01",
+    "periodEnd": "2026-03-31",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Voice line (415) 555-0101",
+        "quantity": 1,
+        "unit": "line",
+        "rate": 135,
+        "amountCents": 13500,
+        "lineType": "voice"
+      },
+      {
+        "description": "Copper line (415) 555-0102",
+        "quantity": 1,
+        "unit": "line",
+        "rate": 60,
+        "amountCents": 6000,
+        "lineType": "pots"
+      },
+      {
+        "description": "Copper line (415) 555-0103",
+        "quantity": 1,
+        "unit": "line",
+        "rate": 60,
+        "amountCents": 6000,
+        "lineType": "pots"
+      }
+    ],
+    "totalCents": 25500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0129145
+}

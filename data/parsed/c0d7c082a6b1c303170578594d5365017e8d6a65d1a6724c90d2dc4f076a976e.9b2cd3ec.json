@@ -1,0 +1,34 @@
+{
+  "source": "san-jose-3-internet-2026-01",
+  "pdfSha256": "c0d7c082a6b1c303170578594d5365017e8d6a65d1a6724c90d2dc4f076a976e",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BC-7010",
+    "serviceAddress": "2005 Story Rd, San Jose, CA 95122",
+    "providerName": "BayConnect",
+    "serviceType": "internet",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BC-BIZ-300",
+    "periodStart": "2026-01-01",
+    "periodEnd": "2026-01-31",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Business internet",
+        "quantity": 1,
+        "unit": "month",
+        "rate": 95,
+        "amountCents": 9500,
+        "lineType": "internet"
+      }
+    ],
+    "totalCents": 9500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.011226899999999998
+}

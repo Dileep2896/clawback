@@ -1,0 +1,34 @@
+{
+  "source": "sf-4-internet-2025-12",
+  "pdfSha256": "4d75815c7890c1caf37eadcbd750dcc4f164c4848c4e55c10b1eeeed9165b989",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BC-7004",
+    "serviceAddress": "Golden Gate Noodle Co. San Francisco #4, 230 Noriega St, San Francisco, CA 94122",
+    "providerName": "BayConnect",
+    "serviceType": "internet",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BC-BIZ-300",
+    "periodStart": "2025-12-01",
+    "periodEnd": "2025-12-31",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Business internet",
+        "quantity": 1,
+        "unit": "month",
+        "rate": 95,
+        "amountCents": 9500,
+        "lineType": "internet"
+      }
+    ],
+    "totalCents": 9500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.011451
+}

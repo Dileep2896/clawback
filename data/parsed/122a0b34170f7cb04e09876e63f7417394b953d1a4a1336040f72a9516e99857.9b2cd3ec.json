@@ -1,0 +1,42 @@
+{
+  "source": "oakland-3-telecom-2026-10",
+  "pdfSha256": "122a0b34170f7cb04e09876e63f7417394b953d1a4a1336040f72a9516e99857",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BT-7007",
+    "serviceAddress": "4801 Telegraph Ave, Oakland, CA 94609",
+    "providerName": "BayTel",
+    "serviceType": "telecom",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BT-BIZ-VOICE",
+    "periodStart": "2026-10-01",
+    "periodEnd": "2026-10-31",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Voice line (510) 555-0113",
+        "quantity": 1,
+        "unit": "line",
+        "rate": 135,
+        "amountCents": 13500,
+        "lineType": "voice"
+      },
+      {
+        "description": "Copper line (510) 555-0114",
+        "quantity": 1,
+        "unit": "line",
+        "rate": 60,
+        "amountCents": 6000,
+        "lineType": "pots"
+      }
+    ],
+    "totalCents": 19500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0122101
+}

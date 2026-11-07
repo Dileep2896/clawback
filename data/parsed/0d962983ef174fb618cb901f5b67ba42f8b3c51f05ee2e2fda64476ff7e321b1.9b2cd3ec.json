@@ -1,0 +1,59 @@
+{
+  "source": "fremont-1-electric-2026-07",
+  "pdfSha256": "0d962983ef174fb618cb901f5b67ba42f8b3c51f05ee2e2fda64476ff7e321b1",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7011",
+    "serviceAddress": "39150 Fremont Blvd, Fremont, CA 94538",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-2214077",
+    "multiplier": 2,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-07-01",
+    "periodEnd": "2026-07-31",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Summer",
+        "kwh": 3804.424
+      },
+      {
+        "period": "Peak Summer",
+        "kwh": 1230.232
+      }
+    ],
+    "maxKw": 10.536,
+    "lineItems": [
+      {
+        "description": "Off-Peak Summer energy",
+        "quantity": 3804.424,
+        "unit": "kWh",
+        "rate": 0.38491,
+        "amountCents": 146436,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Summer energy",
+        "quantity": 1230.232,
+        "unit": "kWh",
+        "rate": 0.64253,
+        "amountCents": 79046,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2546,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 228028
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.013848899999999999
+}

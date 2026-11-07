@@ -1,0 +1,34 @@
+{
+  "source": "sf-3-internet-2026-04",
+  "pdfSha256": "20328cf192fcb76af7ee958373604f05437cff1151bd53f4f9fbea0a95a784ac",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BC-7003",
+    "serviceAddress": "655 Valencia St, San Francisco, CA 94110",
+    "providerName": "BayConnect",
+    "serviceType": "internet",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BC-BIZ-300",
+    "periodStart": "2026-04-01",
+    "periodEnd": "2026-04-30",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Business internet",
+        "quantity": 1,
+        "unit": "month",
+        "rate": 95,
+        "amountCents": 9500,
+        "lineType": "internet"
+      }
+    ],
+    "totalCents": 9500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0112029
+}

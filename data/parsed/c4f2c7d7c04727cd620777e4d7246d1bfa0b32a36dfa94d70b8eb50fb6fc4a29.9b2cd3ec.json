@@ -1,0 +1,34 @@
+{
+  "source": "san-jose-1-internet-2026-08",
+  "pdfSha256": "c4f2c7d7c04727cd620777e4d7246d1bfa0b32a36dfa94d70b8eb50fb6fc4a29",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BC-7008",
+    "serviceAddress": "98 E Santa Clara St, San Jose, CA 95113",
+    "providerName": "BayConnect",
+    "serviceType": "internet",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BC-BIZ-300",
+    "periodStart": "2026-08-01",
+    "periodEnd": "2026-08-31",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Business internet",
+        "quantity": 1,
+        "unit": "month",
+        "rate": 185,
+        "amountCents": 18500,
+        "lineType": "internet"
+      }
+    ],
+    "totalCents": 18500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.011255600000000001
+}

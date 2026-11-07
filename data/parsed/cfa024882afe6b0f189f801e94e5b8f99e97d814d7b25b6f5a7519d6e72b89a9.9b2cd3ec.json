@@ -1,0 +1,71 @@
+{
+  "source": "fremont-1-electric-2026-04",
+  "pdfSha256": "cfa024882afe6b0f189f801e94e5b8f99e97d814d7b25b6f5a7519d6e72b89a9",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7011",
+    "serviceAddress": "39150 Fremont Blvd, Fremont, CA 94538",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-2214077",
+    "multiplier": 2,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-04-01",
+    "periodEnd": "2026-04-30",
+    "kwhByTouPeriod": [
+      {
+        "period": "Super Off-Peak Winter",
+        "kwh": 1222.486
+      },
+      {
+        "period": "Off-Peak Winter",
+        "kwh": 2146.134
+      },
+      {
+        "period": "Peak Winter",
+        "kwh": 1033.4
+      }
+    ],
+    "maxKw": 9.36,
+    "lineItems": [
+      {
+        "description": "Super Off-Peak Winter energy",
+        "quantity": 1222.486,
+        "unit": "kWh",
+        "rate": 0.31617,
+        "amountCents": 38651,
+        "lineType": "energy"
+      },
+      {
+        "description": "Off-Peak Winter energy",
+        "quantity": 2146.134,
+        "unit": "kWh",
+        "rate": 0.35225,
+        "amountCents": 75598,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Winter energy",
+        "quantity": 1033.4,
+        "unit": "kWh",
+        "rate": 0.39584,
+        "amountCents": 40906,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2464,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 157619
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0149539
+}

@@ -1,0 +1,59 @@
+{
+  "source": "oakland-3-electric-2026-10",
+  "pdfSha256": "d56f11a483852d25e5714fc744f6faba0f825c03ea38fe37b5d36e8f0c916616",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7007",
+    "serviceAddress": "4801 Telegraph Ave, Oakland, CA 94609",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009007",
+    "multiplier": 1,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-10-01",
+    "periodEnd": "2026-10-31",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Winter",
+        "kwh": 2771.606
+      },
+      {
+        "period": "Peak Winter",
+        "kwh": 750.861
+      }
+    ],
+    "maxKw": 14.536,
+    "lineItems": [
+      {
+        "description": "Off-Peak Winter energy",
+        "quantity": 2771.606,
+        "unit": "kWh",
+        "rate": 0.35225,
+        "amountCents": 97630,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Winter energy",
+        "quantity": 750.861,
+        "unit": "kWh",
+        "rate": 0.39584,
+        "amountCents": 29722,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2546,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 129898
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0138043
+}

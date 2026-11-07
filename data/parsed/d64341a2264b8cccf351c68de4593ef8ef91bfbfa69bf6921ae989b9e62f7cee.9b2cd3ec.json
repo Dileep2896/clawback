@@ -1,0 +1,34 @@
+{
+  "source": "oakland-2-telecom-2026-10",
+  "pdfSha256": "d64341a2264b8cccf351c68de4593ef8ef91bfbfa69bf6921ae989b9e62f7cee",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BT-7006",
+    "serviceAddress": "3312 Grand Ave, Oakland, CA 94610",
+    "providerName": "BayTel",
+    "serviceType": "telecom",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BT-BIZ-VOICE",
+    "periodStart": "2026-10-01",
+    "periodEnd": "2026-10-31",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Voice line (510) 555-0112",
+        "quantity": 1,
+        "unit": "line",
+        "rate": 135,
+        "amountCents": 13500,
+        "lineType": "voice"
+      }
+    ],
+    "totalCents": 13500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0114822
+}

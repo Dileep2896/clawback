@@ -1,0 +1,34 @@
+{
+  "source": "san-jose-1-telecom-2026-02",
+  "pdfSha256": "d1c0d70bb5169775a66a54fb6b7453cc2da3ffcee43636cc21208df2d6f164e2",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BT-7008",
+    "serviceAddress": "98 E Santa Clara St, San Jose, CA 95113",
+    "providerName": "BayTel",
+    "serviceType": "telecom",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BT-BIZ-VOICE",
+    "periodStart": "2026-02-01",
+    "periodEnd": "2026-02-28",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Voice line (408) 555-0121",
+        "quantity": 1,
+        "unit": "line",
+        "rate": 135,
+        "amountCents": 13500,
+        "lineType": "voice"
+      }
+    ],
+    "totalCents": 13500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0115648
+}

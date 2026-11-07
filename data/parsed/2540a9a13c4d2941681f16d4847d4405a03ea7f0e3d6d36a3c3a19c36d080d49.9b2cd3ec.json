@@ -1,0 +1,71 @@
+{
+  "source": "san-jose-2-electric-2026-03",
+  "pdfSha256": "2540a9a13c4d2941681f16d4847d4405a03ea7f0e3d6d36a3c3a19c36d080d49",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7009",
+    "serviceAddress": "1175 Lincoln Ave, San Jose, CA 95125",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009009",
+    "multiplier": 1,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-03-01",
+    "periodEnd": "2026-03-31",
+    "kwhByTouPeriod": [
+      {
+        "period": "Super Off-Peak Winter",
+        "kwh": 1289.152
+      },
+      {
+        "period": "Off-Peak Winter",
+        "kwh": 1544.87
+      },
+      {
+        "period": "Peak Winter",
+        "kwh": 740.253
+      }
+    ],
+    "maxKw": 15.424,
+    "lineItems": [
+      {
+        "description": "Super Off-Peak Winter energy",
+        "quantity": 1289.152,
+        "unit": "kWh",
+        "rate": 0.31617,
+        "amountCents": 40759,
+        "lineType": "energy"
+      },
+      {
+        "description": "Off-Peak Winter energy",
+        "quantity": 1544.87,
+        "unit": "kWh",
+        "rate": 0.35225,
+        "amountCents": 54418,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Winter energy",
+        "quantity": 740.253,
+        "unit": "kWh",
+        "rate": 0.39584,
+        "amountCents": 29302,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2546,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 127025
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0149421
+}

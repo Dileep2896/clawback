@@ -1,0 +1,71 @@
+{
+  "source": "sf-2-electric-2026-04",
+  "pdfSha256": "de5d99c03b5be24aeedbf9843b0dc517679206778381d3de3b381c9a27bfe578",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7002",
+    "serviceAddress": "1840 Irving St, San Francisco, CA 94122",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009002",
+    "multiplier": 1,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-04-01",
+    "periodEnd": "2026-04-30",
+    "kwhByTouPeriod": [
+      {
+        "period": "Super Off-Peak Winter",
+        "kwh": 1450.627
+      },
+      {
+        "period": "Off-Peak Winter",
+        "kwh": 1760.088
+      },
+      {
+        "period": "Peak Winter",
+        "kwh": 846.257
+      }
+    ],
+    "maxKw": 17.716,
+    "lineItems": [
+      {
+        "description": "Super Off-Peak Winter energy",
+        "quantity": 1450.627,
+        "unit": "kWh",
+        "rate": 0.31617,
+        "amountCents": 45864,
+        "lineType": "energy"
+      },
+      {
+        "description": "Off-Peak Winter energy",
+        "quantity": 1760.088,
+        "unit": "kWh",
+        "rate": 0.35225,
+        "amountCents": 61999,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Winter energy",
+        "quantity": 846.257,
+        "unit": "kWh",
+        "rate": 0.39584,
+        "amountCents": 33498,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2464,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 143825
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0148793
+}

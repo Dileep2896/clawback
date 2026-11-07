@@ -1,0 +1,34 @@
+{
+  "source": "fremont-1-internet-2025-11",
+  "pdfSha256": "1981d374cd78a21c9a509572c8f9bb2443bad6c746de5c09b8c3050f5e39b51c",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BC-7011",
+    "serviceAddress": "39150 Fremont Blvd, Fremont, CA 94538",
+    "providerName": "BayConnect",
+    "serviceType": "internet",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BC-BIZ-300",
+    "periodStart": "2025-11-01",
+    "periodEnd": "2025-11-30",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Business internet",
+        "quantity": 1,
+        "unit": "month",
+        "rate": 95,
+        "amountCents": 9500,
+        "lineType": "internet"
+      }
+    ],
+    "totalCents": 9500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0112682
+}

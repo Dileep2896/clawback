@@ -1,0 +1,34 @@
+{
+  "source": "oakland-2-internet-2026-02",
+  "pdfSha256": "7ef8e01f7d45f3cee80f5e9f05261018f7522ce328d24685c4a68ca9af23365c",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BC-7006",
+    "serviceAddress": "3312 Grand Ave, Oakland, CA 94610",
+    "providerName": "BayConnect",
+    "serviceType": "internet",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BC-BIZ-300",
+    "periodStart": "2026-02-01",
+    "periodEnd": "2026-02-28",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Business internet",
+        "quantity": 1,
+        "unit": "month",
+        "rate": 95,
+        "amountCents": 9500,
+        "lineType": "internet"
+      }
+    ],
+    "totalCents": 9500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.011237500000000001
+}

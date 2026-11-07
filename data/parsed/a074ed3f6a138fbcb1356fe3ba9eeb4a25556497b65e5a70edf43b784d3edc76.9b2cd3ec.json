@@ -1,0 +1,42 @@
+{
+  "source": "oakland-3-gas-2026-07",
+  "pdfSha256": "a074ed3f6a138fbcb1356fe3ba9eeb4a25556497b65e5a70edf43b784d3edc76",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BH-7007",
+    "serviceAddress": "4801 Telegraph Ave, Oakland, CA 94609",
+    "providerName": "BayHearth Energy",
+    "serviceType": "gas",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BH-FIXED-24",
+    "periodStart": "2026-07-01",
+    "periodEnd": "2026-07-31",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Natural gas supply",
+        "quantity": 450,
+        "unit": "therm",
+        "rate": 1.24,
+        "amountCents": 55800,
+        "lineType": "gas_supply"
+      },
+      {
+        "description": "Monthly service fee",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 1200,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 57000
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.012071899999999998
+}

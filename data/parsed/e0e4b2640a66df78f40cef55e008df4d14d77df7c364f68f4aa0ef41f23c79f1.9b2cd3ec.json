@@ -1,0 +1,34 @@
+{
+  "source": "san-jose-1-internet-2026-01",
+  "pdfSha256": "e0e4b2640a66df78f40cef55e008df4d14d77df7c364f68f4aa0ef41f23c79f1",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BC-7008",
+    "serviceAddress": "Golden Gate Noodle Co. San Jose #1, 98 E Santa Clara St, San Jose, CA 95113",
+    "providerName": "BayConnect",
+    "serviceType": "internet",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BC-BIZ-300",
+    "periodStart": "2026-01-01",
+    "periodEnd": "2026-01-31",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Business internet",
+        "quantity": 1,
+        "unit": "month",
+        "rate": 95,
+        "amountCents": 9500,
+        "lineType": "internet"
+      }
+    ],
+    "totalCents": 9500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.011465099999999999
+}

@@ -1,0 +1,59 @@
+{
+  "source": "sf-1-electric-2026-07",
+  "pdfSha256": "cf9c2304df3a5d2ca6ee762edbe89e9bacb35a0656a88add04d8f65802a801bd",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7001",
+    "serviceAddress": "412 Clement St, San Francisco, CA 94118",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009001",
+    "multiplier": 1,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-07-01",
+    "periodEnd": "2026-07-31",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Summer",
+        "kwh": 3889.584
+      },
+      {
+        "period": "Peak Summer",
+        "kwh": 1092.257
+      }
+    ],
+    "maxKw": 20.624,
+    "lineItems": [
+      {
+        "description": "Off-Peak Summer energy",
+        "quantity": 3889.584,
+        "unit": "kWh",
+        "rate": 0.38491,
+        "amountCents": 149714,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Summer energy",
+        "quantity": 1092.257,
+        "unit": "kWh",
+        "rate": 0.64253,
+        "amountCents": 70181,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2546,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 222441
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0137966
+}

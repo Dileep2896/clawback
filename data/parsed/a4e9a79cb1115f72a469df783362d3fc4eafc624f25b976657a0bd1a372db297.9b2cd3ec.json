@@ -1,0 +1,79 @@
+{
+  "source": "oakland-1-electric-2026-03",
+  "pdfSha256": "a4e9a79cb1115f72a469df783362d3fc4eafc624f25b976657a0bd1a372db297",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7005",
+    "serviceAddress": "1520 Broadway, Oakland, CA 94612",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009005",
+    "multiplier": 1,
+    "rateSchedule": "B-10",
+    "planCode": null,
+    "periodStart": "2026-03-01",
+    "periodEnd": "2026-03-31",
+    "kwhByTouPeriod": [
+      {
+        "period": "Super Off-Peak Winter",
+        "kwh": 2827.939
+      },
+      {
+        "period": "Off-Peak Winter",
+        "kwh": 2901.474
+      },
+      {
+        "period": "Peak Winter",
+        "kwh": 1390.306
+      }
+    ],
+    "maxKw": 37.884,
+    "lineItems": [
+      {
+        "description": "Super Off-Peak Winter energy",
+        "quantity": 2827.939,
+        "unit": "kWh",
+        "rate": 0.19139,
+        "amountCents": 54124,
+        "lineType": "energy"
+      },
+      {
+        "description": "Off-Peak Winter energy",
+        "quantity": 2901.474,
+        "unit": "kWh",
+        "rate": 0.22773,
+        "amountCents": 66075,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Winter energy",
+        "quantity": 1390.306,
+        "unit": "kWh",
+        "rate": 0.26321,
+        "amountCents": 36594,
+        "lineType": "energy"
+      },
+      {
+        "description": "Maximum Demand Winter",
+        "quantity": 37.884,
+        "unit": "kW",
+        "rate": 20.5,
+        "amountCents": 77662,
+        "lineType": "demand"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 35243,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 269698
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0156169
+}

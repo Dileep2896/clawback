@@ -1,0 +1,59 @@
+{
+  "source": "sf-3-electric-2026-06",
+  "pdfSha256": "b9b6f851cb006ef94eead86b7be10609f537ef5dd21be452350ec08d2590b78f",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-7003",
+    "serviceAddress": "655 Valencia St, San Francisco, CA 94110",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "BEM-1009003",
+    "multiplier": 1,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-06-01",
+    "periodEnd": "2026-06-30",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Summer",
+        "kwh": 4023.521
+      },
+      {
+        "period": "Peak Summer",
+        "kwh": 1102.946
+      }
+    ],
+    "maxKw": 22.312,
+    "lineItems": [
+      {
+        "description": "Off-Peak Summer energy",
+        "quantity": 4023.521,
+        "unit": "kWh",
+        "rate": 0.38491,
+        "amountCents": 154869,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Summer energy",
+        "quantity": 1102.946,
+        "unit": "kWh",
+        "rate": 0.64253,
+        "amountCents": 70868,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2464,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 228201
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.013810699999999999
+}

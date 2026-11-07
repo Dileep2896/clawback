@@ -1,0 +1,42 @@
+{
+  "source": "fremont-2-telecom-2026-10",
+  "pdfSha256": "65b7a26047181c6922a38f9c6e56311b36dbdd4c97fc432b0a35f92896ad68b0",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BT-7012",
+    "serviceAddress": "46525 Mission Blvd, Fremont, CA 94539",
+    "providerName": "BayTel",
+    "serviceType": "telecom",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BT-BIZ-VOICE",
+    "periodStart": "2026-10-01",
+    "periodEnd": "2026-10-31",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Voice line (510) 555-0132",
+        "quantity": 1,
+        "unit": "line",
+        "rate": 135,
+        "amountCents": 13500,
+        "lineType": "voice"
+      },
+      {
+        "description": "Copper line (510) 555-0133",
+        "quantity": 1,
+        "unit": "line",
+        "rate": 60,
+        "amountCents": 6000,
+        "lineType": "pots"
+      }
+    ],
+    "totalCents": 19500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.012196
+}

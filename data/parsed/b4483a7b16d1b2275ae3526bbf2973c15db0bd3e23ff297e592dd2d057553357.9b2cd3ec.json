@@ -1,0 +1,42 @@
+{
+  "source": "san-jose-3-telecom-2026-09",
+  "pdfSha256": "b4483a7b16d1b2275ae3526bbf2973c15db0bd3e23ff297e592dd2d057553357",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BT-7010",
+    "serviceAddress": "2005 Story Rd, San Jose, CA 95122",
+    "providerName": "BayTel",
+    "serviceType": "telecom",
+    "meterNumber": null,
+    "multiplier": null,
+    "rateSchedule": null,
+    "planCode": "BT-BIZ-VOICE",
+    "periodStart": "2026-09-01",
+    "periodEnd": "2026-09-30",
+    "kwhByTouPeriod": [],
+    "maxKw": null,
+    "lineItems": [
+      {
+        "description": "Voice line (408) 555-0125",
+        "quantity": 1,
+        "unit": "line",
+        "rate": 135,
+        "amountCents": 13500,
+        "lineType": "voice"
+      },
+      {
+        "description": "Copper line (408) 555-0126",
+        "quantity": 1,
+        "unit": "line",
+        "rate": 60,
+        "amountCents": 6000,
+        "lineType": "pots"
+      }
+    ],
+    "totalCents": 19500
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0121678
+}
