@@ -29,7 +29,8 @@ async function startAllowlistProxy(allowed: (url: string) => boolean) {
   proxy.on("connect", (request, client, head) => {
     const [host = "", port = "443"] = (request.url ?? "").split(/:(?=\d+$)/);
     if (!allowed(`https://${request.url}`)) return void client.destroy();
-    const upstream = connect(Number(port), host, () => {
+    // connect() wants a bare IPv6 address: Node treats "[::1]" as a hostname and fails with ENOTFOUND.
+    const upstream = connect(Number(port), host.replace(/^\[|\]$/g, ""), () => {
       client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
       upstream.write(head);
       upstream.pipe(client);

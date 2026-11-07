@@ -33,6 +33,13 @@ export default async function check() {
   tunnelled.server.on("connection", () => tunnelHits++);
   const tunnelledHttps = tunnelled.origin.replace("http:", "https:");
 
+  // The same for an IPv6 origin, whose CONNECT host arrives in brackets.
+  let tunnelHitsV6 = 0;
+  const tunnelledV6 = createServer((_request, response) => response.end());
+  tunnelledV6.on("connection", () => tunnelHitsV6++);
+  await new Promise<void>((resolve) => tunnelledV6.listen(0, "::1", resolve));
+  const tunnelledV6Https = `https://[::1]:${(tunnelledV6.address() as AddressInfo).port}`;
+
   // A STUN server stand-in. WebRTC's sockets skip loopback, so it is reached on this machine's own LAN address if any.
   let udpHits = 0;
   const udp = createSocket("udp4").on("message", () => udpHits++);
@@ -96,7 +103,7 @@ export default async function check() {
   const adapter = createBrowser(vault, () => ({
     callNumbers: [],
     emailDomains: [],
-    portalOrigins: [portal.origin, tunnelledHttps],
+    portalOrigins: [portal.origin, tunnelledHttps, tunnelledV6Https],
   }));
   const session = await adapter.open();
 
@@ -153,6 +160,9 @@ export default async function check() {
     await assert.rejects(session.goto(`${tunnelledHttps}/`));
     assert.ok(tunnelHits > 0, "the proxy did not open a tunnel to an allowed https origin");
 
+    await assert.rejects(session.goto(`${tunnelledV6Https}/`));
+    assert.ok(tunnelHitsV6 > 0, "the proxy did not open a tunnel to an allowed IPv6 https origin");
+
     await session.goto(`${portal.origin}/`);
     await session.fillSecret("#password", "portal");
     await session.click("#go");
@@ -193,6 +203,7 @@ export default async function check() {
     portal.server.close();
     forbidden.server.close();
     tunnelled.server.close();
+    tunnelledV6.close();
     udp.close();
     await rm(dir, { recursive: true, force: true });
   }
