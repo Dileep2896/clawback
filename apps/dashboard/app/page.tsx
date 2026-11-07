@@ -38,7 +38,7 @@ export default function Landing() {
         </header>
 
         {/* The run first, then the claim it proves: the page opens on software working, not on a promise. */}
-        <section className="mx-auto grid w-full max-w-[1320px] flex-1 content-center gap-10 px-4 pt-4 pb-12 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:items-end lg:gap-x-16">
+        <section className="mx-auto grid w-full max-w-[1320px] flex-1 content-start gap-10 px-4 pt-6 pb-12 lg:pt-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:items-end lg:gap-x-16">
           <div className="min-w-0 lg:col-span-2">
             <LiveRun />
           </div>

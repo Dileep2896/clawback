@@ -1,24 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { advance, CALL, COUNT_END, COUNT_START, FADE_AT, FINISHED, markAt, REFUND_CENTS, refundCentsAt, startAt, STEPS, typedAt, type Mark } from "./timeline.ts";
 
-// A shortened playback of the recorded demo run (data/replay/run.jsonl, 4 min 28 s). Every word and number below is
-// from that run; the landing-live lane notes list the row each comes from. Times are ms into an 18 s loop, in the run's own order.
-const LOOP = 18_000;
-const FADE_AT = 17_300;
-const FINISHED = 15_000; // the frame shown under prefers-reduced-motion: every step done
-
-type Mark = "idle" | "doing" | "done" | "found" | "call";
-
-type Step = { agent: string; text: string; start: number; end: number; endMark: Mark; doingMark?: Mark };
-
-const STEPS: Step[] = [
-  { agent: "Collector", text: "downloading bills and usage", start: 0, end: 2_400, endMark: "done" },
-  { agent: "Auditor", text: "Fremont meter billed 2x", start: 2_600, end: 4_400, endMark: "found" },
-  { agent: "Approver", text: "Linda Park approved by SMS", start: 5_600, end: 6_800, endMark: "done" },
-  { agent: "Negotiator", text: "calling BayTel", start: 7_000, end: 11_600, endMark: "done", doingMark: "call" },
-  { agent: "Finance", text: "refund claimed", start: 11_800, end: 14_400, endMark: "done" },
-];
+// What the playback shows besides the timeline, all from the recorded demo run (data/replay/run.jsonl).
 
 // The meter finding's evidence: billed kWh against the meter's own readings.
 const EVIDENCE = [
@@ -26,24 +11,16 @@ const EVIDENCE = [
   { month: "Oct 2025", billed: "4,778", meter: "2,389" },
 ];
 
-// The BayTel call transcript, lines 9 and 10, typed out as they happen.
-const CALL = [
-  { who: "Clawback", text: "Please cancel phone line (415) 555-0102 on account BT-7001.", start: 7_500, end: 9_700 },
-  { who: "BayTel", text: "Yes, that is cancelled.", start: 10_100, end: 10_900 },
+// Yearly savings by finding (annual_savings_cents on the findings rows), shown as the Auditor finds them; they sum to the
+// approval's "Yearly savings: $18,319.32". The total lands when Finance records it.
+const SAVINGS = [
+  { label: "Meter fixed", amount: "$10,710.37" },
+  { label: "2 rate changes", amount: "$2,568.95" },
+  { label: "7 unused lines", amount: "$5,040.00" },
 ];
+const SAVINGS_TOTAL = "$18,319.32";
 
-const REFUND_CENTS = 1_260_606;
-const COUNT_START = 12_000;
-const COUNT_END = 14_200;
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-
-const progress = (t: number, start: number, end: number) => Math.min(1, Math.max(0, (t - start) / (end - start)));
-
-function markAt(step: Step, t: number): Mark {
-  if (t < step.start) return "idle";
-  if (t < step.end) return step.doingMark ?? "doing";
-  return step.endMark;
-}
 
 const MARK_WORD: Record<Mark, string> = { idle: "", doing: "working", call: "on the call", done: "done", found: "found" };
 const MARK_COLOUR: Record<Mark, string> = {
@@ -83,7 +60,7 @@ function Glyph({ mark }: { mark: Mark }) {
 
 /** Text that types out over [start, end] without moving anything: the full line holds the space, invisibly. */
 function Typed({ text, t, start, end }: { text: string; t: number; start: number; end: number }) {
-  const shown = Math.round(text.length * progress(t, start, end));
+  const shown = typedAt(text, t, start, end);
   return (
     <span className="grid">
       <span className="invisible col-start-1 row-start-1">{text}</span>
@@ -95,16 +72,17 @@ function Typed({ text, t, start, end }: { text: string; t: number; start: number
   );
 }
 
-function Row({ step, t }: { step: Step; t: number }) {
+function Row({ step, t }: { step: (typeof STEPS)[number]; t: number }) {
   const mark = markAt(step, t);
   return (
-    <div className={`grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-x-3 py-2.5 ${mark === "idle" ? "text-band-faded" : ""}`}>
+    // The status column has a fixed width, so a row never re-wraps when its word changes ("" → "on the call" → "done").
+    <div className={`grid grid-cols-[1.5rem_minmax(0,1fr)_6.5rem] items-center gap-x-3 py-2.5 ${mark === "idle" ? "text-band-faded" : ""}`}>
       <Glyph mark={mark} />
       <span className="flex min-w-0 flex-wrap gap-x-4">
         <span className="w-[10ch] shrink-0 font-sans font-semibold">{step.agent}</span>
         <span className="min-w-0">{step.text}</span>
       </span>
-      <span className={`font-sans text-base ${MARK_COLOUR[mark]}`}>{MARK_WORD[mark]}</span>
+      <span className={`text-right font-sans text-base ${MARK_COLOUR[mark]}`}>{MARK_WORD[mark]}</span>
     </div>
   );
 }
@@ -121,10 +99,9 @@ function useRunClock() {
   }, [paused]);
 
   useEffect(() => {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setT(FINISHED);
-      return;
-    }
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setT(startAt(reduced));
+    if (reduced) return;
     setCanPlay(true);
     let visible = true;
     let elapsed = 0;
@@ -135,8 +112,7 @@ function useRunClock() {
     });
     if (ref.current) observer.observe(ref.current);
     const tick = (now: number) => {
-      // Off-screen the clock stops; the clamp keeps a returning tab from jumping ahead.
-      if (visible && !pausedRef.current) elapsed = (elapsed + Math.min(now - last, 100)) % LOOP;
+      elapsed = advance(elapsed, now - last, visible && !pausedRef.current);
       last = now;
       setT(elapsed);
       frame = requestAnimationFrame(tick);
@@ -155,14 +131,21 @@ function useRunClock() {
 export function LiveRun() {
   const { t, ref, canPlay, paused, setPaused } = useRunClock();
   const flagged = markAt(STEPS[1]!, t) === "found";
-  const cents = Math.round(REFUND_CENTS * (1 - (1 - progress(t, COUNT_START, COUNT_END)) ** 3));
+  const cents = refundCentsAt(t);
 
   return (
-    <figure ref={ref} aria-labelledby="live-caption" className="min-w-0 overflow-hidden rounded-card border border-band-line">
+    // data-paused also freezes the CSS loops (dot pulse, caret, flash): globals.css.
+    <figure
+      ref={ref}
+      aria-labelledby="live-caption"
+      data-paused={paused || undefined}
+      className="min-w-0 overflow-hidden rounded-card border border-band-line"
+    >
       <p className="sr-only">
         A shortened playback of the recorded demo run. The Collector downloaded the bills and usage. The Auditor found the Fremont meter billed
         twice the metered usage. Linda Park approved by SMS. The Negotiator called BayTel: “Please cancel phone line (415) 555-0102 on account
-        BT-7001.” “Yes, that is cancelled.” Finance recorded a refund claim of $12,606.06, due only when granted.
+        BT-7001.” “Yes, that is cancelled.” Finance recorded a refund claim of $12,606.06, due only when granted, and $18,319.32 a year in savings:
+        $10,710.37 from the fixed meter, $2,568.95 from 2 rate changes and $5,040.00 from 7 unused lines.
       </p>
       <div aria-hidden="true">
         <div className="h-0.5 bg-band-line">
@@ -198,15 +181,38 @@ export function LiveRun() {
             <Row step={STEPS[4]!} t={t} />
           </div>
           {/* The register: where the run's money lands. */}
-          <div className="ml-9 grid content-end gap-2 lg:ml-0 lg:border-l lg:border-band-line lg:pb-2 lg:pl-10">
-            <span className="text-base text-band-faded">Refund across 14 Fremont bills</span>
-            <span
-              className={`grid font-figure text-[clamp(3rem,4.4vw,5.25rem)] leading-none ${t < COUNT_START ? "text-band-faded" : "text-band-money"}`}
-            >
-              <span className="invisible col-start-1 row-start-1">{usd.format(REFUND_CENTS / 100)}</span>
-              <span className="col-start-1 row-start-1">{usd.format(cents / 100)}</span>
-            </span>
-            <span className={`text-base text-band-faded ${t < COUNT_END ? "invisible" : ""}`}>Claimed, due only when granted</span>
+          <div className="ml-9 grid content-between gap-8 lg:ml-0 lg:border-l lg:border-band-line lg:py-2 lg:pl-10">
+            {/* The savings ledger fills as the Auditor finds each line; nothing shows before it is found. */}
+            <div className="grid gap-1 text-base">
+              <p className="mb-1 text-band-faded">Yearly savings found</p>
+              <dl className="contents">
+                {SAVINGS.map((line, i) => (
+                  <div
+                    key={line.label}
+                    className={`flex justify-between gap-4 tabular-nums transition-opacity duration-300 motion-reduce:transition-none ${flagged ? "" : "opacity-0"}`}
+                    style={{ transitionDelay: flagged ? `${i * 150}ms` : "0ms" }}
+                  >
+                    <dt>{line.label}</dt>
+                    <dd>{line.amount}</dd>
+                  </div>
+                ))}
+                <div
+                  className={`mt-1 flex justify-between gap-4 border-t border-band-line pt-2 font-semibold tabular-nums ${t < STEPS[4]!.end ? "invisible" : ""}`}
+                >
+                  <dt>Recorded by Finance</dt>
+                  <dd className="text-band-money">{SAVINGS_TOTAL}</dd>
+                </div>
+              </dl>
+            </div>
+            {/* The refund appears only once Finance starts counting it: no $0.00 while other agents work. */}
+            <div className={`grid gap-2 ${t < COUNT_START ? "invisible" : ""}`}>
+              <span className="text-base text-band-faded">Refund across 14 Fremont bills</span>
+              <span className="grid font-figure text-[clamp(3rem,4.4vw,5.25rem)] leading-none text-band-money">
+                <span className="invisible col-start-1 row-start-1">{usd.format(REFUND_CENTS / 100)}</span>
+                <span className="col-start-1 row-start-1">{usd.format(cents / 100)}</span>
+              </span>
+              <span className="text-base text-band-faded">{t < COUNT_END ? "Counting…" : "Claimed, due only when granted"}</span>
+            </div>
           </div>
         </div>
       </div>
