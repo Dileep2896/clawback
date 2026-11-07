@@ -2,7 +2,7 @@ status: approved
 
 # Phase 12: Switch to naïve (M10)
 
-HOLD: start only when the human says to switch to naïve (Saturday). Follow section 16 exactly and keep `PLATFORM=local` working as the stage fallback. `naive-recon` re-reads the docs first and may reshape the lanes after it, so treat those as outlines. Voice stays on our own stack. Saturday approval, by the human's decision: the Approver emails Linda the request and she replies YES by text to the naïve number (inbound SMS). The dashboard tap stays built as the backup and is used if the inbound SMS wake test fails.
+STARTED 2026-11-07 by the human. See "Changes after recon". Follow section 16 exactly and keep `PLATFORM=local` working as the stage fallback. `naive-recon` re-reads the docs first and may reshape the lanes after it, so treat those as outlines. Voice stays on our own stack. Saturday approval, by the human's decision: the Approver emails Linda the request and she replies YES by text to the naïve number (inbound SMS). The dashboard tap stays built as the backup and is used if the inbound SMS wake test fails.
 
 **Phase check:** `check-platform.ts` passes with `PLATFORM=naive`, reporting `Sms` send honestly as not available, and three full runs succeed.
 
