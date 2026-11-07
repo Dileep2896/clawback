@@ -26,7 +26,8 @@ export function keypadDigits(messages: CallMessage[]): string[] {
   return messages.flatMap((m) => keypadDigit(m) ?? []);
 }
 
-const normalize = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
+// Speech-to-text spells "canceled" with one l, and the script with two. The real call flagged seven correct replies for it.
+const normalize = (text: string) => text.toLowerCase().replace(/canceled/g, "cancelled").replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim();
 
 // What is left of a logged line once script lines are removed. Vapi's log can hold a line twice
 // when it was spoken once (voice-design.md), so a repeat alone is not a problem.

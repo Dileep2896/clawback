@@ -7,7 +7,7 @@ import { allowlistFromEnv } from "@bill-fighter/shared/allowlist";
 import { negotiatorTools } from "@bill-fighter/agents/tools/negotiator";
 import { wrapTool } from "@bill-fighter/agents/tool-wrapper";
 import { liveRowProblems, runLiveCall } from "@bill-fighter/voice/live/caller/engine";
-import { SEED_PLAN, seedCallData } from "@bill-fighter/voice/sim/fixture";
+import { SEED_PLAN, seedCallData, seedCallFacts } from "@bill-fighter/voice/sim/fixture";
 import type { TranscriptRow } from "@bill-fighter/voice/transcript";
 
 if (!process.argv.includes("--place-real-call")) throw new Error("This places a real, paid call. Pass --place-real-call only with the word for that exact call.");
@@ -17,6 +17,7 @@ const ACTION = "voice-live-test";
 
 await withTestDb("voice_live_test", async (db) => {
   await seedCallData(db, ACTION, SEED_PLAN);
+  await seedCallFacts(db, ACTION);
 
   const tools = negotiatorTools({
     db,

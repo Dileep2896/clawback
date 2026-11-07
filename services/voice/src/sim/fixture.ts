@@ -1,6 +1,6 @@
 import type { Db } from "@bill-fighter/db/client";
-import { accounts, actions, customers, locations, phoneLines } from "@bill-fighter/db/schema";
-import { CUSTOMER, POTS_LINE_CENTS, STORES, VOICE_LINE_CENTS } from "@bill-fighter/db/seed/customer";
+import { accounts, actions, approvals, bills, customers, locations, phoneLines, runs } from "@bill-fighter/db/schema";
+import { CUSTOMER, INTERNET_CENTS, POTS_LINE_CENTS, STORES, VOICE_LINE_CENTS } from "@bill-fighter/db/seed/customer";
 import type { CallPlan } from "./engine.ts";
 
 // Lines and accounts from the real seed data, without the 432,288 usage rows a full seed loads.
@@ -13,6 +13,21 @@ export const SEED_PLAN: CallPlan = {
 };
 
 export const ALARM_LINES = STORES.flatMap((store) => store.pots.filter((pots) => pots.purpose === "alarm").map((pots) => pots.number));
+
+export const APPROVED_AT = new Date("2026-11-07T18:00:00.000Z");
+
+/** What a call needs for its fact sheet: an approved bundle holding the action, and a bill per account. Separate from seedCallData, because some tests must have no bundle. */
+export async function seedCallFacts(db: Db, actionId: string, approvedBy: string = CUSTOMER.contactName) {
+  const runId = `call-facts-${actionId}`;
+  await db.insert(runs).values({ id: runId, customerId: CUSTOMER.id, platform: "local", trigger: "manual", status: "running" });
+  await db.insert(approvals).values({ runId, actionIds: [actionId], summary: "The call", status: "approved", channel: "dashboard", approvedBy, approvedAt: APPROVED_AT });
+  await db.insert(bills).values(
+    STORES.flatMap((store) => [
+      { accountId: `${store.id}-telecom`, periodStart: "2026-10-01", periodEnd: "2026-10-31", totalCents: VOICE_LINE_CENTS },
+      { accountId: `${store.id}-internet`, periodStart: "2026-10-01", periodEnd: "2026-10-31", totalCents: INTERNET_CENTS },
+    ]),
+  );
+}
 
 /** Inserts what a call reads, plus the call action. */
 export async function seedCallData(db: Db, actionId: string, plan?: CallPlan) {

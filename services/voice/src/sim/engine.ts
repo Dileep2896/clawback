@@ -2,6 +2,7 @@ import type { Db } from "@bill-fighter/db/client";
 import { accounts, phoneLines } from "@bill-fighter/db/schema";
 import type { Llm } from "@bill-fighter/platform/types";
 import { eq } from "drizzle-orm";
+import { ANSWERS, callFacts } from "../facts.ts";
 import { CLOSING_LINE, LINE_NUMBER, REP_LINES } from "../live/line/script.ts";
 import { appendRow, closeCall, openCall, transcriptRow, type TranscriptRow } from "../transcript.ts";
 import { chooseMove, type Move, type MoveKind, WORDS } from "./negotiator.ts";
@@ -9,14 +10,15 @@ import { repReply, SIM_REFUSAL_LINE } from "./rep.ts";
 
 export type CallPlan = { accountNumber: string; cancelLines: string[]; promoAccounts: string[] };
 
-type Stage = "menu" | "account" | "items" | "read_back" | "ticket" | "repeat" | "goodbye";
+type Stage = "menu" | "account" | "verify" | "items" | "read_back" | "ticket" | "repeat" | "goodbye";
 
-// Stops a looping model. A clean call takes about 16 turns.
+// Stops a looping model. A clean call takes about 17 turns.
 const MAX_TURNS = 40;
 
 const STAGE_MOVES: Record<Exclude<Stage, "items">, MoveKind> = {
   menu: "press_digit",
   account: "give_account",
+  verify: "give_verification",
   read_back: "read_back",
   ticket: "ask_ticket",
   repeat: "repeat_ticket",
@@ -61,6 +63,7 @@ export async function runSimCall(input: {
   const refuse = new Set(input.refuse ?? []);
 
   const { lineByKey, planned } = await checkPlan(db, plan);
+  const facts = await callFacts(db, actionId, plan, planned);
 
   const { id: callId, first } = await openCall(db, { actionId, toNumber: LINE_NUMBER });
   const rows: TranscriptRow[] = [first];
@@ -115,6 +118,8 @@ export async function runSimCall(input: {
       await add(transcriptRow("agent", "keypress", target));
     } else if (move === "give_account") {
       await speak(WORDS.account(plan.accountNumber));
+    } else if (move === "give_verification") {
+      await speak(ANSWERS.verify(facts));
     } else if (move === "read_back") {
       await speak(WORDS.readBack(granted.lines, granted.promos));
     } else if (move === "ask_ticket") {
@@ -130,7 +135,8 @@ export async function runSimCall(input: {
   const hear = (lines: string[]) => {
     const said = (line: string) => lines.includes(line);
     if (stage === "menu" && said(REP_LINES.greeting)) stage = "account";
-    else if (stage === "account" && said(REP_LINES.account)) {
+    else if (stage === "account" && said(REP_LINES.verify)) stage = "verify";
+    else if (stage === "verify" && said(REP_LINES.account)) {
       stage = "items";
       itemDone();
     } else if (stage === "items" && asked) {

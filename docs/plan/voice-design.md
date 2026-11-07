@@ -220,8 +220,8 @@ The transcripts ran locally, so the audio went to no outside service.
 
 ### Open risks
 
-- **The line check failed on the one real call, and the causes are not confirmed.** `checkLineCall` reported the disclosure problem above, "the rep did not open with its greeting" with the greeting logged as "paytel billing...", and seven "off script" entries for "yes that is canceled". The seven look like spelling only, since the check does not treat "canceled" and "cancelled" as equal the way `extractOutcome` does. The recording settles the disclosure (see "Disclosure check") but not why the check failed. The greeting is not settled by transcript: `small.en` heard "Baytel billing", `base.en` heard "Beto Billing", and `medium.en` missed those words.
-- **The caller spoke over the rep's account question** on that call. The rep still accepted the account. The human has heard the recording, and the prompt is unchanged in this lane. The human wants the caller to answer the rep's questions instead of following a fixed script, which is a new lane after this one ships.
+- **The line check failed on the one real call.** Causes are now read from Vapi's record: see "Caller answers". The "canceled" entries are fixed. The disclosure and greeting flags are speech-to-text differences, and the check still reports such differences.
+- **The caller spoke over the rep's account question** on that call. Vapi's timestamps show how much: see "Caller answers".
 - **One real call is one sample.** Speech-to-text also gave "Baytown Billing" and an added "Um", which changed no outcome.
 - **`extractOutcome` needs the rep's exact words.** If Retell's speech-to-text turns "that is" into "that's", the item stays out, and with no ticket the call falls back.
 - **Normalising only handles single digits.** "Double five" or "seven thousand one" leaves the item out.
@@ -241,6 +241,65 @@ Each of these talks to a paid account. Run one only with the word for that exact
 
 - `pnpm exec tsx --env-file=.env services/voice/src/live/caller/cli.ts provision | readback <retell call id> | readback-line <retell start ms>`
 - `pnpm exec tsx --env-file=.env scripts/voice-live-test.ts --place-real-call` **places a real call**
+
+## Caller answers (`voice-caller-answers`)
+
+The caller now answers the rep's questions from a fact sheet, then returns to its request. **Not proven on the model:** no live call and no provisioning ran in this lane, by the human's rule. Both sides must be re-provisioned before a real call, or it runs the old prompts.
+
+### Rules
+
+| Rule | Enforced by |
+|---|---|
+| Disclosure is fixed text and first | `begin_message` and `problemWith`, unchanged |
+| Only code-checked data on the sheet | `facts.ts` reads the database after `checkPlan`. Alarm lines and contact details never get in, proven by a test |
+| Never invents a fact, never claims to be a person | **The prompt only.** Code cannot stop words on a live call |
+| Nothing beyond the approved items | The prompt, then the off-plan check: the caller naming any phone number or BC account outside the plan fails the live call, with or without a yes, and sim takes over with the label. Wording with no number ("the alarm lines") is covered by the prompt only |
+| `extractOutcome` decides what counts | `outcome.ts` is unchanged. Requests stay word for word, so the number and the yes stay on adjacent rows |
+
+### Human's decisions (2026-11-07, relayed by the orchestrator)
+
+- **Authorised:** "Yes. Linda Park, the account holder, approved these changes on November 7, 2026. I'm an AI assistant acting for Golden Gate Noodle Co." The name and date come from the approval record. The rep's fixed question asks who, so that answer leaves out "Yes."
+- **Unknown:** "Linda Park, the account holder, can confirm that, and your question is on the record of this call. For today, may I continue with the approved changes?"
+- **Beyond approved:** "Linda Park approved only these changes, so anything else is Linda Park's decision, and it is on the record of this call. May I continue with the approved changes?"
+- A rep never hears about the dashboard. No callback is promised, because the product cannot make one. No text-to-owner follow-up.
+- **Approved by a process, not the owner:** a live call refuses to dial and falls back to sim. A sim call says "This test run was approved automatically on <date>, not by a person." `pnpm run:local` is the case that does this.
+- **One rep turn with both questions:** "Thanks. What's the service address, and who authorized these changes?" It is in the live script and the sim. The rep accepts any answer, because it has no data to check against.
+
+### What Vapi's record shows
+
+One read-only `GET /call/01a1b4ea-f9a6-7000-91d4-86fc33175855`, 2026-11-07. Times are seconds from the first message.
+
+- **The opening flag was speech-to-text.** Vapi logged "Hi. This is an **AIS** assistant calling on behalf of Golden Gate Noodle Company. This call is being recorded." The check allows no word differences, so one misheard word fails it. The recording already shows the right words. The rule stays as it is, so a real difference is still caught, and it can raise this false alarm again.
+- **The greeting flag is the same kind of thing.** Vapi logged "Paytel billing? Can I have the account number, please?" and "Baytel Business" for the menu, so the rep's logged lines are heard, not the script's text. Not changed in this lane.
+- **The overlap was small.** The rep's greeting ran 17.55 to 20.03 s and the caller started at 19.91 s, 0.12 s early. On every other turn the caller started about 1 to 2 s after the rep ended. This is Vapi's clock, not Retell's recording, so what was heard could differ. **`responsiveness` stays unset:** it adds a wait to every turn, and one small overlap in 16 turns does not earn that. The new prompt also says to wait until the rep has finished, which is unproven.
+
+### Time
+
+| Measure | Before | After | Added |
+|---|---|---|---|
+| Sim, one run each, real model | 161.2 s, 33 model calls | 178.7 s, 35 model calls | **+17.5 s, +2 model calls** |
+| Live, estimated only | 160.9 s | about 179 s | **about 18 s** |
+
+- **One run each is rough.** At the baseline's average of 4.9 s a model call, the 2 added calls explain about 10 s. The other 7.5 s looks like model latency: the "after" run has one 16 s gap between rows that has nothing to do with this change.
+- **The live figure is arithmetic from the real call's speech rates:** about 12 s for the 33-word answer, 3 s for the 11-word question, and 3 s for two gaps.
+- The call was already three times the demo's 50 s, and this makes it longer.
+
+### Open risks
+
+- **None of the new behaviour has run on `gpt-6-luna`.** Stubs prove the code around the prompt, not what the model says.
+- **A freer caller may reword a request or merge two.** That leaves items out, and with no ticket the call falls back to sim.
+- **The rep has a new turn, and its script has only run on the model once.** If it asks late, the question could split a request from its yes, and that item stays out. That is the safe side, but it would show as a lost item.
+- **An answer can be wrong without anything catching it.** The rep accepts anything, so a wrong address would only show in the transcript.
+- **Grouped digits now join only when they make a phone number.** "70 01" for an account stays apart and leaves the item out, on the safe side. Before this change it joined. The caller reads single digits, so this should not arise from its own speech, but speech-to-text decides that.
+- **`RETELL_CALLER_AGENT_VERSION` after re-provisioning is unconfirmed.** Retell's create-agent page does not say what an update does to the version.
+
+### Cost log
+
+| Date | What | Cost |
+|---|---|---|
+| 2026-11-07 | One read-only Vapi GET | No call placed; no usage charge expected |
+| 2026-11-07 | Two sim runs on the Claude Code login | Estimated $0.78 and $0.86 of login usage, no voice credit |
+| | Live calls and provisioning in this lane | **0** |
 
 ## Sources (read 2026-11-06)
 
