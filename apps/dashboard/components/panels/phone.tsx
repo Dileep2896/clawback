@@ -62,7 +62,7 @@ export function Phone() {
             );
           })}
         </ul>
-        {asked && stopped && (
+        {asked && stopped && snapshot?.approval?.status === "pending" && (
           <p data-testid="sms-stopped" className="font-semibold text-stamp">
             {STOPPED_TEXT}
           </p>

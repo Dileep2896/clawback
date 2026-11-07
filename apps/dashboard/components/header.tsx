@@ -91,7 +91,7 @@ export function Header() {
       )}
 
       {problems.map((problem) => (
-        <p key={problem} role="alert" data-testid="run-problem" className="w-full text-[1.625rem] leading-tight font-semibold text-stamp">
+        <p key={problem} role="alert" data-testid="run-problem" className="order-last w-full text-[1.625rem] leading-tight font-semibold text-stamp">
           {problem}
         </p>
       ))}
