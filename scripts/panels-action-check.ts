@@ -80,7 +80,6 @@ async function checkFits(page: Page, where: string) {
 }
 
 async function checkApproveButton(page: Page) {
-  await insertAndRequireSampleRun(page);
   await page.goto(BASE);
   await page.getByTestId("approve").waitFor({ timeout: 10000 });
   await page.evaluate("window.notReloaded = true");
@@ -314,6 +313,7 @@ await insertSampleRun(db);
 const browser = await chromium.launch();
 try {
   const fresh = async () => (await browser.newContext({ viewport: VIEWPORT })).newPage();
+  await insertAndRequireSampleRun(await fresh());
   await checkRoutes(await fresh());
   await checkApproveButton(await fresh());
   await checkYes(await fresh());
