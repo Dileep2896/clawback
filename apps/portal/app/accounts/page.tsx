@@ -57,7 +57,8 @@ export default async function AccountsPage({
                 <th scope="col" className="py-2 pr-6 font-semibold">Account number</th>
                 <th scope="col" className="py-2 pr-6 font-semibold">Location</th>
                 <th scope="col" className="py-2 pr-6 font-semibold">Service</th>
-                <th scope="col" className="py-2 font-semibold">Plan</th>
+                <th scope="col" className="py-2 pr-6 font-semibold">Plan</th>
+                <th scope="col" className="py-2 font-semibold">Documents</th>
               </tr>
             </thead>
             <tbody>
@@ -69,7 +70,17 @@ export default async function AccountsPage({
                     <span className="block text-sm text-muted">{row.address}</span>
                   </td>
                   <td className="py-3 pr-6 capitalize">{row.serviceType}</td>
-                  <td className="py-3">{row.rateSchedule ?? "None listed"}</td>
+                  <td className="py-3 pr-6">{row.rateSchedule ?? "None listed"}</td>
+                  <td className="py-3">
+                    <a href={`/bills?account=${encodeURIComponent(row.id)}`} data-testid="account-bills" className="block underline">
+                      Bills<span className="sr-only"> for account {row.accountNumber}</span>
+                    </a>
+                    {row.serviceType === "electric" && (
+                      <a href={`/usage/${encodeURIComponent(row.id)}`} data-testid="account-usage" className="block underline">
+                        Usage CSV<span className="sr-only"> for account {row.accountNumber}</span>
+                      </a>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
