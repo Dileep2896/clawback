@@ -1,0 +1,211 @@
+import type { Db } from "@bill-fighter/db/client";
+import { accounts, actions, approvals, findings, phoneLines, runs, smsMessages } from "@bill-fighter/db/schema";
+import { CUSTOMER } from "@bill-fighter/db/seed/customer";
+import { withTestDb } from "@bill-fighter/db/test-db";
+import { createApprovalGate } from "@bill-fighter/platform/local/approval-gate";
+import { createIdentity } from "@bill-fighter/platform/local/identity";
+import { createSms } from "@bill-fighter/platform/local/sms";
+import type { Mail } from "@bill-fighter/platform/types";
+import { ALARM_LINES, SEED_PLAN, seedCallData } from "@bill-fighter/voice/sim/fixture";
+import { eq, inArray } from "drizzle-orm";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ALARM_NUMBER, FAX_NUMBER, run as runTool, seedFindings } from "../test-fixtures.ts";
+import { wrapTool } from "../tool-wrapper.ts";
+import { approverTools } from "./approver.ts";
+
+const RUN = "run";
+const SUMMARY = "Please approve the claim, the rate changes and the cancellations.";
+
+type Bundle = { approvalId: string; actionIds: string[]; status: string; summary: string };
+
+const test = (name: string, fn: (db: Db) => Promise<void>) => it(name, () => withTestDb("tools_file_approve_approver", fn));
+
+function setup(db: Db, overrides: Parameters<typeof approverTools>[0] = {}) {
+  const gate = createApprovalGate(db);
+  const tools = approverTools({ db, gate: async () => gate, sms: async () => createSms(db, createIdentity({})), mode: () => "local", ...overrides });
+  const request = (actionIds: string[] = [], summary = SUMMARY, runId = RUN) => runTool(tools, "request_approval", { actionIds, summary }, runId) as Promise<Bundle>;
+  return { gate, tools, request };
+}
+
+beforeEach(() => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
+
+describe("request_approval: the call-provider-tool contract", () => {
+  /** The real seed's lines and accounts, with findings shaped as the rules write them. */
+  async function seedDemo(db: Db) {
+    await seedCallData(db, "unrelated-action");
+    await db.insert(runs).values({ id: RUN, customerId: CUSTOMER.id, platform: "local", trigger: "email", status: "running" });
+    const lines = await db.select().from(phoneLines);
+    const evidence = (lineId: string, detail: object) => ({ billIds: [], billLineIds: [], phoneLineIds: [lineId], detail });
+    const lineFinding = (line: (typeof lines)[number], id: string, action: string) => ({
+      id,
+      customerId: CUSTOMER.id,
+      accountId: line.accountId,
+      type: "unusedLines",
+      title: id,
+      explanation: id,
+      evidenceJson: evidence(line.id, { number: line.number, purpose: line.purpose, action }),
+      annualSavingsCents: action === "cancel" ? 72_000 : 0,
+      confidence: 0.9,
+    });
+    const unused = lines.filter((line) => line.purpose !== "alarm" && line.purpose !== "voice" && line.callsLast12mo === 0);
+    const alarms = lines.filter((line) => line.purpose === "alarm");
+    const promoRows = await db.select().from(accounts).where(inArray(accounts.accountNumber, SEED_PLAN.promoAccounts));
+    await db.insert(findings).values([
+      ...unused.map((line) => lineFinding(line, `unused-${line.id}`, "cancel")),
+      ...alarms.map((line) => lineFinding(line, `alarm-${line.id}`, "confirmWithAlarmCompany")),
+      // Mislabelled as cancellable: phone_lines must still keep it out.
+      lineFinding(alarms[0]!, "alarm-mislabelled", "cancel"),
+      ...promoRows.map((account) => ({
+        id: `promo-${account.id}`,
+        customerId: CUSTOMER.id,
+        accountId: account.id,
+        type: "promoExpiry",
+        title: "promo",
+        explanation: "promo",
+        evidenceJson: { billIds: ["b"], billLineIds: [], phoneLineIds: [], detail: {} },
+        annualSavingsCents: 108_000,
+        confidence: 0.8,
+      })),
+    ]);
+    return { unused };
+  }
+
+  test("creates the call action as the sim engine's plan, with seven cancels and no alarm line", async (db) => {
+    const { unused } = await seedDemo(db);
+    const bundle = await setup(db).request();
+
+    const [call] = await db.select().from(actions).where(eq(actions.id, `call-${RUN}`));
+    expect(call).toMatchObject({ kind: "call", findingId: null, status: "proposed", requiresApproval: true });
+    const plan = call!.payloadJson as typeof SEED_PLAN;
+    expect(Object.keys(plan).sort()).toEqual(["accountNumber", "cancelLines", "promoAccounts"]);
+    expect(plan.accountNumber).toBe(SEED_PLAN.accountNumber);
+    expect([...plan.cancelLines].sort()).toEqual([...SEED_PLAN.cancelLines].sort());
+    expect(plan.promoAccounts).toEqual([...SEED_PLAN.promoAccounts].sort());
+    expect(plan.cancelLines.filter((line) => ALARM_LINES.includes(line))).toEqual([]);
+
+    const cancels = (await db.select().from(actions).where(eq(actions.kind, "cancel"))).map((action) => action.findingId).sort();
+    expect(cancels).toEqual(unused.map((line) => `unused-${line.id}`).sort());
+    expect(cancels).toHaveLength(7);
+
+    expect(bundle.actionIds).toEqual(expect.arrayContaining([`call-${RUN}`, `invoice-${RUN}`, ...cancels.map((findingId) => `cancel-${RUN}-${findingId}`)]));
+    expect(bundle.actionIds).not.toContain("unrelated-action");
+  });
+});
+
+describe("request_approval", () => {
+  test("creates one invoice action with no finding and no amount", async (db) => {
+    await seedFindings(db, RUN);
+    await setup(db).request();
+    const [invoice] = await db.select().from(actions).where(eq(actions.id, `invoice-${RUN}`));
+    expect(invoice).toMatchObject({ kind: "invoice", findingId: null, status: "proposed" });
+    expect(JSON.stringify(invoice!.payloadJson)).not.toMatch(/\d{3}|amount|cents/i);
+  });
+
+  test("the bundle holds the model's ids, and a letter the model forgot", async (db) => {
+    await seedFindings(db, RUN);
+    await db.insert(actions).values([
+      { id: "listed", kind: "letter", status: "proposed" },
+      { id: `letter-${RUN}-forgotten`, kind: "claim", status: "proposed" },
+      { id: "letter-otherrun-x", kind: "claim", status: "proposed" },
+    ]);
+    const { actionIds } = await setup(db).request(["listed"]);
+    expect(actionIds).toEqual(expect.arrayContaining(["listed", `letter-${RUN}-forgotten`]));
+    expect(actionIds).not.toContain("letter-otherrun-x");
+    expect(new Set(actionIds).size).toBe(actionIds.length);
+  });
+
+  test("a second call reuses the row, also after the decision", async (db) => {
+    await seedFindings(db, RUN);
+    const { request, gate } = setup(db);
+    const first = await request();
+    expect(first.status).toBe("pending");
+    const count = (await db.select().from(actions)).length;
+
+    expect(await request(["ignored"], "Another summary.")).toEqual(first);
+    await gate.decide({ runId: RUN, status: "approved", channel: "dashboard", approvedBy: "Linda" });
+    expect(await request()).toMatchObject({ approvalId: first.approvalId, status: "approved" });
+    expect(await db.select().from(approvals)).toHaveLength(1);
+    expect(await db.select().from(actions)).toHaveLength(count);
+  });
+
+  test("two racing calls leave one row and one of each action", async (db) => {
+    await seedFindings(db, RUN);
+    const { request } = setup(db);
+    const [a, b] = await Promise.all([request(), request()]);
+    expect(a!.approvalId).toBe(b!.approvalId);
+    expect(await db.select().from(approvals)).toHaveLength(1);
+    expect(await db.select().from(actions).where(eq(actions.kind, "call"))).toHaveLength(1);
+    expect(await db.select().from(actions).where(eq(actions.kind, "invoice"))).toHaveLength(1);
+  });
+
+  test("leaves alarm lines out of a mixed customer's call, and adds code-made totals to the summary", async (db) => {
+    await seedFindings(db, RUN);
+    const { summary } = await setup(db).request();
+    const [call] = await db.select().from(actions).where(eq(actions.id, `call-${RUN}`));
+    expect(call!.payloadJson).toEqual({ accountNumber: `BT-${RUN}`, cancelLines: [FAX_NUMBER], promoAccounts: [`BC-${RUN}`] });
+    expect(JSON.stringify(call!.payloadJson)).not.toContain(ALARM_NUMBER);
+    // 175_000 refund; 123_400 + 80_000 + 72_000 + 108_000 yearly.
+    expect(summary).toContain("Refund to claim: $1,750.00. Yearly savings: $3,834.00.");
+  });
+
+  test("refuses a summary with its own numbers, and an unknown action id", async (db) => {
+    await seedFindings(db, RUN);
+    const { request } = setup(db);
+    await expect(request([], "Save $20,000 a year!")).rejects.toThrow(/\$20,000/);
+    await expect(request(["no-such-action"])).rejects.toThrow(/unknown actions/);
+    expect(await db.select().from(approvals)).toEqual([]);
+  });
+});
+
+describe("send_sms", () => {
+  const allowNothing = { callNumbers: [], emailDomains: [], portalOrigins: [] };
+
+  test("goes to the configured owner in local mode, on the phone panel, and passes the allowlist with no target", async (db) => {
+    vi.stubEnv("OWNER_PHONE_SIM", "+15550009999");
+    await seedFindings(db, RUN);
+    const tool = setup(db).tools.find((candidate) => candidate.name === "send_sms")!;
+    const audit = { record: vi.fn(async () => {}), list: async () => [] };
+    const output = await wrapTool(tool, { audit, allowlist: allowNothing }).handler({ body: "Please check your approval. Reply YES." }, { runId: RUN, agent: "approver" });
+    expect(output).toMatchObject({ channel: "sms" });
+    const [row] = await db.select().from(smsMessages);
+    expect(row).toMatchObject({ direction: "outbound", to: "+15550009999", body: "Please check your approval. Reply YES." });
+    expect(audit.record).toHaveBeenCalledOnce();
+  });
+
+  it("gives the model no way to name a recipient", () => {
+    const tool = approverTools().find((candidate) => candidate.name === "send_sms")!;
+    expect(() => tool.inputSchema.parse({ to: "+18005551234", body: "hi" })).toThrow();
+    expect(tool.targets({ body: "hi" })).toEqual([]);
+  });
+
+  test("accepts only amounts already in the request's summary", async (db) => {
+    await seedFindings(db, RUN);
+    const { tools, request } = setup(db);
+    const send = (body: string) => runTool(tools, "send_sms", { body }, RUN);
+    await expect(send("Refund of $1,750.00 is waiting.")).rejects.toThrow(/may not hold numbers/);
+    await request();
+    await expect(send("Refund of $1,750.00 is waiting. Reply YES.")).resolves.toMatchObject({ channel: "sms" });
+    await expect(send("Refund of $9,999.00 is waiting.")).rejects.toThrow(/\$9,999/);
+    expect(await db.select().from(smsMessages)).toHaveLength(1);
+  });
+
+  test("goes to the customer by email in naïve mode, never by SMS", async (db) => {
+    const { customerId } = await seedFindings(db, RUN);
+    expect(customerId).toBeTruthy();
+    const send = vi.fn<Mail["send"]>(async () => ({ id: "m1" }));
+    const sms = vi.fn(async () => {
+      throw new Error("naïve SMS is not available");
+    });
+    const { tools } = setup(db, { mode: () => "naive", mail: async () => ({ send, parseInbound: () => { throw new Error("unused"); } }), sms });
+    await expect(runTool(tools, "send_sms", { body: "Please approve. Reply YES." }, RUN)).resolves.toEqual({ id: "m1", channel: "email" });
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: "owner@billfighter.local", text: "Please approve. Reply YES." }));
+    expect(sms).not.toHaveBeenCalled();
+    expect(await db.select().from(smsMessages)).toEqual([]);
+  });
+});
