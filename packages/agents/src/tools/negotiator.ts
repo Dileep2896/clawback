@@ -9,6 +9,7 @@ import { type CallPlan, lineKey, runSimCall } from "@bill-fighter/voice/sim/engi
 import type { TranscriptRow } from "@bill-fighter/voice/transcript";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { z } from "zod";
+import { reportProblem, retryingCallLlm } from "../retry.ts";
 import { defineTool } from "../tool-wrapper.ts";
 
 type EngineCall = { actionId: string; plan: CallPlan; onCost: (usd: number) => void; fallbackReason?: string };
@@ -57,7 +58,10 @@ export function negotiatorTools({ db, budget, sim, live }: NegotiatorDeps) {
     const plan = CALL_PLAN.parse(action.payloadJson);
     let costUsd = 0;
     try {
-      const placed = await place({ actionId, plan, onCost: (usd) => (costUsd += usd) });
+      const placed = await place({ actionId, plan, onCost: (usd) => (costUsd += usd) }).catch(async (error: unknown) => {
+        await reportProblem(db, runId, "The provider call could not be completed, so no cancellation or credit was confirmed.");
+        throw error;
+      });
       const [call] = await db.select().from(calls).where(eq(calls.id, placed.callId));
       const outcome = extractOutcome(call!.transcriptJson as TranscriptRow[]);
       // Only accounts the owner approved can be won, whatever was said on the call.
@@ -143,6 +147,6 @@ export function negotiatorTools({ db, budget, sim, live }: NegotiatorDeps) {
 export default negotiatorTools({
   db: sharedDb,
   budget: () => getPlatform().budget(),
-  sim: async (call) => runSimCall({ db: sharedDb, llm: await getPlatform().llm(), ...call }),
+  sim: async (call) => runSimCall({ db: sharedDb, llm: retryingCallLlm(await getPlatform().llm()), ...call }),
   live: (call) => runLiveCall({ db: sharedDb, ...call }),
 });

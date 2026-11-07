@@ -2,7 +2,7 @@
 // pnpm run:local
 import { randomUUID } from "node:crypto";
 import { loadTools } from "@bill-fighter/agents/registry";
-import { executeRun, runPrompt } from "@bill-fighter/agents/run";
+import { executeRun, runPrompt, stopRunsOnSignal } from "@bill-fighter/agents/run";
 import { db } from "@bill-fighter/db/client";
 import { runs } from "@bill-fighter/db/schema";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
@@ -19,6 +19,7 @@ function print(event: RunEvent) {
 
 async function main() {
   if (platformName() !== "local") throw new Error("run-local auto approves, so it only runs on PLATFORM=local");
+  stopRunsOnSignal(db);
 
   const platform = getPlatform();
   const { email: companyEmail } = await (await platform.identity()).get();

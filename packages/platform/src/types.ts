@@ -40,7 +40,7 @@ export type RunEvent =
   | { type: "tool_call"; agent: string; tool: string; input: unknown }
   | { type: "tool_result"; agent: string; tool: string; output: unknown }
   | { type: "denied"; agent: string; tool: string; reason: string }
-  | { type: "result"; status: "success" | "error" | "over_budget"; costUsd: number };
+  | { type: "result"; status: "success" | "error" | "over_budget"; costUsd: number; reason?: string };
 
 export interface AgentRuntime {
   run(spec: RunSpec): AsyncIterable<RunEvent>;
@@ -55,6 +55,8 @@ export type LlmInput = {
   images?: { mediaType: string; base64: string }[];
   // Told what the call cost, as an SDK estimate and not a bill, even if the call then fails.
   onCost?: (usd: number) => void;
+  // Rejects with an error named TimeoutError after this long. No limit by default, because a parse can take minutes.
+  timeoutMs?: number;
 };
 
 export interface Llm {
