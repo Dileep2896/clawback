@@ -220,7 +220,7 @@ describe("createInboundServer", () => {
   it("serves POST /inbound, and refuses other routes, bad JSON and oversized bodies", async () => {
     await withTestDb(DB_NAME, async (db) => {
       await addCustomer(db, "noodle", BILL_ACCOUNT_NUMBER);
-      const server = createInboundServer(depsFor(db).deps);
+      const server = createInboundServer({ ...depsFor(db).deps, scheduler: { fire: async () => {} } });
       await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
       const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
       const post = (path: string, body: string) => fetch(base + path, { method: "POST", body });
