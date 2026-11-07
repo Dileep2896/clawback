@@ -15,7 +15,16 @@ function lineProblems(config: Json, assistant: Json, phone: Json): string[] {
 
 // shortcut: Vapi's schema types assistantId as a string, so null is unproven until a real run, hence the read-back and the loud failure.
 // Fallback, squad and workflow routes on the number are ours to report, not to clear, so they stay and the error names them.
-async function detach(vapi: Vapi, phoneId: string): Promise<string> {
+// Only ever clears this lane's assistant: the number is read first, so a failed attach cannot disconnect another one.
+// shortcut: Vapi has no conditional update, so a change between this read and the detach would be lost; provision is run by hand, so this is unlikely.
+async function detach(vapi: Vapi, phoneId: string, ours: string): Promise<string> {
+  let holder: unknown;
+  try {
+    holder = ((await vapi("GET", `/phone-number/${phoneId}`)) as Json).assistantId;
+  } catch (err) {
+    return `CHECK BY HAND: could not read ${LINE_NUMBER} (${String(err)}), so nothing was detached. It may still point at ${ours}.`;
+  }
+  if (holder !== ours) return `${LINE_NUMBER} points at ${holder ? String(holder) : "no assistant"}, not this lane's assistant, so it was left alone.`;
   try {
     await vapi("PATCH", `/phone-number/${phoneId}`, { assistantId: null });
     const phone = (await vapi("GET", `/phone-number/${phoneId}`)) as Json;
@@ -37,7 +46,7 @@ export async function provision(vapi: Vapi): Promise<{ assistantId: string; phon
 
   const existing = await findLineAssistant(vapi);
   // A re-run updates an assistant that may already be answering the number.
-  let attached = existing !== undefined && number.assistantId === existing.id;
+  let ours = existing !== undefined && number.assistantId === existing.id ? String(existing.id) : undefined;
   try {
     const saved = (await (existing
       ? vapi("PATCH", `/assistant/${String(existing.id)}`, config)
@@ -48,7 +57,8 @@ export async function provision(vapi: Vapi): Promise<{ assistantId: string; phon
     const before = lineProblems(config, assistant, number);
     if (before.length) throw new Error(`Line is not as designed:\n${before.join("\n")}`);
 
-    attached = true;
+    // Set before the request: one that appears to fail may still have taken effect.
+    ours = assistantId;
     await vapi("PATCH", `/phone-number/${phoneId}`, { assistantId });
 
     const phone = (await vapi("GET", `/phone-number/${phoneId}`)) as Json;
@@ -59,7 +69,7 @@ export async function provision(vapi: Vapi): Promise<{ assistantId: string; phon
     if (after.length) throw new Error(`Line is not as designed:\n${after.join("\n")}`);
     return { assistantId, phoneId };
   } catch (err) {
-    if (!attached) throw err;
-    throw new Error(`${err instanceof Error ? err.message : String(err)}\n${await detach(vapi, phoneId)}`, { cause: err });
+    if (!ours) throw err;
+    throw new Error(`${err instanceof Error ? err.message : String(err)}\n${await detach(vapi, phoneId, ours)}`, { cause: err });
   }
 }

@@ -64,8 +64,56 @@ describe("provision", () => {
     );
   });
 
-  it("fails if the attach did not stick", async () => {
-    await expect(provision(account({ phone: { assistantId: "other" } }))).rejects.toThrow("not attached");
+  it("fails if the attach did not stick, and does not clear whoever holds the number", async () => {
+    const vapi = account({ phone: { assistantId: "other" } });
+    await expect(provision(vapi)).rejects.toThrow(/not attached[\s\S]*points at other[\s\S]*left alone/);
+    expect(phoneWrites(vapi)).toEqual([ATTACH]);
+  });
+
+  describe("when the attach request is rejected", () => {
+    const rejectAttach = (stub: ReturnType<typeof account>, apply = false) =>
+      vi.fn<Vapi>(async (method, path, body) => {
+        if ((body as { assistantId?: unknown } | undefined)?.assistantId !== "a1") return stub(method, path, body);
+        // apply: the request took effect on Vapi's side even though we saw it fail, as with a timeout.
+        if (apply) await stub(method, path, body);
+        throw new Error("HTTP 500");
+      });
+    const writes = (vapi: ReturnType<typeof rejectAttach>) =>
+      vapi.mock.calls.filter(([method, path]) => method === "PATCH" && path.startsWith("/phone-number"));
+
+    it("leaves another assistant on the number", async () => {
+      const vapi = rejectAttach(account({ number: { assistantId: "other" } }));
+      await expect(provision(vapi)).rejects.toThrow(/HTTP 500[\s\S]*points at other[\s\S]*left alone/);
+      expect(writes(vapi)).toEqual([ATTACH]);
+    });
+
+    it("writes nothing more to a number with no assistant", async () => {
+      const vapi = rejectAttach(account());
+      await expect(provision(vapi)).rejects.toThrow(/HTTP 500[\s\S]*points at no assistant[\s\S]*left alone/);
+      expect(writes(vapi)).toEqual([ATTACH]);
+    });
+
+    it("detaches our assistant if the attach took effect anyway", async () => {
+      const vapi = rejectAttach(account({ number: { assistantId: "other" } }), true);
+      await expect(provision(vapi)).rejects.toThrow(/HTTP 500[\s\S]*was detached/);
+      expect(writes(vapi)).toEqual([ATTACH, DETACH]);
+    });
+  });
+
+  it("does not detach when it cannot read who holds the number", async () => {
+    const stub = account({ existing: true, assistant: UNSAFE, number: { assistantId: "a1" } });
+    const vapi = vi.fn<Vapi>(async (method, path, body) => {
+      if (`${method} ${path}` === "GET /phone-number/p1") throw new Error("HTTP 503");
+      return stub(method, path, body);
+    });
+    await expect(provision(vapi)).rejects.toThrow(/CHECK BY HAND.*HTTP 503/);
+    expect(vapi).not.toHaveBeenCalledWith("PATCH", "/phone-number/p1", { assistantId: null });
+  });
+
+  it("leaves the number alone if another assistant took it during an update that went wrong", async () => {
+    const vapi = account({ existing: true, assistant: UNSAFE, number: { assistantId: "a1" }, phone: { assistantId: "other" } });
+    await expect(provision(vapi)).rejects.toThrow(/points at other[\s\S]*left alone/);
+    expect(phoneWrites(vapi)).toEqual([]);
   });
 
   it("never attaches an assistant that fails its read-back", async () => {
