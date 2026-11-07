@@ -12,7 +12,7 @@ const VIEWPORT = { width: 1920, height: 1080 };
 const MIN_FONT_PX = 22;
 const screenshotDir = process.argv[2];
 
-type Snapshot = { calls: unknown[]; humanActions: number; approval: { status: string; channel: string | null; approvedBy: string | null; actionIds: string[] } };
+type Snapshot = { run: { id: string } | null; calls: unknown[]; humanActions: number; approval: { status: string; channel: string | null; approvedBy: string | null; actionIds: string[] } };
 
 const AT = "2026-11-06T17:00:00.000Z";
 const END = "2026-11-06T17:02:03.000Z";
@@ -47,6 +47,12 @@ const shot = async (page: Page, name: string) => {
 const see = (page: Page, testId: string, text: string) => page.getByTestId(testId).filter({ hasText: text }).waitFor({ state: "attached", timeout: 5000 });
 const live = async (page: Page) => (await (await page.request.get(`${BASE}/api/live`)).json()) as Snapshot;
 
+// The server on port 3000 can use another database than this script, and a click acts on whichever run it shows.
+async function insertAndRequireSampleRun(page: Page) {
+  await insertSampleRun(db);
+  assert.equal((await live(page)).run?.id, SAMPLE_RUN_ID, "the dashboard is not showing the sample run this script inserted, so nothing was clicked");
+}
+
 // Browser code goes in as strings, because the root tsconfig has no DOM types.
 const MEASURE = `(() => {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -70,7 +76,7 @@ async function checkFits(page: Page, where: string) {
 }
 
 async function checkApproveButton(page: Page) {
-  await insertSampleRun(db);
+  await insertAndRequireSampleRun(page);
   await page.goto(BASE);
   await page.getByTestId("approve").waitFor({ timeout: 10000 });
   await page.evaluate("window.notReloaded = true");
@@ -103,7 +109,7 @@ async function checkApproveButton(page: Page) {
 }
 
 async function checkYes(page: Page) {
-  await insertSampleRun(db);
+  await insertAndRequireSampleRun(page);
   await page.goto(BASE);
   const reply = page.getByTestId("sms-reply");
   await reply.waitFor({ timeout: 10000 });
@@ -133,7 +139,7 @@ async function checkYes(page: Page) {
 }
 
 async function checkKeyboard(page: Page) {
-  await insertSampleRun(db);
+  await insertAndRequireSampleRun(page);
   await page.goto(BASE);
   await page.getByTestId("approve").waitFor({ timeout: 10000 });
   let focused: string | null = null;
@@ -185,8 +191,8 @@ async function pageWith(browser: Browser, speech: string) {
 }
 
 async function checkCallStates(browser: Browser) {
-  await insertSampleRun(db);
   const page = await pageWith(browser, "record");
+  await insertAndRequireSampleRun(page);
   const state = { calls: [] as unknown[] };
   await fakeCalls(page, state);
   await page.goto(BASE);
