@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { GAS_SUPPLIER } from "@bill-fighter/shared/fixtures";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { chromium } from "playwright";
+import { chromium, type Browser } from "playwright";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { billHtml, billPdfPath, billViews, FIXED_PDF_DATE, readSeedFiles, renderBillPdf, renderBills, stabilizePdf } from "./bill-pdf.ts";
 import { generateSeed, writeSeed } from "./generate.ts";
@@ -145,6 +145,33 @@ describe("seed files", () => {
   });
 });
 
+describe("a failed render", () => {
+  const fakeBrowser = {
+    newPage: () => Promise.reject(new Error("render failed")),
+    close: () => Promise.resolve(),
+  } as unknown as Browser;
+
+  it.each([
+    ["Chromium is missing", () => Promise.reject(new Error("Executable doesn't exist")), /Executable doesn't exist/],
+    ["a bill fails to render", () => Promise.resolve(fakeBrowser), /render failed/],
+  ] as const)("keeps the existing PDFs when %s", async (_, launch, message) => {
+    const parent = mkdtempSync(join(tmpdir(), "bill-rerun-"));
+    const spy = vi.spyOn(chromium, "launch").mockImplementation(launch);
+    try {
+      mkdirSync(join(parent, "bills"));
+      writeFileSync(join(parent, "bills", "kept.pdf"), "from the last good run");
+      await expect(
+        renderBills(views, { dir: pathToFileURL(`${parent}/bills/`), staging: pathToFileURL(`${parent}/staging/`) }),
+      ).rejects.toThrow(message);
+      expect(readFileSync(join(parent, "bills", "kept.pdf"), "utf8")).toBe("from the last good run");
+      expect(readdirSync(parent)).toEqual(["bills"]);
+    } finally {
+      spy.mockRestore();
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+});
+
 const hasChromium = existsSync(chromium.executablePath());
 if (!hasChromium) {
   // Not console.warn: vitest hides console output from a passing file, and this skip must be seen.
@@ -158,7 +185,7 @@ describe.skipIf(!hasChromium)("rendered PDFs", () => {
   beforeAll(async () => {
     dir = mkdtempSync(join(tmpdir(), "bill-pdfs-"));
     writeFileSync(join(dir, "stale.pdf"), "left over from an older seed");
-    await renderBills(views, pathToFileURL(`${dir}/`));
+    await renderBills(views, { dir: pathToFileURL(`${dir}/`), staging: pathToFileURL(`${dir}.staging/`) });
   }, SLOW);
 
   afterAll(() => rmSync(dir, { recursive: true, force: true }));

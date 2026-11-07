@@ -1,4 +1,4 @@
-import type { PhoneLinePurpose } from "@bill-fighter/shared/fixtures";
+import type { PhoneLinePurpose, Provider } from "@bill-fighter/shared/fixtures";
 import type { RateSchedule } from "@bill-fighter/shared/tariff";
 
 export const CUSTOMER = {
@@ -8,6 +8,23 @@ export const CUSTOMER = {
   contactEmail: "linda@goldengatenoodle.example",
   contactPhone: "(415) 555-0100",
   savingsSharePct: 30,
+};
+
+// Modeled on PG&E Form 79-1095: one agent, listed acts, a term of at most three years. Our own wording.
+const AGENT_ACTS =
+  "Bill Fighter, as agent, may request billing records, usage data and account correspondence, request bill investigations, and request rate analysis and rate changes";
+export const AUTHORIZATION = {
+  formType: "79-1095",
+  signedBy: CUSTOMER.contactName,
+  signedAt: "2026-11-02T17:00:00.000Z",
+  expiresAt: "2029-11-02T17:00:00.000Z",
+  scope: {
+    baycurrent: `${AGENT_ACTS}.`,
+    baytel: `${AGENT_ACTS}, and may cancel unused lines.`,
+    bayconnect: `${AGENT_ACTS}.`,
+    // The decoy: flag the contract for review, never act on it.
+    bayhearth: "Bill Fighter, as agent, may request billing records and account correspondence and review the supply contract, and nothing more.",
+  } satisfies Record<Provider, string>,
 };
 
 // Fixed, not derived from today, so the seed regenerates byte for byte. "Ending last month" means October 2026.

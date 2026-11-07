@@ -4,17 +4,19 @@ import { loadTariff } from "@bill-fighter/core/tariff/load";
 import { priceUsage, roundCents, type PricedBill } from "@bill-fighter/core/tariff/price-usage";
 import {
   AccountFixture,
+  AuthorizationFixture,
   BillFixture,
   CustomerFixture,
   GAS_SUPPLIER,
   LocationFixture,
   PhoneLineFixture,
+  Provider,
   UsageIntervalFixture,
-  type Provider,
   type ServiceType,
 } from "@bill-fighter/shared/fixtures";
 import type { RateSchedule, Tariff } from "@bill-fighter/shared/tariff";
 import {
+  AUTHORIZATION,
   CUSTOMER,
   FIRST_MONTH,
   GAS,
@@ -33,6 +35,7 @@ import { loadProfile } from "./load-profile.ts";
 
 export type Seed = {
   customer: CustomerFixture;
+  authorizations: AuthorizationFixture[];
   locations: LocationFixture[];
   accounts: AccountFixture[];
   phoneLines: PhoneLineFixture[];
@@ -240,6 +243,19 @@ export function generateSeed(): Seed {
   const yearMonths = monthsBetween(FIRST_MONTH, LAST_MONTH);
   const seed: Seed = {
     customer: CustomerFixture.parse(CUSTOMER),
+    authorizations: Provider.options.map((provider) =>
+      AuthorizationFixture.parse({
+        id: `${CUSTOMER.id}-${provider}-authorization`,
+        customerId: CUSTOMER.id,
+        provider,
+        formType: AUTHORIZATION.formType,
+        scope: AUTHORIZATION.scope[provider],
+        signedBy: AUTHORIZATION.signedBy,
+        signedAt: AUTHORIZATION.signedAt,
+        expiresAt: AUTHORIZATION.expiresAt,
+        pdfPath: null,
+      }),
+    ),
     locations: [],
     accounts: [],
     phoneLines: [],
@@ -313,8 +329,8 @@ export function writeSeed(seed: Seed, dir: URL = SEED_DIR) {
   // A removed account must not leave an old intervals file behind.
   rmSync(new URL("intervals/", dir), { recursive: true, force: true });
   mkdirSync(new URL("intervals/", dir), { recursive: true });
-  const { customer, locations, accounts, phoneLines, bills, intervals } = seed;
-  writeFileSync(new URL("customer.json", dir), `${JSON.stringify({ customer, locations, accounts, phoneLines }, null, 2)}\n`);
+  const { customer, authorizations, locations, accounts, phoneLines, bills, intervals } = seed;
+  writeFileSync(new URL("customer.json", dir), `${JSON.stringify({ customer, authorizations, locations, accounts, phoneLines }, null, 2)}\n`);
   writeFileSync(new URL("bills.json", dir), `${JSON.stringify(bills, null, 2)}\n`);
   for (const [id, rows] of Object.entries(intervals)) {
     writeFileSync(new URL(`intervals/${id}.json`, dir), `${JSON.stringify(rows)}\n`);
