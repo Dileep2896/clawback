@@ -20,7 +20,7 @@ export async function assertRunCustomer(db: Db, runId: string, customerId: strin
 }
 
 /** The lines a finding may cancel, or [] if it may cancel none. phone_lines decides what is an alarm line, not the finding's own text. */
-export async function cancellableLines(db: Db, finding: { type: string; evidenceJson: unknown }) {
+export async function cancellableLines(db: Pick<Db, "select">, finding: { type: string; evidenceJson: unknown }) {
   if (finding.type !== "unusedLines") return [];
   const { phoneLineIds, detail } = FindingEvidence.parse(finding.evidenceJson);
   if (detail.action !== "cancel" || phoneLineIds.length === 0) return [];

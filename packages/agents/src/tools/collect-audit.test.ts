@@ -592,6 +592,41 @@ describe("auditor", () => {
       expect(await db.select().from(findings).where(eq(findings.id, "promo"))).toEqual([promo]);
     }));
 
+  it("makes a run_audit that overlaps request_approval wait for the bundle, then refuse", () =>
+    withCustomer(async (db) => {
+      await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));
+      await auditor(db, "run_audit").handler(INPUT, CTX);
+      // A refund, so the request has an invoice action to bundle.
+      await db.update(findings).set({ refundCents: 100 });
+      const before = await db.select().from(findings);
+      // Corrected, so an audit that got through would delete the finding the bundle rests on.
+      await db.update(bills).set({ parsedJson: { ...PARSED, totalCents: 5000 } }).where(eq(bills.id, "b1"));
+
+      let reached!: () => void;
+      let release!: () => void;
+      const atBundle = new Promise<void>((resolve) => (reached = resolve));
+      const held = new Promise<void>((resolve) => (release = resolve));
+      const real = createApprovalGate(db);
+      const gate = {
+        ...real,
+        async createBundle(...args: Parameters<typeof real.createBundle>) {
+          reached();
+          await held;
+          return real.createBundle(...args);
+        },
+      };
+
+      const requesting = runTool(approverTools({ db, gate: async () => gate }), "request_approval", { actionIds: [], summary: "Please approve." }, RUN);
+      await atBundle;
+      const auditing = expect(auditor(db, "run_audit").handler(INPUT, CTX)).rejects.toThrow(FROZEN);
+      // Without the lock, this is long enough for the audit to pass the freeze check and write.
+      await sleep(200);
+      release();
+      await requesting;
+      await auditing;
+      expect(await db.select().from(findings)).toEqual(before);
+    }));
+
   it("allows a new audit once the bundle's run has finished", () =>
     withCustomer(async (db) => {
       await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));

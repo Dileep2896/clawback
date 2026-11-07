@@ -1,3 +1,4 @@
+import type { Db } from "@bill-fighter/db/client";
 import type { approvals, auditLog, boardCards, scheduledChecks, smsMessages } from "@bill-fighter/db/schema";
 import type { z } from "zod";
 
@@ -62,8 +63,8 @@ export interface Llm {
 }
 
 export interface ApprovalGate {
-  /** One bundle per run: a second call for the run returns the existing row. */
-  createBundle(bundle: { runId: string; actionIds: string[]; summary: string }): Promise<Approval>;
+  /** One bundle per run: a second call for the run returns the existing row. Give tx to write inside the caller's transaction. */
+  createBundle(bundle: { runId: string; actionIds: string[]; summary: string }, tx?: Pick<Db, "select" | "insert">): Promise<Approval>;
   get(runId: string): Promise<Approval | null>;
   /** The first decision wins: later calls return the row as already decided. */
   decide(decision: {
