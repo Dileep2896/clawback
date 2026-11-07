@@ -8,8 +8,10 @@
   },
   "dependencies": {
     "@bill-fighter/agents": "workspace:*",
+    "@bill-fighter/db": "workspace:*",
     "@bill-fighter/platform": "workspace:*",
     "@bill-fighter/shared": "workspace:*",
+    "drizzle-orm": "^0.45.4",
     "zod": "^4.6.7"
   }
 }
