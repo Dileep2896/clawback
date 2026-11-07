@@ -1,5 +1,5 @@
 import { decideApproval } from "@bill-fighter/db/approvals";
-import { actions, approvals, auditLog, boardCards, findings, runs } from "@bill-fighter/db/schema";
+import { accounts, actions, approvals, auditLog, boardCards, findings, locations, runs } from "@bill-fighter/db/schema";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -85,6 +85,23 @@ describe("liveSnapshot", () => {
       expect(snapshot.auditLog).toHaveLength(AUDIT_ROW_LIMIT);
       expect(snapshot.auditTotal).toBe(total);
       expect(JSON.stringify(snapshot)).not.toContain("from-the-vault");
+    });
+  });
+
+  it("names the site of a finding by its account, and leaves out a finding with no account", async () => {
+    await withTestDb("dash_sites", async (db) => {
+      const { customerId } = await seedRun(db, "r1");
+      await db.insert(locations).values({ id: "fremont-1", customerId, name: "Fremont #1", address: "1 Main St", city: "Fremont" });
+      await db.insert(accounts).values([
+        { id: "fremont-1-electric", locationId: "fremont-1", provider: "baycurrent", accountNumber: "1", serviceType: "electric" },
+        { id: "fremont-1-gas", locationId: "fremont-1", provider: "bayhearth", accountNumber: "2", serviceType: "gas" },
+      ]);
+      const finding = { customerId, type: "meterMultiplierJump", title: "Meter", explanation: "Doubled", evidenceJson: {}, confidence: 0.9 };
+      await db.insert(findings).values([
+        { ...finding, id: "with-account", accountId: "fremont-1-electric" },
+        { ...finding, id: "no-account" },
+      ]);
+      expect((await liveSnapshot(db)).findingSites).toEqual({ "fremont-1-electric": "Fremont #1" });
     });
   });
 

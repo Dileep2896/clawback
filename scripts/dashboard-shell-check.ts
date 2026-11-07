@@ -125,6 +125,7 @@ const NO_RUN = {
   approval: null,
   boardCards: [],
   findings: [],
+  findingSites: {},
   actions: [],
   calls: [],
   ledger: [],
