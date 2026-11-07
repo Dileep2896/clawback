@@ -1,5 +1,5 @@
 import type { Db } from "@bill-fighter/db/client";
-import { actions, approvals, auditLog, calls, findings, phoneLines, runs } from "@bill-fighter/db/schema";
+import { actions, approvals, auditLog, calls, findings, ledger, phoneLines, runs } from "@bill-fighter/db/schema";
 import { lineKey } from "@bill-fighter/voice/sim/engine";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 
@@ -32,7 +32,11 @@ export async function planGaps(db: Db, runId: string): Promise<string[]> {
   if (approval.status === "pending") return ["The run ended while the owner's approval was still pending."];
 
   const bundled = await db.select().from(actions).where(inArray(actions.id, approval.actionIds));
-  const gaps = bundled.filter(({ kind, status }) => kind !== "cancel" && kind !== "letter" && status !== "done").map(({ id, kind }) => `The approved ${kind} action ${id} did not finish.`);
+  // A rep who refused everything leaves a fee of zero, and create_invoice rightly refuses to bill it, so that invoice has nothing to finish.
+  const [fee] = await db.select({ cents: ledger.amountCents }).from(ledger).where(and(eq(ledger.customerId, run.customerId), eq(ledger.kind, "fee")));
+  const nothingToBill = fee?.cents === 0;
+  const gaps = bundled
+    .filter(({ kind, status }) => kind !== "cancel" && kind !== "letter" && status !== "done" && !(kind === "invoice" && nothingToBill)).map(({ id, kind }) => `The approved ${kind} action ${id} did not finish.`);
 
   // A line the rep refused stays open on purpose, so only a line the call confirmed has to be recorded. A letter closes with its cancel action.
   const finishedCalls = await db.select({ outcome: calls.outcomeJson }).from(calls).where(and(inArray(calls.actionId, approval.actionIds), isNotNull(calls.outcomeJson)));

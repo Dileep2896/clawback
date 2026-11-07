@@ -1,5 +1,5 @@
 import type { Db } from "@bill-fighter/db/client";
-import { actions, approvals, auditLog, calls, findings } from "@bill-fighter/db/schema";
+import { actions, approvals, auditLog, calls, findings, ledger } from "@bill-fighter/db/schema";
 import { withTestDb } from "@bill-fighter/db/test-db";
 import { lineKey } from "@bill-fighter/voice/sim/engine";
 import { eq, inArray } from "drizzle-orm";
@@ -18,7 +18,8 @@ const toolRan = (db: Db, tool: string, output: unknown = { ok: true }) => db.ins
 
 /** A run whose owner approved a call and one cancel, with everything finished except what a test undoes. */
 async function approvedRun(db: Db, { confirmed = [FAX_NUMBER] }: { confirmed?: string[] } = {}) {
-  const { id } = await seedFindings(db, RUN);
+  const seeded = await seedFindings(db, RUN);
+  const { id } = seeded;
   await db.insert(actions).values([
     { id: CALL, kind: "call", status: "done" },
     { id: CANCEL, findingId: id("unused"), kind: "cancel", status: "proposed" },
@@ -29,6 +30,7 @@ async function approvedRun(db: Db, { confirmed = [FAX_NUMBER] }: { confirmed?: s
   await db.insert(approvals).values({ runId: RUN, actionIds: [CALL, CANCEL, "claim", "invoice", "letter"], summary: "s", status: "approved" });
   await db.insert(calls).values({ actionId: CALL, mode: "sim", toNumber: "+1", outcomeJson: { cancelled_lines: confirmed.map(lineKey), credits: [], ticket: "T" } });
   for (const tool of AFTER) await toolRan(db, tool);
+  return seeded;
 }
 
 const finishCancel = (db: Db) => db.update(actions).set({ status: "done" }).where(eq(actions.id, CANCEL));
@@ -89,6 +91,16 @@ describe("planGaps", () => {
       await db.update(actions).set({ status: "proposed" }).where(eq(actions.id, CALL));
       await db.update(actions).set({ status: "approved" }).where(eq(actions.id, "invoice"));
       expect((await planGaps(db, RUN)).sort()).toEqual(["The approved call action call-run did not finish.", "The approved invoice action invoice did not finish."]);
+    });
+
+    test("an invoice left open because the fee recorded is zero is not a gap, and one with a fee is", async (db) => {
+      const { customerId } = await approvedRun(db);
+      await finishCancel(db);
+      await db.update(actions).set({ status: "approved" }).where(eq(actions.id, "invoice"));
+      await db.insert(ledger).values({ id: `fee-${customerId}`, customerId, kind: "fee", amountCents: 0, description: "fee" });
+      expect(await planGaps(db, RUN)).toEqual([]);
+      await db.update(ledger).set({ amountCents: 500 }).where(eq(ledger.kind, "fee"));
+      expect(await planGaps(db, RUN)).toEqual(["The approved invoice action invoice did not finish."]);
     });
 
     test("a line the rep confirmed but nobody recorded is a gap", async (db) => {
