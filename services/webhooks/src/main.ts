@@ -1,9 +1,12 @@
 // pnpm dev:webhooks
 import { loadTools } from "@bill-fighter/agents/registry";
+import { stopRunsOnSignal } from "@bill-fighter/agents/run";
 import { db } from "@bill-fighter/db/client";
 import { getPlatform } from "@bill-fighter/platform/factory";
 import { startScheduledRun } from "./scheduled.ts";
 import { createInboundServer, INBOUND_PATH, WEBHOOK_PORT } from "./server.ts";
+
+stopRunsOnSignal(db);
 
 const platform = getPlatform();
 const deps = {

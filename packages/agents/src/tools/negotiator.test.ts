@@ -1,5 +1,5 @@
 import type { Db } from "@bill-fighter/db/client";
-import { accounts, actions, calls, findings, phoneLines } from "@bill-fighter/db/schema";
+import { accounts, actions, approvals, boardCards, calls, findings, phoneLines } from "@bill-fighter/db/schema";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { createCanUseTool } from "@bill-fighter/platform/local/agent-runtime";
@@ -435,6 +435,25 @@ describe("the live engine behind call_provider, on a stubbed Retell", () => {
     const first = await call();
     expect(await call()).toMatchObject({ callId: first.callId, repeated: true });
     expect(stub.dials()).toHaveLength(1);
+  });
+
+  test("when the fallback fails too, the dashboard says so, and a retry still never dials again", async (db) => {
+    await seedRun(db, CTX.runId);
+    const stub = stubRetell([], { dialStatus: 500 });
+    const down: Llm = {
+      structured: async () => {
+        throw new DOMException("The model did not answer within 60 s", "TimeoutError");
+      },
+    };
+    const { call } = setup(db, { live: liveWith(db, stub), llm: down });
+    await expect(call()).rejects.toThrow("did not answer");
+    await expect(call()).rejects.toThrow("did not answer");
+    expect(stub.dials()).toHaveLength(1);
+    expect(await actionStatus(db, CALL)).not.toBe("done");
+    const cards = await db.select().from(boardCards).where(eq(boardCards.agent, "run"));
+    expect(cards).toMatchObject([{ status: "blocked", title: expect.stringContaining("provider call could not be completed") }]);
+    expect(cards[0]!.title).not.toContain("HTTP 500");
+    expect(await db.$count(approvals)).toBe(0);
   });
 
   test("user_hangup does not start the fallback", async (db) => {

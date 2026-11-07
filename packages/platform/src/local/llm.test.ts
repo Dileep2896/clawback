@@ -17,6 +17,18 @@ const llmWith = (messages: unknown[], thenThrow = "") => {
 const success = (structured_output: unknown) => ({ type: "result", subtype: "success", is_error: false, result: "", structured_output });
 
 describe("Llm.structured", () => {
+  it("rejects with a TimeoutError when a stream hangs past timeoutMs, even if it ignores the abort", async () => {
+    const hung: Query = async function* () {
+      yield INIT as unknown as SDKMessage;
+      await new Promise(() => {});
+    };
+    await expect(createLlm(hung, async () => {}).structured({ prompt: "x", timeoutMs: 20 }, SCHEMA)).rejects.toMatchObject({ name: "TimeoutError" });
+  });
+
+  it("has no time limit unless one is asked for, because a parse can take minutes", async () => {
+    await expect(llmWith([INIT, success({ total: 5 })]).structured({ prompt: "x" }, SCHEMA)).resolves.toEqual({ total: 5 });
+  });
+
   it("leaves out the $schema URL the CLI rejects, without touching the caller's schema", async () => {
     const schema = z.toJSONSchema(ParsedBill) as Record<string, unknown>;
     expect(schema.$schema).toBeDefined();

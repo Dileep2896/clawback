@@ -1,14 +1,15 @@
 import type { Db } from "@bill-fighter/db/client";
-import { actions, approvals, findings, ledger, runs } from "@bill-fighter/db/schema";
+import { actions, approvals, boardCards, findings, ledger, runs } from "@bill-fighter/db/schema";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { createApprovalGate } from "@bill-fighter/platform/local/approval-gate";
 import { createCard } from "@bill-fighter/platform/local/card";
 import type { Audit } from "@bill-fighter/platform/types";
 import { eq } from "drizzle-orm";
+import Stripe from "stripe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadTools } from "../registry.ts";
 import { executeRun } from "../run.ts";
-import { financeInvoiceTools } from "./finance-invoice.ts";
+import { financeInvoiceTools, stripeClient } from "./finance-invoice.ts";
 import { financeLedgerTools } from "./finance-ledger.ts";
 
 const RUN = "run-1";
@@ -332,6 +333,100 @@ describe("create_invoice", () => {
     expect(inputSchema.safeParse({ actionId: ACTION }).success).toBe(true);
     expect(inputSchema.safeParse({ actionId: ACTION, amountCents: 100 }).success).toBe(false);
     expect(inputSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+/** Stripe's REST API on a stubbed fetch, so the real SDK's retries run and nothing leaves this machine. */
+function stripeRest(fail: (attempt: number, path: string) => number | null) {
+  const saved = new Map<string, { object: string }>();
+  const requests: { path: string; key: string | null }[] = [];
+  let totalCents = 0;
+  const make = (path: string, body: URLSearchParams) => {
+    if (path === "/v1/customers") return { id: "cus_1", object: "customer" };
+    if (path === "/v1/invoices") return { id: "in_1", object: "invoice" };
+    if (path === "/v1/invoiceitems") {
+      totalCents += Number(body.get("amount"));
+      return { id: `ii_${totalCents}`, object: "invoiceitem" };
+    }
+    return { id: "in_1", object: "finalized", total: totalCents, hosted_invoice_url: "https://invoice.stripe.com/x" };
+  };
+  const stub = (async (url: string | URL, init?: RequestInit) => {
+    const { pathname } = new URL(String(url));
+    const key = new Headers(init?.headers).get("idempotency-key");
+    requests.push({ path: pathname, key });
+    const status = fail(requests.length, pathname);
+    if (status !== null) return new Response(JSON.stringify({ error: { type: "api_error", message: "Stripe is down for key sk_test_fake" } }), { status });
+    if (key && !saved.has(key)) saved.set(key, make(pathname, new URLSearchParams(String(init?.body ?? ""))));
+    return new Response(JSON.stringify(saved.get(key!)), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  return { client: (key: string) => stripeClient(key, Stripe.createFetchHttpClient(stub)), requests, created: (object: string) => [...saved.values()].filter((made) => made.object === object) };
+}
+
+describe("a Stripe failure", () => {
+  const setupRest = (db: Db, rest: ReturnType<typeof stripeRest>) => {
+    const decide = vi.fn();
+    const gate = { ...createApprovalGate(db), decide };
+    const [invoice] = financeInvoiceTools({ db, gate: async () => gate, stripe: rest.client, card: async () => ({ charge: vi.fn() }) });
+    return { decide, create: () => invoice!.handler({ actionId: ACTION }, CTX) as Promise<Record<string, unknown>> };
+  };
+  const runCards = (db: Db) => db.select().from(boardCards).where(eq(boardCards.agent, "run"));
+
+  test("is retried by the real SDK with the same key, and makes one invoice", async (db) => {
+    await seedApprovedInvoice(db);
+    const rest = stripeRest((attempt) => (attempt === 1 ? 500 : null));
+    expect(await setupRest(db, rest).create()).toMatchObject({ invoiceId: "in_1", amountCents: 1_024_961 });
+    expect(rest.requests[0]).toEqual(rest.requests[1]);
+    expect(rest.requests[0]!.key).toBeTruthy();
+    expect(await runCards(db)).toEqual([]);
+    expect(await db.$count(ledger, eq(ledger.kind, "invoice"))).toBe(1);
+  });
+
+  test("that lasts shows a plain card with no Stripe text, and a later repeat bills once and asks nobody again", async (db) => {
+    await seedApprovedInvoice(db);
+    let down = true;
+    const rest = stripeRest(() => (down ? 500 : null));
+    const { create, decide } = setupRest(db, rest);
+
+    await expect(create()).rejects.toThrow();
+    const [card] = await runCards(db);
+    expect(card).toMatchObject({ status: "blocked", title: expect.stringContaining("Stripe did not confirm the invoice") });
+    expect(card!.title).not.toContain("sk_test");
+    expect(await db.$count(ledger, eq(ledger.kind, "invoice"))).toBe(0);
+    expect((await db.select().from(actions).where(eq(actions.id, ACTION)))[0]!.status).toBe("proposed");
+
+    down = false;
+    expect(await create()).toMatchObject({ invoiceId: "in_1" });
+    expect(await create()).toMatchObject({ invoiceId: "in_1", repeated: true });
+    expect(await db.$count(ledger, eq(ledger.kind, "invoice"))).toBe(1);
+    expect(rest.created("invoice")).toHaveLength(1);
+    expect(await db.$count(approvals)).toBe(1);
+    expect(decide).not.toHaveBeenCalled();
+  });
+
+  for (const failing of ["/v1/invoiceitems", "/v1/invoices/in_1/finalize"]) {
+    test(`at ${failing}, after the draft exists, does not claim Stripe has no invoice, and a repeat finishes that same draft`, async (db) => {
+      await seedApprovedInvoice(db);
+      let down = true;
+      const rest = stripeRest((_attempt, path) => (down && path === failing ? 500 : null));
+      const { create } = setupRest(db, rest);
+
+      await expect(create()).rejects.toThrow();
+      expect(rest.created("invoice")).toHaveLength(1);
+      const [card] = await runCards(db);
+      expect(card!.title).toContain("may be unfinished in Stripe");
+      expect(card!.title).not.toContain("did not create");
+      expect(await db.$count(ledger, eq(ledger.kind, "invoice"))).toBe(0);
+
+      down = false;
+      expect(await create()).toMatchObject({ invoiceId: "in_1" });
+      expect(rest.created("invoice")).toHaveLength(1);
+    });
+  }
+
+  test("a refusal of ours is not reported as Stripe's", async (db) => {
+    await seedRun(db, RUN);
+    await expect(setupRest(db, stripeRest(() => null)).create()).rejects.toThrow("not in an approved bundle");
+    expect(await runCards(db)).toEqual([]);
   });
 });
 

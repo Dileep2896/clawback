@@ -3,6 +3,7 @@ import type { Db } from "@bill-fighter/db/client";
 import { approvals, customers, runs, smsMessages } from "@bill-fighter/db/schema";
 import { and, desc, eq, gte } from "drizzle-orm";
 import { z } from "zod";
+import { isStopped, STOPPED_TEXT } from "./run-state.ts";
 
 /** A refusal the caller can understand, as opposed to a failure. */
 class Refused extends Error {
@@ -16,11 +17,13 @@ class Refused extends Error {
 
 async function runOf(db: Db, runId: string) {
   const [found] = await db
-    .select({ startedAt: runs.startedAt, platform: runs.platform, approver: customers.contactName })
+    .select({ startedAt: runs.startedAt, platform: runs.platform, approver: customers.contactName, status: runs.status })
     .from(runs)
     .innerJoin(customers, eq(runs.customerId, customers.id))
     .where(eq(runs.id, runId));
   if (!found) throw new Refused(`Run ${runId} does not exist`, 404);
+  // An approval here would count as a human action, and nothing is left to act on it.
+  if (isStopped(found.status)) throw new Refused(STOPPED_TEXT, 409);
   return found;
 }
 

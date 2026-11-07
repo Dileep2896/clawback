@@ -8,6 +8,7 @@ import { and, eq, inArray, notInArray } from "drizzle-orm";
 import Stripe from "stripe";
 import { z } from "zod";
 import { customerOfRun } from "../findings.ts";
+import { reportProblem } from "../retry.ts";
 import { stripeTestKey } from "../stripe-key.ts";
 import { defineTool } from "../tool-wrapper.ts";
 import { oneAtATime } from "./filer.ts";
@@ -23,12 +24,26 @@ const DAYS_UNTIL_DUE = 30;
 
 const CARD_PAYLOAD = z.object({ amountCents: z.number().int().positive(), description: z.string().min(1) });
 
+/** The SDK retries connection errors and 5xx itself, with the same idempotency key. Its default 80 s per try would stall the stage. */
+export const stripeClient = (key: string, httpClient?: Stripe.HttpClient) => new Stripe(key, { timeout: 15_000, maxNetworkRetries: 2, ...(httpClient ? { httpClient } : {}) });
+
 export function financeInvoiceTools({
   db = sharedDb,
   gate = () => getPlatform().approvalGate(),
-  stripe = (key) => new Stripe(key),
+  stripe = (key) => stripeClient(key),
   card = () => getPlatform().card(),
 }: Partial<Deps> = {}) {
+  const reportingStripeFailure =
+    <I, O>(handler: (input: I, ctx: { runId: string }) => Promise<O>) =>
+    async (input: I, ctx: { runId: string }): Promise<O> => {
+      try {
+        return await handler(input, ctx);
+      } catch (error) {
+        if (error instanceof Stripe.errors.StripeError) await reportProblem(db, ctx.runId, "Stripe did not confirm the invoice, so it may be unfinished in Stripe. No invoice was recorded here, and the fee is still in the ledger.");
+        throw error;
+      }
+    };
+
   // The runtime gates these too, but its release is global: only this run's own approval may spend for it.
   async function approvedAction(actionId: string, runId: string) {
     const approval = await (await gate()).get(runId);
@@ -48,7 +63,7 @@ export function financeInvoiceTools({
       inputSchema: z.strictObject({ actionId: z.string().min(1) }),
       // Contacts nobody: the invoice is finalized and never sent.
       targets: () => [],
-      handler: oneAtATime(async ({ actionId }, { runId }) => {
+      handler: oneAtATime(reportingStripeFailure(async ({ actionId }: { actionId: string }, { runId }) => {
         const key = stripeTestKey();
         const action = await approvedAction(actionId, runId);
         if (action?.kind !== "invoice" || actionId !== `invoice-${runId}`) throw new Error(`create_invoice needs this run's invoice action, and ${actionId} is not it`);
@@ -101,7 +116,7 @@ export function financeInvoiceTools({
           await tx.update(actions).set({ status: "done" }).where(eq(actions.id, actionId));
         });
         return { invoiceId: invoice.id, amountCents: fee.amountCents, dueNowCents, dueWhenGrantedCents, description, hostedInvoiceUrl: invoice.hosted_invoice_url };
-      }),
+      })),
     }),
 
     defineTool({

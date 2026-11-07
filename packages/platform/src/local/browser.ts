@@ -60,6 +60,8 @@ export function createBrowser(vault: Vault, getAllowlist: () => Allowlist = allo
         // The WebRTC flag: UDP does not go through an HTTP proxy, so it would reach any STUN or TURN server unchecked.
         const browser = await chromium.launch({
           headless: true,
+          // Playwright's own SIGINT handler exits as soon as the browsers close, so it would cut off a handler that is still saving.
+          handleSIGINT: process.listenerCount("SIGINT") === 0,
           proxy: { server: proxy.server, bypass: "<-loopback>" },
           args: ["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"],
         });
@@ -117,9 +119,12 @@ export function createBrowser(vault: Vault, getAllowlist: () => Allowlist = allo
           async fillSecret(selector, vaultName) {
             try {
               await page.locator(selector).fill(await vault.get(vaultName));
-            } catch {
+            } catch (error) {
               // A new error with no cause: Playwright's text must not carry the value into agent context or audit_log.
-              throw new Error(`fillSecret failed for ${selector} using vault entry "${vaultName}"`);
+              const failure = new Error(`fillSecret failed for ${selector} using vault entry "${vaultName}"`);
+              // Only the name crosses, so the Collector can still retry a timeout.
+              if (error instanceof Error && error.name === "TimeoutError") failure.name = error.name;
+              throw failure;
             }
           },
           click: (selector) => page.locator(selector).click(),
