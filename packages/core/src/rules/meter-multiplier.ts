@@ -7,15 +7,22 @@ import { billsOf, dollars, type AuditInput } from "./input.ts";
 const CLAIM_MONTHS = 36;
 const SAVINGS_MONTHS = 12;
 const NEAR = 0.01;
+const MS_PER_DAY = 86_400_000;
 
 const threeDecimals = (value: number) => Number(value.toFixed(3));
 const isNear = (ratio: number, whole: number) => Math.abs(ratio - whole) <= whole * NEAR;
 
 function monthsBefore(date: string, months: number) {
-  const day = new Date(`${date}T00:00:00Z`);
-  day.setUTCMonth(day.getUTCMonth() - months);
-  return day.toISOString().slice(0, 10);
+  const from = new Date(`${date}T00:00:00Z`);
+  // Day 0 of the next month is the target month's last day, so Feb 29 lands on Feb 28, not Mar 1.
+  const lastDay = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() - months + 1, 0));
+  lastDay.setUTCDate(Math.min(from.getUTCDate(), lastDay.getUTCDate()));
+  return lastDay.toISOString().slice(0, 10);
 }
+
+// Period ends are inclusive, so the next bill starts the day after.
+const followsOn = (earlier: BillFixture, later: BillFixture) =>
+  new Date(Date.parse(earlier.periodEnd) + MS_PER_DAY).toISOString().slice(0, 10) === later.periodStart;
 
 // shortcut: a gap of exactly half a bill's intervals would look like a doubled bill, so check interval counts if real meter feeds are ever loaded.
 function compare(bill: BillFixture, intervals: Interval[], tariff: Tariff) {
@@ -44,29 +51,42 @@ export function meterMultiplierJump(input: AuditInput): Finding[] {
     const intervals = input.intervals[account.id];
     if (!intervals || bills.length === 0) continue;
 
-    // A bill with no usable schedule or no intervals to compare proves nothing, so it never joins a run.
-    const rows = bills
-      .flatMap((b) => {
-        const schedule = RateSchedule.safeParse(b.rateSchedule);
-        return schedule.success ? [compare(b, intervals, input.tariffFor(schedule.data))] : [];
-      })
-      .filter((r) => r.intervalKwh > 0);
+    // One slot per bill, null when it has no usable schedule or no intervals: such a bill proves nothing, so it
+    // can't be a baseline, a jump or part of a claim, and neighbours of the gap are not treated as adjacent.
+    const slots = bills.map((b) => {
+      const schedule = RateSchedule.safeParse(b.rateSchedule);
+      const row = schedule.success ? compare(b, intervals, input.tariffFor(schedule.data)) : null;
+      return row && row.intervalKwh > 0 ? row : null;
+    });
+    const rows = slots.filter((r) => r !== null);
+    const latest = slots.at(-1);
     const anchor = bills.at(-1)!.periodEnd;
     const claimFrom = monthsBefore(anchor, CLAIM_MONTHS);
     const savingsFrom = monthsBefore(anchor, SAVINGS_MONTHS);
 
-    for (let i = 1; i < rows.length; i++) {
-      const before = rows[i - 1]!;
-      const jump = rows[i]!;
+    for (let i = 1; i < slots.length; i++) {
+      const before = slots[i - 1];
+      const jump = slots[i];
+      if (!before || !jump || !followsOn(before.bill, jump.bill)) continue;
       const multiple = Math.round(jump.ratio);
       const meterChanged =
         before.bill.meterNumber !== null && jump.bill.meterNumber !== null && before.bill.meterNumber !== jump.bill.meterNumber;
       if (!meterChanged || !isNear(before.ratio, 1) || multiple < 2 || !isNear(jump.ratio, multiple)) continue;
 
+      // A later bill is checked on its own numbers, so it can join across a skipped bill, but only on the same
+      // meter and only if it does not overlap (a reissued bill would claim one period twice).
+      const run = [jump];
       let end = i;
-      while (rows[end + 1] && isNear(rows[end + 1]!.ratio, multiple)) end++;
-      const run = rows.slice(i, end + 1);
-      const stillBilling = end === rows.length - 1;
+      for (let next = i + 1; next < slots.length; next++) {
+        const row = slots[next];
+        if (!row) continue;
+        const sameMeter = row.bill.meterNumber === jump.bill.meterNumber;
+        if (!sameMeter || row.bill.periodStart <= run.at(-1)!.bill.periodEnd || !isNear(row.ratio, multiple)) break;
+        run.push(row);
+        end = next;
+      }
+      // Only the actual latest bill can show the overbilling is still going on.
+      const stillBilling = end === slots.length - 1;
       i = end;
 
       const claimable = run.filter((r) => r.bill.periodStart >= claimFrom);
@@ -88,7 +108,9 @@ export function meterMultiplierJump(input: AuditInput): Finding[] {
             `Refund to claim under the 3 year window of Electric Rule 17.1: ${dollars(refundCents)} across ${claimable.length} bills. ` +
             (stillBilling
               ? `Correcting the multiplier saves about ${dollars(annualSavingsCents)} a year. `
-              : "Later bills are correct again, so there is no ongoing saving. ") +
+              : latest && isNear(latest.ratio, 1)
+                ? "Later bills are correct again, so there is no ongoing saving. "
+                : "The latest bill does not confirm this is continuing, so no ongoing saving is claimed. ") +
             "The refund is a claim until the provider credits it.",
           evidence: {
             billIds: claimable.map((r) => r.bill.id),
@@ -103,7 +125,7 @@ export function meterMultiplierJump(input: AuditInput): Finding[] {
               kwhRatio: multiple,
               claimWindowStart: claimFrom,
               // Includes the bills before the swap, which are the baseline.
-              bills: rows.slice(0, end + 1).map((r) => ({
+              bills: rows.filter((r) => r.bill.periodStart <= jump.bill.periodStart || run.includes(r)).map((r) => ({
                 billId: r.bill.id,
                 periodStart: r.bill.periodStart,
                 billedKwh: threeDecimals(r.billedKwh),

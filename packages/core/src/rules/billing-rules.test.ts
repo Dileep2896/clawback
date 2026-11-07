@@ -159,6 +159,7 @@ describe("meterMultiplierJump", () => {
     const intervals = intervalsFor(bills.length).filter((_, i) => i !== 3);
     const [finding] = meterMultiplierJump(input(bills, { intervals: { [ACCOUNT]: intervals } }));
     expect(finding!.refundCents).toBe(2 * OVERBILLED_AT_2X);
+    expect(finding!.annualSavingsCents).toBe(2 * OVERBILLED_AT_2X);
     expect(finding!.evidence.billIds).not.toContain(bills[3]!.id);
   });
 
@@ -167,7 +168,100 @@ describe("meterMultiplierJump", () => {
     bills[3] = { ...bills[3]!, rateSchedule };
     const [finding] = meterMultiplierJump(input(bills));
     expect(finding!.refundCents).toBe(2 * OVERBILLED_AT_2X);
+    expect(finding!.annualSavingsCents).toBe(2 * OVERBILLED_AT_2X);
     expect(finding!.evidence.billIds).not.toContain(bills[3]!.id);
+  });
+
+  describe("only compares truly consecutive bills", () => {
+    it("invents no meter change across a skipped bill on the new meter", () => {
+      const bills = [bill(0), bill(1, { meterNumber: "NEW", rateSchedule: null }), billedAt(2, 2, "NEW")];
+      expect(meterMultiplierJump(input(bills))).toEqual([]);
+    });
+
+    it("invents no meter change across a bill with no intervals", () => {
+      const bills = [bill(0), bill(1, { meterNumber: "NEW" }), billedAt(2, 2, "NEW")];
+      const intervals = intervalsFor(3).filter((_, i) => i !== 1);
+      expect(meterMultiplierJump(input(bills, { intervals: { [ACCOUNT]: intervals } }))).toEqual([]);
+    });
+
+    it("needs a checked baseline right before the jump, even when the meter visibly changed", () => {
+      const bills = [bill(0), bill(1, { rateSchedule: null }), billedAt(2, 2, "NEW")];
+      expect(meterMultiplierJump(input(bills))).toEqual([]);
+    });
+
+    it("invents no meter change across a month with no bill at all", () => {
+      const bills = [bill(0), billedAt(2, 2, "NEW"), billedAt(3, 2, "NEW")];
+      expect(meterMultiplierJump(input(bills, { intervals: { [ACCOUNT]: intervalsFor(4) } }))).toEqual([]);
+    });
+  });
+
+  describe("claims no ongoing savings the latest bill cannot back", () => {
+    it("keeps the refund when the latest bill has no usable schedule", () => {
+      const [finding] = meterMultiplierJump(input([...swapped(1), bill(3, { meterNumber: "NEW", rateSchedule: null })]));
+      expect(finding!.refundCents).toBe(OVERBILLED_AT_2X);
+      expect(finding!.annualSavingsCents).toBe(0);
+      expect(finding!.explanation).toMatch(/does not confirm/);
+      expect(finding!.explanation).not.toMatch(/correct again/);
+    });
+
+    it("keeps the refund when the latest bill has no intervals", () => {
+      const bills = [...swapped(1), billedAt(3, 2, "NEW")];
+      const [finding] = meterMultiplierJump(input(bills, { intervals: { [ACCOUNT]: intervalsFor(3) } }));
+      expect(finding!.refundCents).toBe(OVERBILLED_AT_2X);
+      expect(finding!.annualSavingsCents).toBe(0);
+    });
+
+    it("does not call a latest bill at another multiple correct", () => {
+      const [finding] = meterMultiplierJump(input([...swapped(2), billedAt(4, 1.5, "NEW")]));
+      expect(finding!.annualSavingsCents).toBe(0);
+      expect(finding!.explanation).not.toMatch(/correct again/);
+    });
+
+    it("stops the run at a further meter, which the swap does not explain", () => {
+      const [finding] = meterMultiplierJump(input([...swapped(2), billedAt(4, 2, "THIRD")]));
+      expect(finding!.refundCents).toBe(2 * OVERBILLED_AT_2X);
+      expect(finding!.annualSavingsCents).toBe(0);
+    });
+
+    it("claims a reissued bill for the same period once", () => {
+      const bills = swapped(2);
+      const [finding] = meterMultiplierJump(input([...bills, { ...bills.at(-1)!, id: "reissued" }]));
+      expect(finding!.refundCents).toBe(2 * OVERBILLED_AT_2X);
+      expect(finding!.evidence.billIds).not.toContain("reissued");
+      expect(finding!.annualSavingsCents).toBe(0);
+    });
+  });
+
+  describe("date windows ending on a leap day", () => {
+    const dated = (periodStart: string, periodEnd: string, multiple: number, meterNumber: string) => ({
+      ...billedAt(0, multiple, meterNumber),
+      id: periodStart,
+      periodStart,
+      periodEnd,
+    });
+    // One bill either side of the window's first day, the latest ending 2024-02-29.
+    const edges = (year: number) => [
+      dated(`${year}-01-27`, `${year}-02-26`, 1, "OLD"),
+      dated(`${year}-02-27`, `${year}-02-27`, 2, "NEW"),
+      dated(`${year}-02-28`, `${year}-03-31`, 2, "NEW"),
+      dated("2024-02-01", "2024-02-29", 2, "NEW"),
+    ];
+    const run = (bills: BillFixture[]) =>
+      meterMultiplierJump(
+        input(bills, { intervals: { [ACCOUNT]: bills.map((b) => ({ ts: `${b.periodStart}T20:00:00Z`, kwh: TRUE_KWH })) } }),
+      );
+
+    it("counts 36 months back to Feb 28, keeping that bill and dropping the day before", () => {
+      const [finding] = run(edges(2021));
+      expect(finding!.evidence.billIds).toEqual(["2021-02-28", "2024-02-01"]);
+      expect(finding!.evidence.detail.claimWindowStart).toBe("2021-02-28");
+    });
+
+    it("counts 12 months back to Feb 28, keeping that bill and dropping the day before", () => {
+      const [finding] = run(edges(2023));
+      expect(finding!.refundCents).toBe(3 * OVERBILLED_AT_2X);
+      expect(finding!.annualSavingsCents).toBe(2 * OVERBILLED_AT_2X);
+    });
   });
 
   it("still audits other accounts when one has no usable schedule or intervals", () => {
