@@ -11,15 +11,17 @@ import { normalizeSpeech } from "./normalize.ts";
 const LINE = { number: "(415) 555-0102", accountNumber: "BT-7001" };
 const PLAN = { accountNumber: "BT-7001", promoAccounts: ["BC-7002"] };
 
+const ACCOUNT = /\bB[TC]-\d+/;
+
 // shortcut: the rep script is a prompt with no code to call, so this reads its rules literally. Only a real call shows what the model does.
 const REP_RULES = [
-  { rule: "Gives an account number", line: REP_LINES.account, hears: /\bB[TC]-\d+/ },
-  { rule: "Asks to cancel one or more phone lines", line: REP_LINES.cancel, hears: /\bcancel phone line\b/i },
-  { rule: "Asks to restore promo pricing", line: REP_LINES.promo, hears: /\brestore promo pricing\b/i },
+  { rule: "Gives an account number when asked for one", line: REP_LINES.account, hears: ACCOUNT, onlyWhenAsked: true },
+  { rule: "Asks to cancel one or more phone lines", line: REP_LINES.cancel, hears: /\bcancel phone line\b/i, onlyWhenAsked: false },
+  { rule: "Asks to restore promo pricing", line: REP_LINES.promo, hears: /\brestore promo pricing\b/i, onlyWhenAsked: false },
 ];
 
-const repReply = (request: string) =>
-  REP_RULES.filter(({ hears }) => hears.test(normalizeSpeech(request)))
+const repReply = (request: string, repAskedForAccount = false) =>
+  REP_RULES.filter(({ hears, onlyWhenAsked }) => hears.test(normalizeSpeech(request)) && (repAskedForAccount || !onlyWhenAsked))
     .map(({ line }) => line)
     .join(" ");
 
@@ -38,12 +40,13 @@ describe("generated requests against the rep script", () => {
     expect(promos).toHaveLength(3);
   });
 
-  it("catches a cancellation that also names an account", () => {
-    expect(repReply(WORDS.cancel("4 1 5, 5 5 5, 0 1 0 2", "B T, 7 0 0 1"))).toBe(`${REP_LINES.account} ${REP_LINES.cancel}`);
+  it("draws two replies if a request names an account just after the rep asks for one", () => {
+    expect(repReply(WORDS.cancel("4 1 5, 5 5 5, 0 1 0 2", "B T, 7 0 0 1"), true)).toBe(`${REP_LINES.account} ${REP_LINES.cancel}`);
   });
 
   it("gives the account once, at the start", () => {
-    expect(repReply(callVariables(SEED_PLAN, lines).account_line)).toBe(REP_LINES.account);
+    expect(repReply(callVariables(SEED_PLAN, lines).account_line, true)).toBe(REP_LINES.account);
+    for (const request of cancels) expect(normalizeSpeech(request)).not.toMatch(ACCOUNT);
   });
 
   it("gets one reply per cancellation, and all seven count", () => {
@@ -51,11 +54,9 @@ describe("generated requests against the rep script", () => {
     expect(outcomeOf(cancels).cancelled_lines).toHaveLength(7);
   });
 
-  // Known gap, left open by instruction: extractOutcome needs the BC account in the request, and the script answers it as an account number too.
-  // When this is fixed, this test should fail and become one reply per promo with all three counted.
-  it("still gets two replies per promo, so none of the three count", () => {
-    for (const request of promos) expect(repReply(request)).toBe(`${REP_LINES.account} ${REP_LINES.promo}`);
-    expect(outcomeOf(promos).credits).toEqual([]);
+  it("gets one reply per promo, and all three count", () => {
+    for (const request of promos) expect(repReply(request)).toBe(REP_LINES.promo);
+    expect(outcomeOf(promos).credits).toEqual(SEED_PLAN.promoAccounts);
   });
 });
 
