@@ -1,0 +1,103 @@
+import { randomUUID } from "node:crypto";
+import { allowlistFromEnv, isAllowedEmail } from "@bill-fighter/shared/allowlist";
+import { createMail as createLocalMail } from "../local/mail.ts";
+import type { InboundEmail, Mail } from "../types.ts";
+import { naiveClient, need, seg } from "./client.ts";
+import { createIdentity } from "./identity.ts";
+
+type Env = Record<string, string | undefined>;
+
+export type InboundMessage = {
+  id: string;
+  channel: "email" | "sms";
+  endpoint_id: string;
+  from: string;
+  to: string;
+  subject: string | null;
+  text: string;
+  read_at: string | null;
+};
+
+export type NaiveMail = Mail & {
+  /** Hands each unread email to bills@ to onEmail, oldest first, then marks it read. A throw leaves it unread for the next poll. */
+  pollInbound(onEmail: (email: InboundEmail) => Promise<void>): Promise<number>;
+};
+
+/**
+ * Sends from our bills@ inbox (NAIVE_INBOX_ID). naïve has no inbound-mail webhook, and the inbox is made with wake: false
+ * so no naïve session starts on mail; pollInbound reads the stored feed instead.
+ */
+export function createMail(env: Env = process.env): NaiveMail {
+  const call = naiveClient(env);
+  const identity = createIdentity(env);
+  const identityPath = () => `/identities/${seg(need(env, "NAIVE_IDENTITY_ID"))}`;
+  // The webhook body shape does not change between platforms, so the local schema is the one schema.
+  const { parseInbound } = createLocalMail(env);
+
+  return {
+    async send({ to, from, subject, text, html, attachments }) {
+      if (/[,;<>\s]/.test(to) || !isAllowedEmail(allowlistFromEnv(env), to)) {
+        throw new Error(`Mail refused: ${to} is outside ALLOWED_EMAIL_DOMAINS`);
+      }
+      // Refused, never dropped: naïve sends plain text only.
+      if (html !== undefined || (attachments?.length ?? 0) > 0) {
+        throw new Error("Mail refused: naïve sends plain text only, so html and attachments cannot be sent");
+      }
+      const { email } = await identity.get();
+      // naïve sends only from our own inboxes; demo-start's provider sender keeps local delivery (orchestrator's ruling).
+      if (from !== undefined && from.trim().toLowerCase() !== email.toLowerCase()) {
+        throw new Error(`Mail refused: naïve sends only from ${email}, not "${from}"`);
+      }
+      const receipt = await call<{ accepted: boolean }>("POST", `${identityPath()}/emails/${seg(need(env, "NAIVE_INBOX_ID"))}/send`, {
+        to: [to],
+        subject,
+        text,
+      });
+      if (!receipt.accepted) throw new Error(`naïve did not accept the mail to ${to}`);
+      // naïve deliberately returns no message id, and inbound dedupe needs one unique per send.
+      return { id: `naive-${randomUUID()}` };
+    },
+
+    parseInbound,
+
+    // shortcut: walks the whole feed each poll (read mail stays in it and naïve has no unread filter); fine at demo volume.
+    async pollInbound(onEmail) {
+      const inbox = need(env, "NAIVE_INBOX_ID");
+      const all: InboundMessage[] = [];
+      for (let after: string | null = null; ; ) {
+        const cursor: string = after ? `&after=${encodeURIComponent(after)}` : "";
+        const page: { data: InboundMessage[]; has_more?: boolean; next_cursor?: string | null } = await call<{ data: InboundMessage[]; has_more?: boolean; next_cursor?: string | null }>(
+          "GET",
+          `${identityPath()}/messages?channel=email&limit=100${cursor}`,
+        );
+        all.push(...page.data);
+        if (!page.has_more || !page.next_cursor) break;
+        after = page.next_cursor;
+      }
+      // The feed is newest first; other inboxes of the persona (the Linda stand-in) are not ours to consume.
+      const unread = all.filter((m) => m.channel === "email" && m.endpoint_id === inbox && !m.read_at).reverse();
+      for (const message of unread) {
+        await onEmail(parseInbound({ messageId: message.id, from: message.from, to: message.to, subject: message.subject ?? "", text: message.text }));
+        await call("POST", `${identityPath()}/messages/${seg(message.id)}/read`, { read: true });
+      }
+      return unread.length;
+    },
+  };
+}
+
+/**
+ * One-off setup: claims an inbox (e.g. bills@ on the system domain) owned by an agent that never runs. wake: false
+ * stores mail without starting a naïve session, so pollInbound is the only reader. Record the returned id as NAIVE_INBOX_ID.
+ */
+export async function createInbox(address: string, owningAgentId: string, env: Env = process.env): Promise<{ id: string; address: string; wake: boolean }> {
+  const inbox = await naiveClient(env)<{ id: string; address: string; wake: boolean }>(
+    "POST",
+    `/identities/${seg(need(env, "NAIVE_IDENTITY_ID"))}/emails`,
+    { address, owning_agent_id: owningAgentId, wake: false },
+  );
+  // A woken inbox would start sessions that read mail (the MCP trap in naive-notes), so refuse to hand one back.
+  if (inbox.wake !== false) throw new Error(`naïve created ${inbox.address} with wake on; turn it off before using it`);
+  return inbox;
+}
+
+export default createMail();

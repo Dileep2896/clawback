@@ -7,7 +7,8 @@ const SUFFIX = ".check.ts";
 
 /**
  * Runs every src/<platform>/**\/*.check.ts and returns the exit code. A check default-exports an async function:
- * returning passes, throwing fails. An interface with no check also fails, so a missing adapter never looks green.
+ * returning passes, throwing fails, and returning { notAvailable: reason } prints N/A, which does not fail the run.
+ * An interface with no check also fails, so a missing adapter never looks green.
  */
 export async function runChecks(
   platform: PlatformName,
@@ -22,6 +23,7 @@ export async function runChecks(
     : [];
 
   let failed = 0;
+  let notAvailable = 0;
   const fail = (line: string) => {
     failed++;
     log(`FAIL ${line}`);
@@ -31,8 +33,13 @@ export async function runChecks(
     try {
       const run = (await import(/* @vite-ignore */ pathToFileURL(join(dir, check)).href)).default;
       if (typeof run !== "function") throw new Error("no default-exported check function");
-      await run();
-      log(`PASS ${platform}/${check}`);
+      const result: unknown = await run();
+      // A check returns { notAvailable } when the platform cannot do the thing at all, so it is never shown as a PASS.
+      const reason = (result as { notAvailable?: unknown } | undefined)?.notAvailable;
+      if (typeof reason === "string") {
+        notAvailable++;
+        log(`N/A ${platform}/${check}: not available on ${platform}: ${reason}`);
+      } else log(`PASS ${platform}/${check}`);
     } catch (error) {
       fail(`${platform}/${check}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -43,6 +50,7 @@ export async function runChecks(
     if (!covered.has(file)) fail(`${platform}/${file}: not built yet (expected ${platform}/${file}${SUFFIX})`);
   }
 
-  log(failed ? `${failed} failed` : "All checks passed");
+  const na = notAvailable ? ` (${notAvailable} N/A)` : "";
+  log(failed ? `${failed} failed${na}` : `All checks passed${na}`);
   return failed ? 1 : 0;
 }
