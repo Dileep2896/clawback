@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import { executeRun, scheduledRunPrompt } from "@bill-fighter/agents/run";
 import { accounts, locations, runs, scheduledChecks } from "@bill-fighter/db/schema";
 import { platformName } from "@bill-fighter/platform/factory";
@@ -9,6 +10,8 @@ import type { InboundDeps, InboundReply } from "./inbound.ts";
 type RunDeps = Pick<InboundDeps, "db" | "runtime" | "audit" | "tools">;
 
 const dedupeKey = (checkId: string) => `scheduled-check:${checkId}`;
+const STARTUP_WAIT_MS = 5_000;
+const STARTUP_POLL_MS = 50;
 
 /**
  * The Scheduler's onFire handler. The run is not awaited: it can wait hours on the owner's approval, and a cron tick fires its due checks one at a time.
@@ -48,8 +51,13 @@ export async function handleFireCheck(payload: unknown, { db, scheduler }: Pick<
   if (!check) return { status: 404, body: { error: `No scheduled check ${checkId}` } };
 
   await scheduler.fire(checkId);
-  const [run] = await db.select({ id: runs.id }).from(runs).where(eq(runs.dedupeKey, dedupeKey(checkId)));
-  // fire() skips a check that is not pending, and one that failed earlier never got a run.
-  if (!run) return { status: 409, body: { error: `Scheduled check ${checkId} has no run and cannot start one` } };
-  return { status: 200, body: { runId: run.id } };
+  // fire() returns at once for a check it did not claim, and whoever did claim it may not have inserted the run yet.
+  for (const deadline = Date.now() + STARTUP_WAIT_MS; Date.now() < deadline; await sleep(STARTUP_POLL_MS)) {
+    // Status before run: a check already seen as finished cannot gain a run after this read.
+    const [current] = await db.select({ status: scheduledChecks.status }).from(scheduledChecks).where(eq(scheduledChecks.id, checkId));
+    const [run] = await db.select({ id: runs.id }).from(runs).where(eq(runs.dedupeKey, dedupeKey(checkId)));
+    if (run) return { status: 200, body: { runId: run.id } };
+    if (current?.status !== "running") return { status: 409, body: { error: `Scheduled check ${checkId} has no run and cannot start one` } };
+  }
+  return { status: 503, body: { error: `Scheduled check ${checkId} is still starting, try again` } };
 }

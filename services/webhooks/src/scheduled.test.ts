@@ -1,14 +1,15 @@
 import type { AddressInfo } from "node:net";
+import { setTimeout as sleep } from "node:timers/promises";
 import type { Db } from "@bill-fighter/db/client";
 import { accounts, customers, locations, runs, scheduledChecks } from "@bill-fighter/db/schema";
 import { withTestDb } from "@bill-fighter/db/test-db";
 import { createAudit } from "@bill-fighter/platform/local/audit";
 import { createMail } from "@bill-fighter/platform/local/mail";
 import { createScheduler } from "@bill-fighter/platform/local/scheduler";
-import type { RunEvent, RunSpec } from "@bill-fighter/platform/types";
+import type { RunEvent, RunSpec, ScheduledCheck } from "@bill-fighter/platform/types";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { startScheduledRun } from "./scheduled.ts";
+import { handleFireCheck, startScheduledRun } from "./scheduled.ts";
 import { createInboundServer, FIRE_CHECK_PATH } from "./server.ts";
 
 // Each test migrates a fresh database on the Postgres every worktree shares, which is slow under load.
@@ -102,6 +103,89 @@ describe("forced firing", () => {
       } finally {
         scheduler.stop();
         await new Promise((resolve) => server.close(resolve));
+      }
+    });
+  });
+});
+
+describe("firing a check someone else is already starting", () => {
+  // Far off, so a cron tick cannot claim it instead of the first caller.
+  const LATER = new Date("2030-01-01T16:00:00Z");
+
+  /** Holds the claimed check before its run exists, as a slow startup in a cron tick or another request would. */
+  function setupHeld(db: Db, startup: (check: ScheduledCheck, deps: ReturnType<typeof setup>["deps"]) => Promise<void>) {
+    const { deps, run, scheduler } = setup(db);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let claimed!: () => void;
+    const started = new Promise<void>((resolve) => (claimed = resolve));
+    scheduler.onFire(async (check) => {
+      claimed();
+      await gate;
+      await startup(check, deps);
+    });
+    return { run, scheduler, release, started };
+  }
+
+  it("waits for the run and answers with the same one", async () => {
+    await withTestDb("monitor_fire", async (db) => {
+      await addCustomer(db, "noodle", ["BE-1"]);
+      const { run, scheduler, release, started } = setupHeld(db, startScheduledRun);
+      try {
+        const check = await scheduler.schedule({ customerId: "noodle", runAt: LATER });
+        const first = handleFireCheck({ checkId: check.id }, { db, scheduler });
+        await started;
+        const second = handleFireCheck({ checkId: check.id }, { db, scheduler });
+        expect(await Promise.race([second, sleep(200, "waiting")])).toBe("waiting");
+
+        release();
+        const [a, b] = await Promise.all([first, second]);
+        expect(a.status).toBe(200);
+        expect(b).toEqual(a);
+        await finished(db, (a.body as { runId: string }).runId);
+        expect(run).toHaveBeenCalledOnce();
+      } finally {
+        release();
+        scheduler.stop();
+      }
+    });
+  });
+
+  it("answers 409 once the startup it waited on has failed", async () => {
+    await withTestDb("monitor_fire", async (db) => {
+      await addCustomer(db, "noodle", ["BE-1"]);
+      const { run, scheduler, release, started } = setupHeld(db, () => Promise.reject(new Error("startup broke")));
+      try {
+        const check = await scheduler.schedule({ customerId: "noodle", runAt: LATER });
+        const first = handleFireCheck({ checkId: check.id }, { db, scheduler });
+        await started;
+        const second = handleFireCheck({ checkId: check.id }, { db, scheduler });
+        release();
+        await expect(first).rejects.toThrow("startup broke");
+        expect((await second).status).toBe(409);
+        expect(run).not.toHaveBeenCalled();
+      } finally {
+        release();
+        scheduler.stop();
+      }
+    });
+  });
+
+  it("answers 503, not a failure, when startup outlasts the wait", async () => {
+    await withTestDb("monitor_fire", async (db) => {
+      await addCustomer(db, "noodle", ["BE-1"]);
+      const { scheduler, release, started } = setupHeld(db, () => Promise.resolve());
+      try {
+        const check = await scheduler.schedule({ customerId: "noodle", runAt: LATER });
+        const first = handleFireCheck({ checkId: check.id }, { db, scheduler });
+        await started;
+        expect((await handleFireCheck({ checkId: check.id }, { db, scheduler })).status).toBe(503);
+        release();
+        // Nothing inserted a run in this startup, so the first caller ends with the 409.
+        expect((await first).status).toBe(409);
+      } finally {
+        release();
+        scheduler.stop();
       }
     });
   });
