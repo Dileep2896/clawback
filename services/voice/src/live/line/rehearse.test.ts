@@ -1,0 +1,61 @@
+import { describe, expect, it, vi } from "vitest";
+import { rehearse, TURNS } from "./rehearse.ts";
+import { MENU_LINE, REP_LINES } from "./script.ts";
+import { type Vapi, vapiClient } from "./vapi.ts";
+
+const reply = (content: string | null, cost?: number) => ({
+  id: "chat",
+  output: [{ role: "assistant", content }],
+  ...(cost === undefined ? {} : { cost }),
+});
+
+describe("rehearse", () => {
+  it.each(["22", "23"])("expects the menu again for keypad entry %s", (digits) => {
+    expect(TURNS.find((t) => t.caller === `User's Keypad Entry: ${digits}`)?.expected).toBe(MENU_LINE);
+  });
+
+  it("expects the ticket again when it is read back wrong", () => {
+    expect(TURNS.find((t) => t.caller.includes("BT-48123"))?.expected).toBe(REP_LINES.ticket);
+  });
+
+  it("runs every turn in one chat and passes exact replies", async () => {
+    const replies = TURNS.map((t) => reply(t.expected, 0.0001));
+    const vapi = vi.fn<Vapi>(async () => replies.shift());
+    const { results, costUsd, stoppedBecause } = await rehearse(vapi, "a1");
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(results).toHaveLength(TURNS.length);
+    expect(costUsd).toBeCloseTo(0.0001 * TURNS.length);
+    expect(stoppedBecause).toBeUndefined();
+    expect(vapi.mock.calls[1]?.[2]).toMatchObject({ previousChatId: "chat" });
+  });
+
+  it("marks a reworded reply as failed", async () => {
+    const vapi = vi.fn<Vapi>(async () => reply("Sure thing!", 0.0001));
+    const { results } = await rehearse(vapi, "a1", [{ caller: "Hi", expected: "Exact words." }]);
+    expect(results[0]?.ok).toBe(false);
+  });
+
+  it("stops above one cent", async () => {
+    const vapi = vi.fn<Vapi>(async () => reply("x", 0.006));
+    const { stoppedBecause, results } = await rehearse(vapi, "a1");
+    expect(stoppedBecause).toBe("over the one cent limit");
+    expect(results).toHaveLength(2);
+  });
+
+  it("stops when the cost is not reported", async () => {
+    const vapi = vi.fn<Vapi>(async () => reply("x"));
+    const { stoppedBecause, results } = await rehearse(vapi, "a1");
+    expect(stoppedBecause).toBe("Vapi did not report a cost");
+    expect(results).toHaveLength(1);
+  });
+
+  it("fails clearly and stops at once when Vapi wants a card", async () => {
+    const body = '{"code":"payment_method_missing"}';
+    const fetchStub = vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { status: 402 }));
+    const error = await rehearse(vapiClient("secret-key", fetchStub), "a1").catch((e: Error) => e.message);
+    expect(error).toContain("Vapi chat needs a card on file");
+    expect(error).toContain(body);
+    expect(error).not.toContain("secret-key");
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+  });
+});

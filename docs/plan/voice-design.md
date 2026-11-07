@@ -33,7 +33,7 @@ The fallback for point 2 (speak the menu and advance once the caller has acted) 
 - Retell: first utterance is role `agent` and an exact match for `DISCLOSURE_LINE`, spoken from 0.19 s to 5.87 s.
 - Vapi, transcribing the audio separately: "Hi. This is an AI assistant calling on behalf of Golden Gate Noodle Company. This call is being recorded." The only difference is the period after "Hi", which is punctuation chosen by the speech-to-text.
 - The Retell transcript may reflect its own text rather than the audio, so the Vapi transcript is the independent check.
-- Human listen to the recording, 2026-11-06: **the disclosure sounds right.** The human did not report on whether the menu played once or twice, so that stays unresolved (see below).
+- Human listen to the recording, 2026-11-06: **the disclosure sounds right.** The human did not report on whether the menu played once or twice. The assistant audio track later settled it: once (see "Mock provider line").
 
 ## Transcripts
 
@@ -103,14 +103,79 @@ Vapi (`POST /assistant`, `PATCH /phone-number/{id}`):
 
 ## What later tasks must handle
 
-- **`voice-live-line`: the assistant does not follow scripted lines exactly.** It was told to say "Key press received. Goodbye." and only "Goodbye." appears in either transcript. It was told to say the menu once and Vapi logged it twice, while Retell heard it once and only 21 TTS characters were billed, so whether it actually played twice is unresolved. The fixed rep script needs a stricter prompt or a stronger model, and a full test.
-- **`voice-live-line`: a tone is only proven by the platform message** `User's Keypad Entry:`, never by the model's words.
+- **`voice-live-line`: the assistant does not follow scripted lines exactly.** It was told to say "Key press received. Goodbye." and only "Goodbye." appears in either transcript. The fixed rep script needs a stricter prompt or a stronger model, and a full test. Handled so far in "Mock provider line", but not yet proven on the model.
+- **`voice-live-line`: a tone is only proven by the platform message** `User's Keypad Entry:`, never by the model's words. Handled in `check.ts`.
+- **`voice-live-caller`: the first full test must also close the line's open check** (see "Mock provider line"), and run `cli.ts readback <vapi call id>`. It is also the first time the rep script runs on the model, so budget for finding script problems there.
 - **`voice-live-caller`: the Retell recording URL opens with no authentication.** The agent's `opt_in_signed_url` makes URLs expire after 24 hours by default, which conflicts with storing the URL in `calls`. Decide before any non-demo use. The expiry of the plain URL is not documented.
 - **`voice-live-caller`: when Vapi ends the call, Retell reports `disconnection_reason: user_hangup`.** That is a normal ending here, not a failure, so the sim fallback must not trigger on it.
 - **`voice-live-caller`: budget 2.08 cents per call** for the flat Retell line unless post-call analysis can be turned off, and confirm that it is the cause. A 15.3 s call was billed at 16 s, so expect rounding up to the second.
 - **Both: this spike was minimal.** It does not prove the full script fits, or that the rep AI handles the seven lines, three promos and ticket number. The later full tests cover that.
 
+## Mock provider line (`voice-live-line`)
+
+Code is in `services/voice/src/live/line/`. Assistant `baytel-line` (`027a8389-219a-43c5-9329-197c34e7c7b6`) is attached to `+16502522121`. The read-back matches the design, with no transfer tool, forwarding number or fallback destination.
+
+### Acceptance checks
+
+| Check | Result |
+|---|---|
+| A real call hears the menu and reaches the rep with no human on the line | **NOT RUN.** Deferred to the first `voice-live-caller` full test, by the human's decision (2026-11-06), to save call credit. |
+| Behavior matches the spike, and the transcript never claims an unrecognized tone | Config and checks are in place and tested without a call. **Not yet seen on a real call.** No script line mentions a key being received, and `check.ts` flags any line off script. |
+| No call is ever forwarded to a personal phone | Met in config: confirmed by read-back and tests. `vapi.ts` also refuses to place a call. |
+| As few live calls as possible, each cost logged | Met: **no live calls in this lane.** |
+
+### Human's decisions (2026-11-06)
+
+- The rep agrees to all seven cancellations and all three promos, with no refusal.
+- The ticket number is fixed: `BT-48213`, read digit by digit.
+- **No card goes on Vapi, so the text rehearsal stays NOT RUN.** The rep script first runs on the model in the first `voice-live-caller` full test. The `rehearse` command stays in the code, and a 402 from `POST /chat` stops it at once with a message saying why.
+
+### Fixes after review (2026-11-06)
+
+All checked with stubbed tests only. No call, chat rehearsal or `provision` was run against the real account.
+
+- **`provision.ts` no longer attaches an unproven assistant.** The assistant's read-back must pass before the number is touched. Any later failure, or a failed update to an assistant already on the number, detaches it and reads the number back. If the assistant is still on the number, the error says `STILL ATTACHED`. A number on some other assistant is left alone.
+- **`check.ts` needs real proof of reaching the rep.** The scripted greeting must appear after the key press. An empty message, the closing line alone, another rep line, or a greeting from before the key press all fail.
+- **`check.ts` needs real proof of a tone.** A keypad entry must have both timestamps, present and equal.
+- **`provision.ts` only detaches this lane's assistant.** Cleanup reads the number first and leaves it alone if anything else holds it. If that read fails, nothing is detached and the error says `CHECK BY HAND`.
+- **`check.ts` needs the full disclosure first.** The caller's speech before the menu must start with `DISCLOSURE_LINE`, ignoring case and punctuation. A missing, partial or late disclosure fails.
+- **`check.ts` orders a call by timestamps, not log position.** Every user and bot message needs a valid `time` and `endTime`, or the check reports it. The disclosure must end before the menu starts, the key press must come after the menu ends, and the rep's first line after it must be the greeting. Nothing but the closing line may follow the closing line.
+- **`check.ts` takes exact values.** A keypad entry must match `User's Keypad Entry: <digits>` in full, and only the value `2` reaches the rep. The disclosure must end on a word boundary. Off-script text in any alphabet is flagged. A `tool_calls` entry naming no tool fails.
+- **The prompt takes exact values.** The menu is left only on a message that is exactly `User's Keypad Entry: 2`, so `22` and `23` stay in the menu. A read-back ticket must have exactly the letters and digits `BT48213` in order. The rehearsal turns cover both, but rehearsal is NOT RUN.
+
+### What the spike's data showed, with no new call
+
+- **The menu played once.** Vapi's assistant-only audio has speech only at 7.90-9.05 s and 14.35-14.70 s, and Retell also heard it once. The doubled text is in Vapi's message log, so log text does not prove what was spoken.
+- **The 21 billed TTS characters prove nothing about this.** That count leaves out "Goodbye.", which was spoken.
+- **The off-script ending was probably a skipped line, not a reworded one.** The log shows `endCall` with no words before it, then "Goodbye.", which matches the documented default `endCallMessage`. This is inferred from the log and the docs. The line now sets `endCallMessage` to its closing line, so the model does not choose those words.
+- **Real keypad entries differ from speech.** The platform entry has `time == endTime` and no `duration` or `metadata`. `check.ts` uses this after the call, but the assistant's model can't see the difference, so a caller who says those exact words could still advance it.
+
+### Open risks
+
+- **The prompt has not run on the model, and won't before the first full test.** The menu and rep lines still come from the LLM (`gpt-6-luna`, temperature 0), so word-for-word delivery is unproven. Text rehearsal is built but NOT RUN: `POST /chat` returned `402 payment_method_missing` because Vapi chat needs a card on file, and the human decided not to add one. If the first full test finds the rep off script, try a stronger model.
+- **The detach in `provision.ts` has not run against Vapi.** It sends `assistantId: null`, but Vapi's public schema types that field as a string and does not document null. If Vapi rejects it, the error says `STILL ATTACHED` and the number must be detached by hand.
+- **Detaching leaves other routes on the number.** A fallback, squad or workflow route stays until cleared by hand, so a call could still follow it. The error names it.
+- **A successful attach replaces whatever held the number, and a later failure does not restore it.** Cleanup detaches our assistant and leaves the number with none, so the previous assistant must be re-attached by hand.
+- **The disclosure check allows no word differences.** A mis-heard word on a real call shows as a problem in `readback`, and needs a human to compare it with the recording. The spike's one Vapi transcript passes, but one sample doesn't show how often this happens.
+- **The updated `provision.ts` has not run against Vapi at all.**
+- **`baytel-line` on Vapi still has the old prompt, which accepts any keypad message starting with `2`.** The prompt fix changes assistant config, and `provision` was not run, by the human's rule. Run `provision` before the first `voice-live-caller` full test, or that test runs the old prompt.
+- **The timestamp rules have only fixture data behind them.** They assume Vapi's `time` and `endTime` share one clock across speech, keypad and bot messages, and that a bot message's `endTime` is when it stopped. Vapi's log already doubled the spike's menu text, so a real call may flag a good call, for example "the key was pressed before the menu finished". Compare any such problem with the recording, and adjust the rule if the log is wrong.
+- **`gpt-6-luna` may ignore temperature.** Vapi accepted and returned the setting, which doesn't show the model honors it.
+- **Rep replies are not verified against the request.** The rep agrees to whatever line it is asked about, so the caller side must keep alarm lines out.
+
+### Cost log
+
+| Date | What | Cost |
+|---|---|---|
+| 2026-11-06 | Provisioning and read-backs | No call placed; no usage charge expected |
+| 2026-11-06 | One `POST /chat` attempt, refused with 402 | None: it was refused before running |
+| | Live calls in this lane | **0** |
+
+### Commands
+
+`pnpm exec tsx --env-file=.env services/voice/src/live/line/cli.ts provision | rehearse | readback <call id>`. None of them can place a call. With no card on Vapi, `rehearse` stops at its first request with a 402 message.
+
 ## Sources (read 2026-11-06)
 
 - Retell: [create phone call](https://docs.retellai.com/api-references/create-phone-call), [get call](https://docs.retellai.com/api-references/get-call), [create agent](https://docs.retellai.com/api-references/create-agent), [create Retell LLM](https://docs.retellai.com/api-references/create-retell-llm), [press digit](https://docs.retellai.com/build/single-multi-prompt/press-digit), [versions](https://docs.retellai.com/agent/version), [pricing](https://www.retellai.com/pricing)
-- Vapi: [free telephony](https://docs.vapi.ai/free-telephony), [keypad input](https://docs.vapi.ai/documentation/assistants/conversation-behavior/keypad-input-settings), [create assistant](https://docs.vapi.ai/api-reference/assistants/create), [update phone number](https://docs.vapi.ai/api-reference/phone-numbers/update), [get call](https://docs.vapi.ai/api-reference/calls/get), [pricing](https://vapi.ai/pricing)
+- Vapi: [free telephony](https://docs.vapi.ai/free-telephony), [keypad input](https://docs.vapi.ai/documentation/assistants/conversation-behavior/keypad-input-settings), [create assistant](https://docs.vapi.ai/api-reference/assistants/create), [update phone number](https://docs.vapi.ai/api-reference/phone-numbers/update), [get call](https://docs.vapi.ai/api-reference/calls/get), [pricing](https://vapi.ai/pricing), [chat quickstart](https://docs.vapi.ai/chat/quickstart)
