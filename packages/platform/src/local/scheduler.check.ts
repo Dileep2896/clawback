@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { customers } from "@bill-fighter/db/schema";
+import { withTestDb } from "@bill-fighter/db/test-db";
 import { createScheduler } from "./scheduler.ts";
-import { withTempDb } from "./temp-db.ts";
 
 export default async function check() {
-  await withTempDb("scheduler", async (db) => {
+  await withTestDb("scheduler", async (db) => {
     const rows = await db
       .insert(customers)
       .values({ name: "c", contactName: "c", contactEmail: "c@billfighter.local", contactPhone: "+15550001111" })

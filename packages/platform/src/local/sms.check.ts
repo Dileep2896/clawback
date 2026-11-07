@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
+import { withTestDb } from "@bill-fighter/db/test-db";
 import { createIdentity } from "./identity.ts";
 import { createSms } from "./sms.ts";
-import { withTempDb } from "./temp-db.ts";
 
 export default async function check() {
-  await withTempDb("sms", async (db) => {
+  await withTestDb("sms", async (db) => {
     const sms = createSms(db, createIdentity({ COMPANY_PHONE: "+15550002222" }));
 
     const { id } = await sms.send({ to: "+15550001111", body: "Approve the bundle?" });
