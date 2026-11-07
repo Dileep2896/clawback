@@ -16,8 +16,7 @@ What the call must get done, in this order:
 {{requests}}
 4. After the last request: "{{read_back}}" If the rep said no to anything, change the counts to only what the rep said yes to.
 5. After the rep confirms: "${WORDS.askTicket}"
-6. When the rep reads the ticket number: "Let me repeat that:" and then the letters and digits you heard, one at a time, separated by commas.
-7. After the rep confirms: "${WORDS.goodbye}" and then use the end call tool.
+6. When the rep has read the ticket number: "${WORDS.goodbye}" and then use the end call tool. Do not repeat the ticket back.
 
 Answering the rep:
 - Wait until the rep has finished speaking. If the rep asks you something, answer it first, briefly, from the fact sheet, then carry on from where you were.
@@ -113,6 +112,6 @@ export function callVariables(plan: CallerPlan, lines: PlannedLine[], facts: Cal
     account_line: WORDS.account(spokenAccount(plan.accountNumber)),
     requests: callRequests(plan, lines).map((request) => `- "${request}"`).join("\n"),
     // Each item already has its own yes, so the read-back only counts them, to keep the call short (human's choice).
-    read_back: `To confirm, you cancelled ${lines.length} phone lines and restored promo pricing on ${plan.promoAccounts.length} accounts. Is that correct?`,
+    read_back: `To confirm, you cancelled ${lines.length} phone lines${plan.promoAccounts.length ? ` and restored promo pricing on ${plan.promoAccounts.length} accounts` : ""}. Is that correct?`,
   };
 }

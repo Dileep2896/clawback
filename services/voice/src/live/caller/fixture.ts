@@ -55,8 +55,6 @@ export function fullCallItems(plan: Plan, lines: Line[]): RetellItem[] {
     said("agent", WORDS.askTicket),
     said("user", "Your ticket number is"),
     said("user", "b, t, four, eight, two, one, three."),
-    said("agent", "Let me repeat that: B, T, 4, 8, 2, 1, 3."),
-    said("user", REP_LINES.confirm),
     said("agent", WORDS.goodbye),
     said("user", CLOSING_LINE),
   ];
