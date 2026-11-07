@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Db } from "@bill-fighter/db/client";
@@ -256,6 +256,22 @@ describe("request_approval with the Filer's letters", () => {
     expect((await requesting).actionIds).toContain(meter);
     const [action] = await db.select().from(actions).where(eq(actions.id, meter));
     expect(action!.payloadJson).toMatchObject({ evidencePath: expect.any(String) });
+  });
+
+  test("a failed attach_evidence batch finishes its writes before a waiting request can freeze the PDF", async (db) => {
+    const { id, request, call, letters } = await setupBoth(db);
+    await call("draft_letter", { letters: letters.slice(0, 1) });
+    const meter = letterActionId(RUN, id("meter"));
+    await call("attach_evidence", { actionIds: [meter] });
+    // Removed so the batch's rewrite is visible: the file is back only once that write has ended.
+    const pdf = join(dir, `${encodeURIComponent(meter)}-with-evidence.pdf`);
+    rmSync(pdf);
+
+    const attaching = call("attach_evidence", { actionIds: [meter, "not-a-letter"] });
+    const requesting = request([meter]);
+    await expect(attaching).rejects.toThrow(/not a letter of this run/);
+    expect(existsSync(pdf)).toBe(true);
+    expect((await requesting).actionIds).toContain(meter);
   });
 });
 

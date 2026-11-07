@@ -121,18 +121,19 @@ export function filerTools({
           rendered.push({ findingId, kind, pdf });
         }
 
-        return Promise.all(
-          rendered.map(async ({ findingId, kind, pdf }) => {
-            const actionId = letterActionId(runId, findingId);
-            const path = await save(actionId, "", pdf);
-            const payloadJson: LetterPayload = { letterPath: path };
-            await db
-              .insert(actions)
-              .values({ id: actionId, findingId, kind, payloadJson, status: "proposed" })
-              .onConflictDoUpdate({ target: actions.id, set: { payloadJson } });
-            return { actionId, findingId, kind, path };
-          }),
-        );
+        // In sequence: a failure must not release the run's queue while a sibling write is still going.
+        const drafted = [];
+        for (const { findingId, kind, pdf } of rendered) {
+          const actionId = letterActionId(runId, findingId);
+          const path = await save(actionId, "", pdf);
+          const payloadJson: LetterPayload = { letterPath: path };
+          await db
+            .insert(actions)
+            .values({ id: actionId, findingId, kind, payloadJson, status: "proposed" })
+            .onConflictDoUpdate({ target: actions.id, set: { payloadJson } });
+          drafted.push({ actionId, findingId, kind, path });
+        }
+        return drafted;
       }),
     }),
 
@@ -146,37 +147,38 @@ export function filerTools({
         const bundled = (await (await gate()).get(runId))?.actionIds ?? [];
         const frozen = actionIds.filter((actionId) => bundled.includes(actionId));
         if (frozen.length > 0) throw new Error(`Run ${runId} has already asked for approval, so the evidence of ${frozen.join(", ")} can no longer change`);
-        return Promise.all(
-          actionIds.map(async (actionId) => {
-            const [row] = await db
-              .select({ action: actions, finding: findings })
-              .from(actions)
-              .innerJoin(findings, eq(actions.findingId, findings.id))
-              .where(eq(actions.id, actionId));
-            // Exact, not a prefix: run "run" must not rewrite the frozen PDF of run "run-2".
-            if (!row || actionId !== letterActionId(runId, row.finding.id)) throw new Error(`Action ${actionId} is not a letter of this run`);
-            const { letterPath } = row.action.payloadJson as LetterPayload;
-            const { billIds, billLineIds, phoneLineIds } = FindingEvidence.parse(row.finding.evidenceJson);
-            const rows = await db.select().from(bills).where(inArray(bills.id, billIds));
-            const billPdfs = await Promise.all(
-              billIds.map(async (billId) => {
-                const pdfPath = rows.find((bill) => bill.id === billId)?.pdfPath;
-                if (!pdfPath) throw new Error(`Bill ${billId} has no PDF on file`);
-                try {
-                  return await readFile(resolve(REPO_ROOT, pdfPath));
-                } catch (cause) {
-                  throw new Error(`Bill ${billId}: cannot read its PDF at ${pdfPath}`, { cause });
-                }
-              }),
-            );
-            // Always from the bare letter, so repeating this cannot double the pages.
-            const merged = await mergeEvidence(await readFile(resolve(REPO_ROOT, letterPath)), billPdfs);
-            const evidencePath = await save(actionId, "-with-evidence", merged);
-            const payloadJson = { letterPath, evidencePath, billIds, billLineIds, phoneLineIds };
-            await db.update(actions).set({ payloadJson }).where(eq(actions.id, actionId));
-            return { actionId, evidencePath, billIds };
-          }),
-        );
+        // In sequence: a failure must not release the run's queue while a sibling could still overwrite a frozen PDF.
+        const attached = [];
+        for (const actionId of actionIds) {
+          const [row] = await db
+            .select({ action: actions, finding: findings })
+            .from(actions)
+            .innerJoin(findings, eq(actions.findingId, findings.id))
+            .where(eq(actions.id, actionId));
+          // Exact, not a prefix: run "run" must not rewrite the frozen PDF of run "run-2".
+          if (!row || actionId !== letterActionId(runId, row.finding.id)) throw new Error(`Action ${actionId} is not a letter of this run`);
+          const { letterPath } = row.action.payloadJson as LetterPayload;
+          const { billIds, billLineIds, phoneLineIds } = FindingEvidence.parse(row.finding.evidenceJson);
+          const rows = await db.select().from(bills).where(inArray(bills.id, billIds));
+          const billPdfs = await Promise.all(
+            billIds.map(async (billId) => {
+              const pdfPath = rows.find((bill) => bill.id === billId)?.pdfPath;
+              if (!pdfPath) throw new Error(`Bill ${billId} has no PDF on file`);
+              try {
+                return await readFile(resolve(REPO_ROOT, pdfPath));
+              } catch (cause) {
+                throw new Error(`Bill ${billId}: cannot read its PDF at ${pdfPath}`, { cause });
+              }
+            }),
+          );
+          // Always from the bare letter, so repeating this cannot double the pages.
+          const merged = await mergeEvidence(await readFile(resolve(REPO_ROOT, letterPath)), billPdfs);
+          const evidencePath = await save(actionId, "-with-evidence", merged);
+          const payloadJson = { letterPath, evidencePath, billIds, billLineIds, phoneLineIds };
+          await db.update(actions).set({ payloadJson }).where(eq(actions.id, actionId));
+          attached.push({ actionId, evidencePath, billIds });
+        }
+        return attached;
       }),
     }),
 
