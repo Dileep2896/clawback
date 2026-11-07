@@ -19,6 +19,12 @@ describe("Llm.structured", () => {
     await expect(llmWith([INIT, success({ total: 5 })]).structured({ prompt: "x" }, SCHEMA)).resolves.toEqual({ total: 5 });
   });
 
+  it("returns the validated value, with defaults filled in, and keeps properties the schema allows", async () => {
+    const withDefault = { type: "object", properties: { total: { type: "integer", default: 5 } }, required: ["total"] };
+    const llm = llmWith([INIT, success({ note: "kept" })]);
+    await expect(llm.structured({ prompt: "x" }, withDefault)).resolves.toEqual({ total: 5, note: "kept" });
+  });
+
   it.each([
     ["output that breaks the schema", [INIT, success({ total: "five" })], /does not match/],
     ["a success with no structured output", [INIT, success(undefined)], /no structured output/],

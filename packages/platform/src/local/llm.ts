@@ -65,7 +65,8 @@ export function createLlm(query: Query = sdkQuery as Query): Llm {
       if (output === undefined) throw new Error("Llm.structured failed: the result had no structured output");
       const parsed = schema.safeParse(output);
       if (!parsed.success) throw new Error(`Llm.structured failed: output does not match the schema: ${parsed.error.message}`);
-      return output as T;
+      // Not the raw output: validation can fill in defaults, and the raw value would then break the schema.
+      return parsed.data as T;
     },
   };
 }
