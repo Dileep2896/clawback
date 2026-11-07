@@ -129,7 +129,6 @@ Limit: 2 to 4 minutes per run, `RUN_BUDGET_USD` $5. Cost is Claude Code login us
 | Sim 1 | sim, old script | success, Human actions 1, one email | 5:01 | $0.38 |
 | Sim 2 | sim, old script | success, same | 1:54 to approval, parked 10:30, 2:43 after YES | $0.40 |
 | Sim 3 | sim, old script | success, same | 5:12 | $0.41 |
-| Sim 4 | 1:49 | 0:06 | 0:03 | 2:16 | 2:27 | same | same three amounts | about $0.41 |
 | Live 1 | live, old script | success, call 3:04 | 6:14 | $0.51 voice |
 | Sim check | sim, Option A | success, one `send_email` | 4:36 | $0.39 |
 | Live 2 | live, Option A | success, call 2:23, no fallback | 5:24 | $0.40 voice |
