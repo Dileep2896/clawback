@@ -51,7 +51,7 @@ export function createCanUseTool(
     if (typeof actionId !== "string" || !actionId) return deny(`${bare} needs an actionId to be approved`);
     try {
       if (await gate.waitForRelease(actionId, signal)) return allow;
-      return deny(`Action ${actionId} is not in an approved bundle`);
+      return deny(`Action ${actionId} did not run and nothing was changed: the owner denied its approval request, or it was never in one. It is not pending.`);
     } catch (error) {
       return deny(`Could not check approval for ${actionId}: ${errorText(error)}`);
     }
