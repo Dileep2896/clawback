@@ -85,4 +85,19 @@ export function createMail(env: Env = process.env): NaiveMail {
   };
 }
 
+/**
+ * One-off setup: claims an inbox (e.g. bills@ on the system domain) owned by an agent that never runs. wake: false
+ * stores mail without starting a naïve session, so pollInbound is the only reader. Record the returned id as NAIVE_INBOX_ID.
+ */
+export async function createInbox(address: string, owningAgentId: string, env: Env = process.env): Promise<{ id: string; address: string; wake: boolean }> {
+  const inbox = await naiveClient(env)<{ id: string; address: string; wake: boolean }>(
+    "POST",
+    `/identities/${seg(need(env, "NAIVE_IDENTITY_ID"))}/emails`,
+    { address, owning_agent_id: owningAgentId, wake: false },
+  );
+  // A woken inbox would start sessions that read mail (the MCP trap in naive-notes), so refuse to hand one back.
+  if (inbox.wake !== false) throw new Error(`naïve created ${inbox.address} with wake on; turn it off before using it`);
+  return inbox;
+}
+
 export default createMail();

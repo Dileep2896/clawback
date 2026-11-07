@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createIdentity } from "./identity.ts";
-import { createMail, type InboundMessage } from "./mail.ts";
+import { createInbox, createMail, type InboundMessage } from "./mail.ts";
 
 type Seen = { method: string; url: string; auth: string; idempotency: string; body: unknown };
 
@@ -19,6 +19,10 @@ const server = createServer(async (request: IncomingMessage, response) => {
   if (url === "/v1/identities/idn_1") return json(200, { id: "idn_1", name: "Clawback" });
   if (url.startsWith("/v1/identities/idn_1/emails?")) {
     return json(200, { data: [{ id: "eml_bills", address: "bills@sys.test" }, { id: "eml_linda", address: "linda@sys.test" }] });
+  }
+  if (method === "POST" && url === "/v1/identities/idn_1/emails") {
+    const { address, wake } = JSON.parse(raw) as { address: string; wake?: boolean };
+    return json(201, { id: "eml_new", object: "email_inbox", address, wake: wake ?? true });
   }
   if (url === "/v1/identities/idn_1/emails/eml_bills/send") {
     if (failSend) return json(409, { error: { code: "job_not_ready", message: "domain not verified" } });
@@ -137,5 +141,14 @@ describe("naive mail", () => {
     feed = [{ id: "inb_1", channel: "email", endpoint_id: "eml_bills", from: "a@sys.test", to: "bills@sys.test", subject: null, text: "t", read_at: null }];
     await expect(createMail(env).pollInbound(async () => { throw new Error("handler down"); })).rejects.toThrow("handler down");
     expect(seen.some((request) => request.url.endsWith("/read"))).toBe(false);
+  });
+});
+
+describe("naive inbox setup", () => {
+  it("creates the inbox with wake: false and the owning agent", async () => {
+    expect(await createInbox("bills@sys.test", "agt_mailroom", env)).toMatchObject({ id: "eml_new", address: "bills@sys.test", wake: false });
+    const create = seen.find((request) => request.method === "POST" && request.url === "/v1/identities/idn_1/emails");
+    expect(create?.body).toEqual({ address: "bills@sys.test", owning_agent_id: "agt_mailroom", wake: false });
+    expect(create?.idempotency).not.toBe("");
   });
 });
