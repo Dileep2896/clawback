@@ -95,7 +95,10 @@ async function checkStart(page: Page) {
   console.info("ok start: the run started for the seeded customer and the page moved to Overview");
 }
 
-/** A new customer uploads a seed PDF, sees it on Bills, and gets an honest queued audit. */
+/**
+ * A new customer uploads a seed PDF. It parses from the cache, but its account is the demo customer's, so it is held for review
+ * rather than filed: two customers on one account makes Intake stop the demo run.
+ */
 async function checkNewCustomer(page: Page) {
   const email = `sam+${Date.now()}@missiondumplings.example`;
   await signUp(page, { name: "Sam Lee", company: "Mission Dumplings", email, password: "dumplings-2026" });
@@ -105,18 +108,13 @@ async function checkNewCustomer(page: Page) {
   await page.getByTestId("upload-tab").click();
   await page.getByTestId("upload-input").setInputFiles(join("data/bills", bill));
   await page.getByTestId("upload-list").getByText("Reading your bill…").waitFor();
-  await page.locator('[data-status="saved"]').waitFor({ timeout: 30_000 });
+  await page.locator('[data-status="needs_review"]').getByText("already linked to another Clawback customer").waitFor({ timeout: 30_000 });
+  assert.equal(await page.getByTestId("start-audit").isEnabled(), false, "Start was enabled with nothing connected or filed");
   await shot(page, "onboarding-upload-1920");
 
-  await page.getByTestId("start-audit").click();
-  await page.getByTestId("audit-queued").waitFor();
-  await shot(page, "onboarding-queued-1920");
-
   await page.goto(`${BASE}/bills`);
-  await page.getByTestId("bills-site").first().waitFor({ timeout: 15_000 });
-  assert.equal(await page.locator("[data-bill]").count(), 1, "the new customer should see exactly their one uploaded bill");
-  await shot(page, "bills-new-customer-1920");
-  console.info(`ok new customer: ${bill} parsed from the cache, filed, shown on Bills, audit queued`);
+  await page.getByText("No bills yet").waitFor({ timeout: 15_000 });
+  console.info(`ok new customer: ${bill} parsed from the cache and held for review, not filed under a second customer`);
 }
 
 const browser = await chromium.launch();

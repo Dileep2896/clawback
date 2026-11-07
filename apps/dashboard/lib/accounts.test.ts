@@ -54,11 +54,16 @@ describe("sign-up, log in, uploads and the reset", () => {
       expect(await saveParsedBill(db, sam.customerId, BILL, "/tmp/x.pdf")).toMatchObject({ status: "on_file" });
       expect(await db.select().from(billLines)).toHaveLength(1);
 
+      // An account another customer already has is never filed twice: Intake would find two customers and stop the run.
+      const other = await createUser(db, { ...NEW, email: "other@example.com" });
+      if (other === "taken") throw new Error("unexpected");
+      expect(await saveParsedBill(db, other.customerId, BILL, "/tmp/x.pdf")).toMatchObject({ status: "needs_review" });
+
       // The demo customer's rows are the rehearsed run's input: an upload never adds to them.
       expect(await saveParsedBill(db, CUSTOMER.id, BILL, "/tmp/x.pdf")).toMatchObject({ status: "needs_review" });
       expect(await saveParsedBill(db, sam.customerId, { ...BILL, providerName: "PG&E" }, "/tmp/x.pdf")).toMatchObject({ status: "needs_review" });
 
-      expect(await clearSignups(db.$client)).toEqual([sam.customerId]);
+      expect((await clearSignups(db.$client)).sort()).toEqual([sam.customerId, other.customerId].sort());
       expect(await db.select().from(users)).toHaveLength(0);
       expect((await db.select().from(customers)).map((c) => c.id)).toEqual([CUSTOMER.id]);
       expect(await db.select().from(locations).where(eq(locations.customerId, sam.customerId))).toHaveLength(0);

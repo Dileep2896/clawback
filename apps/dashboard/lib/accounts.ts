@@ -80,6 +80,13 @@ export async function saveParsedBill(db: Db, customerId: string, bill: ParsedBil
     let accountId = account?.id;
     if (!accountId && locked) return { status: "needs_review" as const, reason: "This account is not one of the demo customer's accounts" };
     if (!accountId) {
+      // One provider account has one owner. A second customer filing it makes Intake find two customers and stop the demo run.
+      const [owned] = await tx
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(and(eq(accounts.provider, provider), eq(accounts.accountNumber, bill.accountNumber)))
+        .limit(1);
+      if (owned) return { status: "needs_review" as const, reason: "This account is already linked to another Clawback customer" };
       const address = bill.serviceAddress ?? "Address not on the bill";
       const parts = address.split(",").map((part) => part.trim());
       const [location] = await tx
