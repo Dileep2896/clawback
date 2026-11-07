@@ -1,0 +1,59 @@
+{
+  "source": "sample-mission-dumplings-baycurrent-2026-09",
+  "pdfSha256": "dea105aca0f690389c4327f9f88bd9194a1e91adcb082658beba3addb99c96ee",
+  "schemaHash": "9b2cd3ec",
+  "status": "parsed",
+  "bill": {
+    "accountNumber": "BE-8801",
+    "serviceAddress": "2400 Mission St",
+    "providerName": "BayCurrent Electric",
+    "serviceType": "electric",
+    "meterNumber": "1009988",
+    "multiplier": 2,
+    "rateSchedule": "B-6",
+    "planCode": null,
+    "periodStart": "2026-09-01",
+    "periodEnd": "2026-09-30",
+    "kwhByTouPeriod": [
+      {
+        "period": "Off-Peak Summer",
+        "kwh": 3539
+      },
+      {
+        "period": "Peak Summer",
+        "kwh": 1113.848
+      }
+    ],
+    "maxKw": 10,
+    "lineItems": [
+      {
+        "description": "Off-Peak Summer energy",
+        "quantity": 3539,
+        "unit": "kWh",
+        "rate": 0.38491,
+        "amountCents": 136220,
+        "lineType": "energy"
+      },
+      {
+        "description": "Peak Summer energy",
+        "quantity": 1113.848,
+        "unit": "kWh",
+        "rate": 0.64253,
+        "amountCents": 71568,
+        "lineType": "energy"
+      },
+      {
+        "description": "Customer Charge",
+        "quantity": null,
+        "unit": null,
+        "rate": null,
+        "amountCents": 2464,
+        "lineType": "fixed"
+      }
+    ],
+    "totalCents": 210252
+  },
+  "problems": [],
+  "attempts": 1,
+  "costUsd": 0.0199657
+}

@@ -18,6 +18,8 @@ const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 export const CREDENTIALS_PATH = join(ROOT, "data/seed/portal-credentials.json");
 export const PARSED_DIR = join(ROOT, "data/parsed");
 export const UPLOADS_DIR = join(ROOT, "data/uploads");
+// The committed sample business's bill (scripts/make-sample-bill.ts). Kept out of data/parsed, the audit's input.
+export const SAMPLE_PARSED_DIR = join(ROOT, "data/parsed-samples");
 
 export type DashboardDeps = InboundDeps & {
   identity: Pick<Identity, "get">;
@@ -27,6 +29,7 @@ export type DashboardDeps = InboundDeps & {
   credentialsPath?: string;
   uploadsDir?: string;
   parsedDir?: string;
+  sampleParsedDir?: string;
 };
 
 /** What demo:start always did: the bill email goes to the company inbox, then into the same handler a webhook delivery reaches. */
@@ -74,7 +77,7 @@ const ParseBody = z.strictObject({ customerId: z.string().regex(SAFE_ID), pdfBas
  * Saves an uploaded bill, then parses it. A seed bill is already in data/parsed and costs nothing.
  * Anything else is parsed live into data/uploads/parsed, never data/parsed: the audit reads that folder, and an upload must not join the demo run.
  */
-export async function parseUpload(payload: unknown, deps: Pick<DashboardDeps, "llm" | "uploadsDir" | "parsedDir">): Promise<InboundReply> {
+export async function parseUpload(payload: unknown, deps: Pick<DashboardDeps, "llm" | "uploadsDir" | "parsedDir" | "sampleParsedDir">): Promise<InboundReply> {
   const input = ParseBody.safeParse(payload);
   if (!input.success) return { status: 400, body: { error: "Expected { customerId, pdfBase64 }" } };
   const pdf = Buffer.from(input.data.pdfBase64, "base64");
@@ -86,9 +89,9 @@ export async function parseUpload(payload: unknown, deps: Pick<DashboardDeps, "l
   await mkdir(join(uploadsDir, input.data.customerId), { recursive: true });
   await writeFile(pdfPath, pdf);
 
-  const seedEntry = join(deps.parsedDir ?? PARSED_DIR, `${sha}.${SCHEMA_HASH}.json`);
-  const parsed = existsSync(seedEntry)
-    ? CachedParse.parse(JSON.parse(readFileSync(seedEntry, "utf8")))
+  const committed = [deps.parsedDir ?? PARSED_DIR, deps.sampleParsedDir ?? SAMPLE_PARSED_DIR].map((dir) => join(dir, `${sha}.${SCHEMA_HASH}.json`)).find((entry) => existsSync(entry));
+  const parsed = committed
+    ? CachedParse.parse(JSON.parse(readFileSync(committed, "utf8")))
     : await createParseCache({ dir: join(uploadsDir, "parsed"), llm: deps.llm }).parse(pdf, `upload-${sha.slice(0, 16)}`);
   return { status: 200, body: { pdfPath, status: parsed.status, bill: parsed.bill, problems: parsed.problems } };
 }

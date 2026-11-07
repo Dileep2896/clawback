@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SCHEMA_HASH } from "@bill-fighter/agents/parse-cache";
@@ -85,6 +85,17 @@ describe("parseUpload", () => {
   it("refuses anything that is not a PDF, and an unsafe customer id", async () => {
     expect((await parseUpload({ customerId: "c1", pdfBase64: Buffer.from("hello").toString("base64") }, { uploadsDir: root })).status).toBe(415);
     expect((await parseUpload({ customerId: "../etc", pdfBase64: pdf.toString("base64") }, { uploadsDir: root })).status).toBe(400);
+  });
+
+  it("answers the committed sample business's bill from data/parsed-samples with no model call", async () => {
+    const sample = readFileSync(new URL("../../../data/sample-bills/mission-dumplings-baycurrent-2026-09.pdf", import.meta.url));
+    const llm = {
+      structured: async () => {
+        throw new Error("must not be called");
+      },
+    };
+    const reply = await parseUpload({ customerId: "c2", pdfBase64: sample.toString("base64") }, { uploadsDir: mkdtempSync(join(root, "uploads-")), llm });
+    expect(reply).toMatchObject({ status: 200, body: { status: "parsed", bill: { accountNumber: "BE-8801", providerName: expect.stringContaining("BayCurrent") } } });
   });
 
   it("answers a seed bill from data/parsed with no model call, and saves the PDF under the customer", async () => {
