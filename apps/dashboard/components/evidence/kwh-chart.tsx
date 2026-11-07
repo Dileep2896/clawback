@@ -3,6 +3,8 @@ import { type MeterDetail, monthLabel, monthName, quantity } from "../../lib/evi
 // Leaves headroom over the tallest bar for the swap label.
 const TALLEST_BAR_PCT = 85;
 const MAX_MONTH_LABELS = 18;
+// The stripes tell the series apart without colour.
+const BILLED_FILL = "bg-bar-billed bg-[repeating-linear-gradient(45deg,transparent_0_3px,rgb(255_255_255/0.5)_3px_6px)]";
 
 function Swatch({ className, label }: { className: string; label: string }) {
   return (
@@ -31,7 +33,7 @@ export function KwhChart({ detail }: { detail: MeterDetail }) {
   return (
     <figure>
       <div className="mb-2 flex flex-wrap gap-x-6">
-        <Swatch className="bg-bar-billed" label="Billed kWh" />
+        <Swatch className={BILLED_FILL} label="Billed kWh" />
         <Swatch className="bg-bar-real" label="Real kWh" />
       </div>
       <figcaption className="mb-2">{summary}</figcaption>
@@ -46,7 +48,7 @@ export function KwhChart({ detail }: { detail: MeterDetail }) {
                   </span>
                 </div>
               )}
-              <div data-series="billed" className="min-w-0 flex-1 rounded-t bg-bar-billed" style={{ height: height(bill.billedKwh) }} />
+              <div data-series="billed" className={`min-w-0 flex-1 rounded-t ${BILLED_FILL}`} style={{ height: height(bill.billedKwh) }} />
               <div data-series="real" className="min-w-0 flex-1 rounded-t bg-bar-real" style={{ height: height(bill.intervalKwh) }} />
             </div>
           ))}
