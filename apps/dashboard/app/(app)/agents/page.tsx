@@ -1,5 +1,12 @@
+import { db } from "@bill-fighter/db/client";
+import { runs } from "@bill-fighter/db/schema";
+import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import { Header } from "../../../components/header.tsx";
+import { NoAudit } from "../../../components/no-audit.tsx";
+import { PageHeader } from "../../../components/ui/kit.tsx";
+import { isDemoCustomer } from "../../../lib/accounts.ts";
+import { currentSession } from "../../../lib/session.ts";
 import { Approval } from "../../../components/panels/approval.tsx";
 import { AuditLog } from "../../../components/panels/audit-log.tsx";
 import { Board } from "../../../components/panels/board.tsx";
@@ -13,7 +20,17 @@ export const metadata: Metadata = { title: "Agents" };
 const COLUMN = "grid min-h-0 gap-3 min-[1100px]:grid-rows-[2fr_3fr]";
 
 // The projector view: every word 22 px or larger. Four columns read as the story: the work, the human, the call, the money. One screen wide, stacked when narrow.
-export default function AgentsPage() {
+export default async function AgentsPage() {
+  // A sign-up with no audit gets an honest empty page. The demo customer keeps its empty panels before the stage run starts.
+  const session = await currentSession();
+  if (session && !isDemoCustomer(session.cid) && !(await db.$count(runs, eq(runs.customerId, session.cid)))) {
+    return (
+      <main className="mx-auto w-full max-w-[1200px] px-4 py-10 sm:px-6">
+        <PageHeader title="Watch your agents work" description="Every step the agents take on your audit, live." />
+        <NoAudit />
+      </main>
+    );
+  }
   return (
     <div data-fit-screen className="flex min-h-0 flex-1 flex-col text-[22px] leading-[1.35]">
       <Header />

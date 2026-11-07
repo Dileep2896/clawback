@@ -19,6 +19,25 @@ describe("liveSnapshot", () => {
     });
   });
 
+  it("scoped to a customer: their own latest run only, and their bills even with no run", async () => {
+    await withTestDb("dash_scoped", async (db) => {
+      await seedRun(db, "demo");
+      // A newer run of another customer, as a second sign-up would have.
+      await seedRun(db, "other");
+      await db.update(runs).set({ startedAt: LONG_AGO }).where(eq(runs.id, "demo"));
+      expect((await liveSnapshot(db, "customer-demo")).run?.id).toBe("demo");
+
+      await db.delete(runs).where(eq(runs.id, "other"));
+      await db.insert(locations).values({ id: "loc", customerId: "customer-other", name: "Mission St", address: "2400 Mission St", city: "San Francisco" });
+      await db.insert(accounts).values({ id: "acct", locationId: "loc", provider: "baycurrent", accountNumber: "BE-8801", serviceType: "electric" });
+      await db.insert(bills).values({ id: "upload", accountId: "acct", periodStart: "2026-09-01", periodEnd: "2026-09-30", totalCents: 100 });
+      const fresh = await liveSnapshot(db, "customer-other");
+      expect(fresh.run).toBeNull();
+      expect(fresh.findings).toEqual([]);
+      expect(fresh.bills.map((b) => b.id)).toEqual(["upload"]);
+    });
+  });
+
   it("shows the latest run and keeps an older run's rows out", async () => {
     await withTestDb("dash_latest", async (db) => {
       await seedRun(db, "old");

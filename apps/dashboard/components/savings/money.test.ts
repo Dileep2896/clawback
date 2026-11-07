@@ -7,6 +7,7 @@ import { MoneyView } from "./money.tsx";
 it("shows the invoice and card payment states while the ledger is still empty", () => {
   const action = (id: string, kind: string, payloadJson: unknown = null) => ({ id, kind, status: "proposed", findingId: null, payloadJson });
   const snapshot = {
+    run: { id: "r1" },
     ledger: [],
     findings: [],
     findingSites: {},
@@ -18,4 +19,9 @@ it("shows the invoice and card payment states while the ledger is still empty", 
   expect(html).toContain("Not created yet: approved, agents at work.");
   expect(html).toContain('data-card-payment="pay"');
   expect(html).toContain("Pay the gas bill");
+});
+
+it("shows no audit yet, not an empty ledger, before the customer has a run", () => {
+  const html = renderToStaticMarkup(createElement(MoneyView, { snapshot: { run: null, ledger: [], actions: [] } as unknown as Snapshot }));
+  expect(html).toContain("No audit yet");
 });

@@ -37,6 +37,18 @@ describe("a replayed run", () => {
   });
 });
 
+describe("approveRun for a signed-in customer", () => {
+  it("refuses another customer's run as if it did not exist, and releases their own", async () => {
+    await withTestDb("approve_scoped", async (db) => {
+      await seedBundle(db);
+      await expect(approveRun(db, "r1", "someone-else")).rejects.toMatchObject({ status: 404 });
+      expect((await db.select().from(approvals))[0]?.status).toBe("pending");
+      await approveRun(db, "r1", "customer-r1");
+      expect((await db.select().from(approvals))[0]?.status).toBe("approved");
+    });
+  });
+});
+
 describe("approveRun", () => {
   it("releases the whole bundle and records the customer's contact", async () => {
     await withTestDb("panels_action_one", async (db) => {

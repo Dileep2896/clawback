@@ -22,6 +22,8 @@ data/seed/
 data/letters/
 # Written by each run, for diagnosing a failed one.
 data/run-events/
+# Bills uploaded at sign-up, and their parses. demo:reset deletes the sign-up customers' folders.
+data/uploads/
 # PG&E's copyrighted sample, downloaded by pnpm parse:sample. Never committed, nor is its parsed result.
 data/samples/
 # Rejected or half-written captures, which can hold the secrets that got them rejected.

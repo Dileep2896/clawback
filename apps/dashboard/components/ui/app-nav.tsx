@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { logOutAction } from "../../app/(auth)/actions.ts";
 import { Wordmark } from "./kit.tsx";
 
 export const NAV = [
@@ -64,11 +65,16 @@ export function AppNav() {
           })}
         </ul>
       </nav>
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-x-2">
         <span data-testid="demo-data" className="rounded-full border border-line px-3 py-0.5 font-semibold whitespace-nowrap text-faded">
           Demo data
         </span>
         <ThemeToggle />
+        <form action={logOutAction}>
+          <button type="submit" data-testid="log-out" className="min-h-11 cursor-pointer rounded-control px-3 font-semibold whitespace-nowrap hover:bg-paper">
+            Log out
+          </button>
+        </form>
       </div>
     </header>
   );

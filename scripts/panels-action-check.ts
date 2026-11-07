@@ -2,6 +2,7 @@
 // pnpm dev:dashboard must be running. Pass a folder to keep screenshots.
 // pnpm exec tsx --env-file-if-exists=.env scripts/panels-action-check.ts
 import assert from "node:assert/strict";
+import { signedInContext } from "./dashboard-session.ts";
 import { randomInt } from "node:crypto";
 import { db } from "@bill-fighter/db/client";
 import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
@@ -188,7 +189,7 @@ const speechStub = (mode: string) => `
 `;
 
 async function pageWith(browser: Browser, speech: string) {
-  const page = await (await browser.newContext({ viewport: VIEWPORT })).newPage();
+  const page = await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage();
   await page.addInitScript({ content: speechStub(speech) });
   return page;
 }
@@ -284,7 +285,7 @@ async function checkSpeechFailures(browser: Browser) {
 }
 
 async function checkNaive(browser: Browser) {
-  const page = await (await browser.newContext({ viewport: VIEWPORT })).newPage();
+  const page = await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage();
   await page.route("**/api/live", async (route) => {
     const body = (await (await route.fetch()).json()) as { run: object };
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...body, run: { ...body.run, platform: "naive" } }) });
@@ -312,7 +313,7 @@ assertNotSharedDb();
 await insertSampleRun(db);
 const browser = await chromium.launch();
 try {
-  const fresh = async () => (await browser.newContext({ viewport: VIEWPORT })).newPage();
+  const fresh = async () => (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage();
   await insertAndRequireSampleRun(await fresh());
   await checkRoutes(await fresh());
   await checkApproveButton(await fresh());

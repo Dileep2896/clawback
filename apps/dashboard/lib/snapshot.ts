@@ -68,10 +68,43 @@ const NO_RUN: LiveData = {
   scheduledChecks: [],
 };
 
-/** Everything on the screen, for the most recently started run. Every list has a fixed order, so unchanged data serializes the same. */
-export async function liveSnapshot(db: Db): Promise<LiveData> {
-  const [run] = await db.select().from(runs).orderBy(desc(runs.startedAt), desc(runs.id)).limit(1);
-  if (!run) return NO_RUN;
+/** One customer's bills with their account and site, ordered by site then account. Also the Bills page for a customer with no run yet. */
+export function customerBills(db: Db, customerId: string): Promise<BillRow[]> {
+  return db
+    .select({
+      id: bills.id,
+      periodStart: bills.periodStart,
+      periodEnd: bills.periodEnd,
+      totalCents: bills.totalCents,
+      parseConfidence: bills.parseConfidence,
+      accountId: accounts.id,
+      provider: accounts.provider,
+      accountNumber: accounts.accountNumber,
+      serviceType: accounts.serviceType,
+      locationId: locations.id,
+      site: locations.name,
+      city: locations.city,
+    })
+    .from(bills)
+    .innerJoin(accounts, eq(bills.accountId, accounts.id))
+    .innerJoin(locations, eq(accounts.locationId, locations.id))
+    .where(eq(locations.customerId, customerId))
+    .orderBy(asc(locations.name), asc(locations.id), asc(accounts.id), desc(bills.periodStart), asc(bills.id));
+}
+
+/**
+ * Everything on the screen, for the customer's most recently started run. Every list has a fixed order, so unchanged data serializes the same.
+ * /api/live passes the signed-in customer, so a new sign-up sees no audit rather than the demo run. Without one (tests), the latest run of all.
+ * A customer with no run still gets their bills, which a sign-up can upload before any audit.
+ */
+export async function liveSnapshot(db: Db, customerId?: string): Promise<LiveData> {
+  const [run] = await db
+    .select()
+    .from(runs)
+    .where(customerId === undefined ? undefined : eq(runs.customerId, customerId))
+    .orderBy(desc(runs.startedAt), desc(runs.id))
+    .limit(1);
+  if (!run) return customerId === undefined ? NO_RUN : { ...NO_RUN, bills: await customerBills(db, customerId) };
 
   const [customerRows, approvalRows, customerFindings] = await Promise.all([
     db.select().from(customers).where(eq(customers.id, run.customerId)),
@@ -94,7 +127,7 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
 
   const siteAccountIds = customerFindings.flatMap((f) => f.accountId ?? []);
 
-  const [sites, humanActions, cards, runCalls, ledgerRows, customerBills, sms, audit, auditTotal, checks] = await Promise.all([
+  const [sites, humanActions, cards, runCalls, ledgerRows, billRows, sms, audit, auditTotal, checks] = await Promise.all([
     db
       .select({ accountId: accounts.id, name: locations.name })
       .from(accounts)
@@ -106,26 +139,7 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
     db.select().from(boardCards).where(eq(boardCards.runId, run.id)).orderBy(asc(boardCards.updatedAt), asc(boardCards.id)),
     db.select().from(calls).where(inArray(calls.actionId, runActions.map((a) => a.id))).orderBy(asc(calls.startedAt), asc(calls.id)),
     db.select().from(ledger).where(eq(ledger.customerId, run.customerId)).orderBy(asc(ledger.createdAt), asc(ledger.id)),
-    db
-      .select({
-        id: bills.id,
-        periodStart: bills.periodStart,
-        periodEnd: bills.periodEnd,
-        totalCents: bills.totalCents,
-        parseConfidence: bills.parseConfidence,
-        accountId: accounts.id,
-        provider: accounts.provider,
-        accountNumber: accounts.accountNumber,
-        serviceType: accounts.serviceType,
-        locationId: locations.id,
-        site: locations.name,
-        city: locations.city,
-      })
-      .from(bills)
-      .innerJoin(accounts, eq(bills.accountId, accounts.id))
-      .innerJoin(locations, eq(accounts.locationId, locations.id))
-      .where(eq(locations.customerId, run.customerId))
-      .orderBy(asc(locations.name), asc(locations.id), asc(accounts.id), desc(bills.periodStart), asc(bills.id)),
+    customerBills(db, run.customerId),
     // shortcut: sms_messages has no run or customer id, so a run's thread is found by time. Add a run_id if runs ever overlap.
     db.select().from(smsMessages).where(gte(smsMessages.createdAt, run.startedAt)).orderBy(asc(smsMessages.createdAt), asc(smsMessages.id)),
     db
@@ -149,7 +163,7 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
     actions: runActions,
     calls: runCalls,
     ledger: ledgerRows,
-    bills: customerBills,
+    bills: billRows,
     sms,
     auditLog: audit,
     auditTotal,
