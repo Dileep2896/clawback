@@ -142,7 +142,7 @@ async function main() {
     });
     await waitUntilAnswers(process.env.NAIVE_TUNNEL_CHECK_URL ?? url);
     if (closing) return;
-    writeFileSync(ENV_FILE, `NAIVE_MCP_PUBLIC_URL=${url}\n`);
+    writeFileSync(ENV_FILE, `export NAIVE_MCP_PUBLIC_URL=${url}\n`); // export: a sourced file must reach processes launched after it
     console.info(`Tunnel up: ${url} -> http://127.0.0.1:${port}\nNAIVE_MCP_PUBLIC_URL written to .env.tunnel`);
 
     if (command.length === 0) {

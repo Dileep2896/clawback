@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
@@ -112,7 +112,10 @@ describe("naive:tunnel lifecycle", () => {
   it("holds without a command, writes .env.tunnel, and cleans up on SIGINT", async () => {
     const run = start([]);
     await until(() => existsSync(join(dir, ".env.tunnel")));
-    expect(readFileSync(join(dir, ".env.tunnel"), "utf8")).toBe(`NAIVE_MCP_PUBLIC_URL=${URL_}\n`);
+    expect(readFileSync(join(dir, ".env.tunnel"), "utf8")).toBe(`export NAIVE_MCP_PUBLIC_URL=${URL_}\n`);
+    // a process launched separately after `source .env.tunnel` must see the URL
+    const seen = execFileSync("sh", ["-c", '. ./.env.tunnel && sh -c \'printf %s "$NAIVE_MCP_PUBLIC_URL"\''], { cwd: dir, env: {} });
+    expect(seen.toString()).toBe(URL_);
     run.proc.kill("SIGINT");
     expect(await finished(run)).toBe(130);
   });
