@@ -5,6 +5,7 @@ import {
   actions,
   approvals,
   auditLog,
+  bills,
   boardCards,
   calls,
   customers,
@@ -33,12 +34,17 @@ export type LiveData = {
   actions: Row<typeof actions>[];
   calls: Row<typeof calls>[];
   ledger: Row<typeof ledger>[];
+  /** The customer's bills with their account and site. No parsed JSON: it is large and the pages show only these columns. */
+  bills: BillRow[];
   sms: Row<typeof smsMessages>[];
   // No input or output: those columns can hold tool data, so they never reach the browser.
   auditLog: Pick<Row<typeof auditLog>, "id" | "agent" | "tool" | "costUsd" | "createdAt">[];
   auditTotal: number;
   scheduledChecks: Row<typeof scheduledChecks>[];
 };
+
+type BillRow = Pick<Row<typeof bills>, "id" | "periodStart" | "periodEnd" | "totalCents" | "parseConfidence"> &
+  Pick<Row<typeof accounts>, "provider" | "accountNumber" | "serviceType"> & { accountId: string; site: string; city: string };
 
 /** What the browser receives: JSON turns every Date into a string. */
 type Wire<T> = T extends Date ? string : T extends (infer U)[] ? Wire<U>[] : T extends object ? { [K in keyof T]: Wire<T[K]> } : T;
@@ -55,6 +61,7 @@ const NO_RUN: LiveData = {
   actions: [],
   calls: [],
   ledger: [],
+  bills: [],
   sms: [],
   auditLog: [],
   auditTotal: 0,
@@ -87,7 +94,7 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
 
   const siteAccountIds = customerFindings.flatMap((f) => f.accountId ?? []);
 
-  const [sites, humanActions, cards, runCalls, ledgerRows, sms, audit, auditTotal, checks] = await Promise.all([
+  const [sites, humanActions, cards, runCalls, ledgerRows, customerBills, sms, audit, auditTotal, checks] = await Promise.all([
     db
       .select({ accountId: accounts.id, name: locations.name })
       .from(accounts)
@@ -99,6 +106,25 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
     db.select().from(boardCards).where(eq(boardCards.runId, run.id)).orderBy(asc(boardCards.updatedAt), asc(boardCards.id)),
     db.select().from(calls).where(inArray(calls.actionId, runActions.map((a) => a.id))).orderBy(asc(calls.startedAt), asc(calls.id)),
     db.select().from(ledger).where(eq(ledger.customerId, run.customerId)).orderBy(asc(ledger.createdAt), asc(ledger.id)),
+    db
+      .select({
+        id: bills.id,
+        periodStart: bills.periodStart,
+        periodEnd: bills.periodEnd,
+        totalCents: bills.totalCents,
+        parseConfidence: bills.parseConfidence,
+        accountId: accounts.id,
+        provider: accounts.provider,
+        accountNumber: accounts.accountNumber,
+        serviceType: accounts.serviceType,
+        site: locations.name,
+        city: locations.city,
+      })
+      .from(bills)
+      .innerJoin(accounts, eq(bills.accountId, accounts.id))
+      .innerJoin(locations, eq(accounts.locationId, locations.id))
+      .where(eq(locations.customerId, run.customerId))
+      .orderBy(asc(locations.name), asc(accounts.id), desc(bills.periodStart), asc(bills.id)),
     // shortcut: sms_messages has no run or customer id, so a run's thread is found by time. Add a run_id if runs ever overlap.
     db.select().from(smsMessages).where(gte(smsMessages.createdAt, run.startedAt)).orderBy(asc(smsMessages.createdAt), asc(smsMessages.id)),
     db
@@ -122,6 +148,7 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
     actions: runActions,
     calls: runCalls,
     ledger: ledgerRows,
+    bills: customerBills,
     sms,
     auditLog: audit,
     auditTotal,

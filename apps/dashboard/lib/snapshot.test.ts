@@ -1,5 +1,5 @@
 import { decideApproval } from "@bill-fighter/db/approvals";
-import { accounts, actions, approvals, auditLog, boardCards, findings, locations, runs, scheduledChecks } from "@bill-fighter/db/schema";
+import { accounts, actions, approvals, auditLog, bills, boardCards, findings, locations, runs, scheduledChecks } from "@bill-fighter/db/schema";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -138,6 +138,30 @@ describe("liveSnapshot", () => {
       ]);
       await db.insert(approvals).values({ ...bundle("r1"), actionIds: ["invoice"] });
       expect((await liveSnapshot(db)).actions.map((a) => a.id)).toEqual(["invoice", "on-finding"]);
+    });
+  });
+
+  it("lists the customer's bills with their site, and no other customer's", async () => {
+    await withTestDb("dash_bills", async (db) => {
+      await seedRun(db, "old");
+      await db.update(runs).set({ startedAt: LONG_AGO }).where(eq(runs.id, "old"));
+      const { customerId } = await seedRun(db, "new");
+      await db.insert(locations).values([
+        { id: "mine", customerId, name: "Fremont #1", address: "1 Main St", city: "Fremont" },
+        { id: "theirs", customerId: "customer-old", name: "Elsewhere", address: "2 Main St", city: "Oakland" },
+      ]);
+      await db.insert(accounts).values([
+        { id: "mine-electric", locationId: "mine", provider: "baycurrent", accountNumber: "1", serviceType: "electric" },
+        { id: "theirs-electric", locationId: "theirs", provider: "baycurrent", accountNumber: "2", serviceType: "electric" },
+      ]);
+      const bill = { periodStart: "2026-01-01", periodEnd: "2026-01-31", totalCents: 12345, parsedJson: { raw: "not-sent-to-browser" } };
+      await db.insert(bills).values([
+        { ...bill, id: "mine-jan", accountId: "mine-electric" },
+        { ...bill, id: "theirs-jan", accountId: "theirs-electric" },
+      ]);
+      const snapshot = await liveSnapshot(db);
+      expect(snapshot.bills.map((b) => [b.id, b.site, b.totalCents])).toEqual([["mine-jan", "Fremont #1", 12345]]);
+      expect(JSON.stringify(snapshot)).not.toContain("not-sent-to-browser");
     });
   });
 });
