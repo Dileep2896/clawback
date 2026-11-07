@@ -9,28 +9,57 @@ export async function findLineAssistant(vapi: Vapi): Promise<Json | undefined> {
   return assistants.find((a) => a.name === ASSISTANT_NAME);
 }
 
-// Creates or updates the line's assistant, attaches it to the number, then proves it from a read-back.
+function lineProblems(config: Json, assistant: Json, phone: Json): string[] {
+  return [...subsetDiff(config, assistant).map((path) => `read-back differs at ${path}`), ...forwardingProblems(assistant, phone)];
+}
+
+// shortcut: Vapi's schema types assistantId as a string, so null is unproven until a real run, hence the read-back and the loud failure.
+// Fallback, squad and workflow routes on the number are ours to report, not to clear, so they stay and the error names them.
+async function detach(vapi: Vapi, phoneId: string): Promise<string> {
+  try {
+    await vapi("PATCH", `/phone-number/${phoneId}`, { assistantId: null });
+    const phone = (await vapi("GET", `/phone-number/${phoneId}`)) as Json;
+    if (!phone.assistantId) return "The assistant was detached from the number. Run provision again once this is fixed.";
+    return `STILL ATTACHED: ${LINE_NUMBER} still points at ${String(phone.assistantId)}. Detach it by hand.`;
+  } catch (err) {
+    return `STILL ATTACHED: detaching from ${LINE_NUMBER} failed (${String(err)}). Detach it by hand.`;
+  }
+}
+
+// Creates or updates the line's assistant, proves it from a read-back, and only then attaches it to the number.
+// Any failure with the assistant on the number detaches it, so a bad config is never left callable.
 export async function provision(vapi: Vapi): Promise<{ assistantId: string; phoneId: string }> {
   const config = lineAssistant();
   const numbers = (await vapi("GET", "/phone-number")) as Json[];
   const number = numbers.find((n) => n.number === LINE_NUMBER);
   if (!number) throw new Error(`${LINE_NUMBER} is not on this Vapi account`);
+  const phoneId = String(number.id);
 
   const existing = await findLineAssistant(vapi);
-  const saved = (await (existing
-    ? vapi("PATCH", `/assistant/${String(existing.id)}`, config)
-    : vapi("POST", "/assistant", config))) as Json;
-  const assistantId = String(saved.id);
-  const phoneId = String(number.id);
-  await vapi("PATCH", `/phone-number/${phoneId}`, { assistantId });
+  // A re-run updates an assistant that may already be answering the number.
+  let attached = existing !== undefined && number.assistantId === existing.id;
+  try {
+    const saved = (await (existing
+      ? vapi("PATCH", `/assistant/${String(existing.id)}`, config)
+      : vapi("POST", "/assistant", config))) as Json;
+    const assistantId = String(saved.id);
 
-  const assistant = (await vapi("GET", `/assistant/${assistantId}`)) as Json;
-  const phone = (await vapi("GET", `/phone-number/${phoneId}`)) as Json;
-  const problems = [
-    ...subsetDiff(config, assistant).map((path) => `read-back differs at ${path}`),
-    ...forwardingProblems(assistant, phone),
-    ...(phone.assistantId === assistantId ? [] : ["the number is not attached to the assistant"]),
-  ];
-  if (problems.length) throw new Error(`Line is not as designed:\n${problems.join("\n")}`);
-  return { assistantId, phoneId };
+    const assistant = (await vapi("GET", `/assistant/${assistantId}`)) as Json;
+    const before = lineProblems(config, assistant, number);
+    if (before.length) throw new Error(`Line is not as designed:\n${before.join("\n")}`);
+
+    attached = true;
+    await vapi("PATCH", `/phone-number/${phoneId}`, { assistantId });
+
+    const phone = (await vapi("GET", `/phone-number/${phoneId}`)) as Json;
+    const after = [
+      ...lineProblems(config, assistant, phone),
+      ...(phone.assistantId === assistantId ? [] : ["the number is not attached to the assistant"]),
+    ];
+    if (after.length) throw new Error(`Line is not as designed:\n${after.join("\n")}`);
+    return { assistantId, phoneId };
+  } catch (err) {
+    if (!attached) throw err;
+    throw new Error(`${err instanceof Error ? err.message : String(err)}\n${await detach(vapi, phoneId)}`, { cause: err });
+  }
 }
