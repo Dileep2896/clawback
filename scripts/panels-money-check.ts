@@ -90,7 +90,7 @@ const sumOf = (rows: LedgerRow[], kind: string) => rows.filter((row) => row.kind
 
 async function checkRealFigures(page: Page, costUsd: number) {
   assert.equal((await fetchLive(page)).run?.costUsd, costUsd, "the dashboard is not reading the database this script wrote");
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await page.getByTestId("ledger-refund").waitFor({ timeout: 5000 });
 
   assert.equal(await textOf(page, "ledger-refund"), "$12,606.06");
@@ -199,7 +199,7 @@ async function checkNoFeeRowYet(page: Page) {
   const live = (await fetchLive(page)) as Live & Record<string, unknown>;
   live.ledger = live.ledger.filter((row) => row.kind !== "fee");
   await page.route("**/api/live", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(live) }));
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await see(page, "ledger-fee", "Not recorded yet");
   await see(page, "ledger-keeps", "Not recorded yet");
   await checkFits(page, "no fee row");
@@ -213,7 +213,7 @@ async function checkEmpty(page: Page) {
       body: JSON.stringify({ run: null, customer: null, humanActions: 0, approval: null, boardCards: [], findings: [], findingSites: {}, actions: [], calls: [], ledger: [], sms: [], auditLog: [], auditTotal: 0 }),
     }),
   );
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await page.getByText("No ledger rows yet").waitFor({ timeout: 5000 });
   await page.getByText("No tool calls yet").waitFor({ timeout: 5000 });
   await checkFits(page, "no run");
@@ -222,7 +222,7 @@ async function checkEmpty(page: Page) {
 async function checkSample(page: Page) {
   await clearRuns();
   await insertSampleRun(db);
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await see(page, "ledger-refund", "$12,600.00");
   await see(page, "ledger-savings", "$17,000.00");
   await see(page, "ledger-savings-confirmed", "$5,040.00");

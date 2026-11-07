@@ -8,7 +8,7 @@ import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
 import { type Browser, chromium, type Page } from "playwright";
 import { assertNotSharedDb, insertSampleRun, SAMPLE_RUN_ID, updateSampleRun } from "../apps/dashboard/lib/sample-data.ts";
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.DASHBOARD_URL ?? "http://localhost:3000";
 const VIEWPORT = { width: 1920, height: 1080 };
 const MIN_FONT_PX = 22;
 const screenshotDir = process.argv[2];
@@ -80,7 +80,7 @@ async function checkFits(page: Page, where: string) {
 }
 
 async function checkApproveButton(page: Page) {
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await page.getByTestId("approve").waitFor({ timeout: 10000 });
   await page.evaluate("window.notReloaded = true");
   await checkFits(page, "pending");
@@ -113,7 +113,7 @@ async function checkApproveButton(page: Page) {
 
 async function checkYes(page: Page) {
   await insertAndRequireSampleRun(page);
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   const reply = page.getByTestId("sms-reply");
   await reply.waitFor({ timeout: 10000 });
 
@@ -143,7 +143,7 @@ async function checkYes(page: Page) {
 
 async function checkKeyboard(page: Page) {
   await insertAndRequireSampleRun(page);
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await page.getByTestId("approve").waitFor({ timeout: 10000 });
   let focused: string | null = null;
   for (let i = 0; i < 60 && focused !== "approve"; i++) {
@@ -198,7 +198,7 @@ async function checkCallStates(browser: Browser) {
   await insertAndRequireSampleRun(page);
   const state = { calls: [] as unknown[] };
   await fakeCalls(page, state);
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   // Not "No calls yet": that also shows before the first snapshot, and rows in the first snapshot count as already said.
   await see(page, "customer", "Golden Gate Noodle Co.");
 
@@ -272,7 +272,7 @@ async function checkSpeechFailures(browser: Browser) {
     const page = await pageWith(browser, mode);
     const state = { calls: [] as unknown[] };
     await fakeCalls(page, state);
-    await page.goto(BASE);
+    await page.goto(`${BASE}/agents`);
     await see(page, "customer", "Golden Gate Noodle Co.");
     state.calls = [call("sim-1", "sim", [DISCLOSURE, MENU])];
     await page.locator('[data-call-row="disclosure"]').waitFor({ timeout: 5000 });
@@ -289,7 +289,7 @@ async function checkNaive(browser: Browser) {
     const body = (await (await route.fetch()).json()) as { run: object };
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...body, run: { ...body.run, platform: "naive" } }) });
   });
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await see(page, "phone-naive", "On naïve the request goes by email");
   assert.equal(await page.getByTestId("sms-reply").count(), 0, "no reply box on naïve");
   assert.equal(await page.getByTestId("approve").count(), 1, "Approve is there in both modes");

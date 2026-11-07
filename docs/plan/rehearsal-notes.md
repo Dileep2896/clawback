@@ -13,6 +13,7 @@ pnpm dev:dashboard
 pnpm demo:replay --speed N
 ```
 
+- The stage screen is `http://localhost:3000/agents` ("Watch your agents work"). `/` is now the landing page.
 - `--speed` is 1 to 8, default 1. It scales every gap by the same factor. Nothing is cut.
 - Replay clears the run tables first. It refuses a non-local database and a second replay.
 - If a real run is marked `running`, replay refuses. Restart `pnpm dev:webhooks`, then add `--force`, or the live agent writes into the replay.
