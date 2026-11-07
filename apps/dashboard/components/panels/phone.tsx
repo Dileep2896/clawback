@@ -13,6 +13,12 @@ export function Phone() {
   const [failed, setFailed] = useState(false);
   const sms = snapshot?.sms ?? [];
   const run = snapshot?.run;
+  // During render, not in an effect, so a YES typed for one run can never be sent for the next.
+  const [draftRun, setDraftRun] = useState(run?.id);
+  if (draftRun !== run?.id) {
+    setDraftRun(run?.id);
+    setDraft("");
+  }
   const contact = snapshot?.customer?.contactName ?? "Owner";
   const local = run?.platform === "local";
   const canReply = local && sms.some((message) => message.direction === "outbound");
