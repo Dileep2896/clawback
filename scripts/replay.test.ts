@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -454,6 +455,13 @@ describe("capture", () => {
       expect(saved).toBe(`${target}.failed`);
       expect(existsSync(target)).toBe(false);
     }));
+
+  it("keeps failed and half-written captures out of git", () => {
+    const paths = ["data/replay/run.jsonl.failed", "data/replay/run.jsonl.failed.tmp", "data/replay/run.jsonl.tmp"];
+    // check-ignore prints only the ignored paths, and exits non-zero if any path is not ignored.
+    const ignored = execFileSync("git", ["check-ignore", ...paths], { cwd: new URL("..", import.meta.url), encoding: "utf8" });
+    expect(ignored.trim().split("\n")).toEqual(paths);
+  });
 
   it("saves what it has when no run finishes in time", () =>
     withTestDb("replay_timeout", async (db) => {
