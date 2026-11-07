@@ -178,9 +178,11 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
   let watch: ReturnType<typeof idleWatch> | undefined;
   const inFlight = new Set<Promise<unknown>>();
   let ended = false;
+  let finalBudget: Budget | undefined;
 
   try {
     const { gate, budget, query = sdkQuery as Query, login = checkLogin, idleMs = Number(process.env.MODEL_IDLE_MS) || MODEL_IDLE_MS } = await deps();
+    finalBudget = budget;
     const start = await budget.status(spec.runId);
     const remainingUsd = start.capUsd - start.totalUsd;
     if (remainingUsd <= 0) {
@@ -287,11 +289,18 @@ async function* run(spec: RunSpec, deps: () => Promise<Deps>): AsyncGenerator<Ru
     ended = true;
     watch?.stop();
     abortController.abort();
+    // The abort does not reach a handler in this process, so its rows are still coming. The caller may exit once it sees the result,
+    // or once it fails on an event, which is why this is in the finally.
+    // No limit of its own: portal steps, Stripe, model turns and live calls each have one.
+    await Promise.all(inFlight);
   }
 
-  // The abort does not reach a handler in this process, so its rows are still coming. The caller may exit once it sees the result.
-  // No limit of its own: portal steps, Stripe, model turns and live calls each have one.
-  await Promise.all(inFlight);
+  // A tool's own cost, such as a call's, reaches Budget without passing the check on the SDK's result.
+  try {
+    if (!over && finalBudget) over = (await finalBudget.status(spec.runId)).over;
+  } catch (error) {
+    thrown.push(error);
+  }
   yield* pending.splice(0);
   const { finished, reason } = runOutcome(messages, allowedInit, thrown);
   if (over) yield { type: "text", agent: main, text: "Stopped: estimated cost reached RUN_BUDGET_USD." };

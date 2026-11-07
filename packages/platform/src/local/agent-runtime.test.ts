@@ -52,11 +52,13 @@ function setup(messages: unknown[], { capUsd = 5, totalUsd = 0, thenThrow, gate 
   const added: number[] = [];
   const captured: { options?: Options } = {};
   const budget: Budget = {
-    status: async () => ({ totalUsd, capUsd, over: totalUsd >= capUsd }),
-    add: async (_runId, costUsd) => {
-      added.push(costUsd);
+    status: async () => {
       const total = totalUsd + added.reduce((sum, cost) => sum + cost, 0);
       return { totalUsd: total, capUsd, over: total >= capUsd };
+    },
+    add: async (runId, costUsd) => {
+      added.push(costUsd);
+      return budget.status(runId);
     },
   };
   const query: Query = async function* ({ options }) {
@@ -66,7 +68,7 @@ function setup(messages: unknown[], { capUsd = 5, totalUsd = 0, thenThrow, gate 
     if (thenThrow !== undefined) throw new Error(thenThrow);
   };
   const runtime = createAgentRuntime(async () => ({ gate: gate as ApprovalGate, budget, query, login }));
-  return { added, captured, runtime };
+  return { added, budget, captured, runtime };
 }
 
 async function collect(events: AsyncIterable<RunEvent>) {
@@ -169,6 +171,64 @@ describe("a tool still running when the run ends", () => {
       if (event.type === "result") order.push(`result ${event.status}`);
     }
     expect(order).toEqual(["row written", "result over_budget"]);
+  });
+
+  it("still finishes when the caller fails on an event, so the caller cannot exit ahead of its rows", async () => {
+    const order: string[] = [];
+    let started: () => void = () => {};
+    const inTool = new Promise<void>((resolve) => (started = resolve));
+    const tool: ToolDef = {
+      ...def("send_email"),
+      handler: async () => {
+        started();
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        order.push("row written");
+        return "ok";
+      },
+    };
+    const said = { type: "assistant", parent_tool_use_id: null, message: { content: [{ type: "text", text: "hi" }] } };
+    const { runtime } = setup([EMAIL_INIT, said, result(0)], {
+      during: async (options) => {
+        void callHandler(options, "send_email");
+        await inTool;
+      },
+    });
+    await expect(
+      (async () => {
+        for await (const event of runtime.run(specWith(tool))) {
+          if (event.type === "text") throw new Error("the audit write failed");
+        }
+      })(),
+    ).rejects.toThrow("the audit write failed");
+    order.push("caller failed");
+    expect(order).toEqual(["row written", "caller failed"]);
+  });
+
+  it("counts a cost the tool adds after the last result, and reports over_budget", async () => {
+    let started: () => void = () => {};
+    const inTool = new Promise<void>((resolve) => (started = resolve));
+    const tool: ToolDef = {
+      ...def("send_email"),
+      handler: async () => {
+        started();
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        await budget.add(SPEC.runId, 5.6);
+        return "ok";
+      },
+    };
+    const { budget, runtime } = setup([EMAIL_INIT, result(0)], {
+      during: async (options) => {
+        void callHandler(options, "send_email");
+        await inTool;
+      },
+    });
+    expect((await collect(runtime.run(specWith(tool)))).last.status).toBe("over_budget");
+  });
+
+  it("is an error, not a success, when the final budget check fails", async () => {
+    const { budget, runtime } = setup([EMAIL_INIT, result(0)]);
+    vi.spyOn(budget, "status").mockResolvedValueOnce({ totalUsd: 0, capUsd: 5, over: false }).mockRejectedValueOnce(new Error("the database is gone"));
+    expect((await collect(runtime.run(specWith(def("send_email"))))).last).toMatchObject({ status: "error", reason: "the database is gone" });
   });
 
   it("never starts a gated tool whose approval check was still going when the run ended", async () => {
