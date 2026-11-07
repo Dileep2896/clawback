@@ -14,5 +14,12 @@ export function feeCents({ refundCents, annualSavingsCents, sharePct }: { refund
   return Math.round(((refundCents + annualSavingsCents) * sharePct) / 100);
 }
 
-export const customerKeepsCents = ({ refundCents, annualSavingsCents, feeCents: fee }: { refundCents: number; annualSavingsCents: number; feeCents: number }) =>
+/** Due now is the share of won amounts, and the rest is what remains of the recorded fee, so the parts always add up to it to the cent. */
+export function splitFee({ totalFeeCents, wonCents, sharePct }: { totalFeeCents: number; wonCents: number; sharePct: number }) {
+  const dueNowCents = feeCents({ refundCents: wonCents, annualSavingsCents: 0, sharePct });
+  if (dueNowCents > totalFeeCents) throw new Error(`Fee of ${totalFeeCents} cents is less than the ${dueNowCents} cents due on won findings, so the fee row is out of date`);
+  return { dueNowCents, dueWhenGrantedCents: totalFeeCents - dueNowCents };
+}
+
+export const customerKeepsCents =({ refundCents, annualSavingsCents, feeCents: fee }: { refundCents: number; annualSavingsCents: number; feeCents: number }) =>
   refundCents + annualSavingsCents - fee;
