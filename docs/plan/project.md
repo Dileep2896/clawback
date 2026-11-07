@@ -370,7 +370,7 @@ NAIVE_CARD_CAP_USD=5
 - 1:20 Findings: the Fremont meter doubled after a swap ($12,600 back under PG&E Rule 17.1), wrong rate plan, seven dead phone lines, three expired promos.
 - 2:00 Linda gets one text. She replies YES. "Human actions: 1".
 - 2:10 The AI calls the provider on speaker: disclosure, menu, cancels the lines, gets a ticket number.
-- 3:00 Ledger: about $12,600 back, about $20,000 a year saved, our 30% fee, invoice sent; audit log scrolls; run cost shown.
+- 3:00 Ledger: about $12,600 back, about $20,000 a year saved, our 30% fee, invoice created in Stripe test mode; audit log scrolls; run cost shown.
 - 3:30 "That ran on its own. Next: real restaurants in the Bay Area."
 
 ---

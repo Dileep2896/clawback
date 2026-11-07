@@ -20,6 +20,9 @@ Picked up 2026-11-06
 - For panels-action: a sim fallback from live is a system transcript row of kind fallback, right after the disclosure. Show it as the on-screen label.
 - For run-trigger: an open browser session's proxy keeps the process alive for 10 idle minutes, so run-local ends with process.exit. demo-start must print a seed account number in the inbound email, because Intake matches the customer by account number.
 - For monitor-check: parse_bill never calls the model, so a new next-month bill must be in the parse cache first, or it fails visibly.
+- agents-e2e result: 2 green runs on final prompts, 109 to 126 s to approval against the 120 s mark, about $0.30 estimated per run, bundle of 19 actions. Approved run not exercised yet.
+- For demo-reset: a killed parked run stays running with a pending approval and freezes run_audit for that customer; reset must clear this.
+- For run-resilience: SIGTERM closes browsers but Node stays up on the proxy and may hold port 3002. A parked run shows $0 cost until decided, so the header reads $0 during the approval wait; decide at rehearsal.
 - For finance-invoice: split the invoice by finding status. Fee on won findings is due now; fee on filed findings (the refund and filed savings) is due when granted. Real demo figures: total fee about $10,249.61 at 30%, customer keeps about $23,915.77. Only a fee over the won savings of $8,280 is due now, about $2,484.
 - For finance-invoice: request_approval creates one invoice action, id invoice-<runId>, finding_id null, no amount in the payload; the fee is computed in finance-invoice. card_pay has no action yet; the naive lanes own that.
 - goldengatenoodle.example is in ALLOWED_EMAIL_DOMAINS in .env and .env.example (human, 2026-11-06: "go ahead with the email"). Worktree .env files copied earlier need the same line for agents-e2e.
