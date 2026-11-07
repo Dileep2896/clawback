@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { runAudit } from "@bill-fighter/core/rules/index";
 import type { Db } from "@bill-fighter/db/client";
 import { accounts, actions, billLines, bills, customers, findings, locations, usageIntervals } from "@bill-fighter/db/schema";
@@ -97,10 +98,12 @@ type PortalPages = {
   usageCsv?: (accountId: string) => string;
   // URLs containing this answer with some other page, such as a login redirect: no marker, no rows.
   wrongPageAt?: string;
+  // URLs containing this stay loading a moment, so a concurrent caller can navigate away meanwhile.
+  slowPageAt?: string;
 };
 
 /** Plays the portal's pages, so these tests need no browser. The e2e script drives the real one. */
-function fakeBrowser({ accountPages = [[]], billsByAccount = {}, usageRows = [], loginError, usageCsv = () => "", wrongPageAt }: PortalPages) {
+function fakeBrowser({ accountPages = [[]], billsByAccount = {}, usageRows = [], loginError, usageCsv = () => "", wrongPageAt, slowPageAt }: PortalPages) {
   const filled: { selector: string; vaultName: string }[] = [];
   const closed = vi.fn();
   let url = "";
@@ -109,7 +112,10 @@ function fakeBrowser({ accountPages = [[]], billsByAccount = {}, usageRows = [],
   const accountPage = () => Number(new URL(url).searchParams.get("page") ?? 1);
 
   const session: BrowserSession = {
-    goto: async (next) => void (url = next),
+    goto: async (next) => {
+      url = next;
+      if (slowPageAt && next.includes(slowPageAt)) await sleep(50);
+    },
     fill: async () => {
       throw new Error("a portal tool must not use fill");
     },
@@ -252,6 +258,17 @@ describe("collector", () => {
         failed: [],
       });
       expect(readdirSync(join(runPaths(RUN, root).downloadedBills, "a1"))).toHaveLength(16);
+    }));
+
+  it("runs concurrent downloads for one provider one at a time on the shared page", () =>
+    withCustomer(async (db) => {
+      const usageCsv = (accountId: string) => `${CSV_HEADER}\n${accountId},2026-01-01T08:00:00.000Z,1\n`;
+      const { tool } = collector(db, { accountPages: [["a1", "a2"]], billsByAccount: { a1: ["a1-1"], a2: ["a2-1"] }, usageRows: ["a2"], usageCsv, slowPageAt: "/bills" });
+      await login(tool);
+      const input = { providers: ["bayconnect"] };
+      const [bills, usage] = await Promise.all([tool("download_bills").handler(input, CTX), tool("download_usage").handler(input, CTX)]);
+      expect(bills).toEqual({ downloaded: [{ provider: "bayconnect", bills: 2, billsByAccount: { a1: 1, a2: 1 } }], failed: [] });
+      expect(usage).toEqual({ downloaded: [{ provider: "bayconnect", accounts: ["a2"] }], failed: [] });
     }));
 
   it.each([

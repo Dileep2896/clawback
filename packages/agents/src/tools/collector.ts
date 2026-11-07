@@ -100,6 +100,7 @@ function parseUsageCsv(csv: string, accountId: string) {
 
 export function createCollectorTools({ db, browser, root = RUNS_DIR }: { db: Db; browser: () => Promise<Browser>; root?: string }) {
   const sessions = new Map<string, { session: BrowserSession; idle: NodeJS.Timeout }>();
+  const queues = new Map<string, Promise<unknown>>();
   const keyOf = (runId: string, provider: Provider) => `${runId}:${provider}`;
 
   async function closeSession(key: string) {
@@ -118,10 +119,18 @@ export function createCollectorTools({ db, browser, root = RUNS_DIR }: { db: Db;
     return entry.session;
   }
 
+  // shortcut: this chain covers one process and a run is one process, use a shared lock if a run ever spans processes.
+  function oneAtATime<T>(key: string, work: () => Promise<T>): Promise<T> {
+    const result = (queues.get(key) ?? Promise.resolve()).then(work, work);
+    queues.set(key, result);
+    return result;
+  }
+
   // One provider failing must not hide what the others collected, so each reports for itself.
-  async function perProvider<T>(providers: Provider[], work: (provider: Provider) => Promise<T>) {
+  // A session has one page, so operations on the same run and provider queue rather than navigate under each other.
+  async function perProvider<T>(runId: string, providers: Provider[], work: (provider: Provider) => Promise<T>) {
     const unique = [...new Set(providers)];
-    const settled = await Promise.allSettled(unique.map(work));
+    const settled = await Promise.allSettled(unique.map((provider) => oneAtATime(keyOf(runId, provider), () => work(provider))));
     return {
       done: settled.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])),
       failed: settled.flatMap((result, index) =>
@@ -138,7 +147,7 @@ export function createCollectorTools({ db, browser, root = RUNS_DIR }: { db: Db;
       targets: portalTarget,
       async handler({ providers }, { runId }) {
         const adapter = await browser();
-        const { done, failed } = await perProvider(providers, async (provider) => {
+        const { done, failed } = await perProvider(runId, providers, async (provider) => {
           const key = keyOf(runId, provider);
           await closeSession(key);
           const session = await adapter.open();
@@ -164,7 +173,7 @@ export function createCollectorTools({ db, browser, root = RUNS_DIR }: { db: Db;
       targets: portalTarget,
       async handler({ providers }, { runId }) {
         const { downloadedBills } = runPaths(runId, root);
-        const { done, failed } = await perProvider(providers, async (provider) => {
+        const { done, failed } = await perProvider(runId, providers, async (provider) => {
           const session = sessionFor(runId, provider);
           const accountIds: string[] = [];
           await eachAccountPage(session, async () => {
@@ -195,7 +204,7 @@ export function createCollectorTools({ db, browser, root = RUNS_DIR }: { db: Db;
       async handler({ providers }, { runId }) {
         const { downloadedUsage } = runPaths(runId, root);
         await mkdir(downloadedUsage, { recursive: true });
-        const { done, failed } = await perProvider(providers, async (provider) => {
+        const { done, failed } = await perProvider(runId, providers, async (provider) => {
           const session = sessionFor(runId, provider);
           const accounts: string[] = [];
           await eachAccountPage(session, async () => {
