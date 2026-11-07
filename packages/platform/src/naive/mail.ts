@@ -60,12 +60,22 @@ export function createMail(env: Env = process.env): NaiveMail {
 
     parseInbound,
 
-    // shortcut: reads one page of 100 messages; page through with next_cursor if a poll ever falls that far behind.
+    // shortcut: walks the whole feed each poll (read mail stays in it and naïve has no unread filter); fine at demo volume.
     async pollInbound(onEmail) {
       const inbox = need(env, "NAIVE_INBOX_ID");
-      const page = await call<{ data: InboundMessage[] }>("GET", `${identityPath()}/messages?channel=email&limit=100`);
+      const all: InboundMessage[] = [];
+      for (let after: string | null = null; ; ) {
+        const cursor: string = after ? `&after=${encodeURIComponent(after)}` : "";
+        const page: { data: InboundMessage[]; has_more?: boolean; next_cursor?: string | null } = await call<{ data: InboundMessage[]; has_more?: boolean; next_cursor?: string | null }>(
+          "GET",
+          `${identityPath()}/messages?channel=email&limit=100${cursor}`,
+        );
+        all.push(...page.data);
+        if (!page.has_more || !page.next_cursor) break;
+        after = page.next_cursor;
+      }
       // The feed is newest first; other inboxes of the persona (the Linda stand-in) are not ours to consume.
-      const unread = page.data.filter((m) => m.channel === "email" && m.endpoint_id === inbox && !m.read_at).reverse();
+      const unread = all.filter((m) => m.channel === "email" && m.endpoint_id === inbox && !m.read_at).reverse();
       for (const message of unread) {
         await onEmail(parseInbound({ messageId: message.id, from: message.from, to: message.to, subject: message.subject ?? "", text: message.text }));
         await call("POST", `${identityPath()}/messages/${seg(message.id)}/read`, { read: true });

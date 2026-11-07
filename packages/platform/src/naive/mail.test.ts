@@ -24,7 +24,14 @@ const server = createServer(async (request: IncomingMessage, response) => {
     if (failSend) return json(409, { error: { code: "job_not_ready", message: "domain not verified" } });
     return json(202, { accepted: true });
   }
-  if (url.startsWith("/v1/identities/idn_1/messages?")) return json(200, { data: feed });
+  if (url.startsWith("/v1/identities/idn_1/messages?")) {
+    // Cursor pagination as naïve documents it: limit + after, next_cursor is the last id on the page.
+    const query = new URL(url, "http://stub").searchParams;
+    const start = query.has("after") ? feed.findIndex((m) => m.id === query.get("after")) + 1 : 0;
+    const data = feed.slice(start, start + Number(query.get("limit") ?? 20));
+    const hasMore = start + data.length < feed.length;
+    return json(200, { data, has_more: hasMore, next_cursor: hasMore ? data.at(-1)?.id : null });
+  }
   if (/^\/v1\/identities\/idn_1\/messages\/[^/]+\/read$/.test(url)) return json(200, {});
   json(404, { error: { code: "not_found", message: "no route" } });
 });
@@ -111,6 +118,19 @@ describe("naive mail", () => {
       ["/v1/identities/idn_1/messages/inb_old/read", { read: true }],
       ["/v1/identities/idn_1/messages/inb_new/read", { read: true }],
     ]);
+  });
+
+  it("reaches unread mail on later pages behind 100+ read messages, oldest first", async () => {
+    const message = (id: string, read_at: string | null): InboundMessage => ({
+      id, channel: "email", endpoint_id: "eml_bills", from: "a@sys.test", to: "bills@sys.test", subject: id, text: "t", read_at,
+    });
+    const read = Array.from({ length: 150 }, (_, i) => message(`inb_read_${i}`, "2026-11-07T00:00:00Z"));
+    // Newest first: one fresh unread on page 1, two older unread bills buried on pages 2 and 3.
+    feed = [message("inb_newest", null), ...read.slice(0, 120), message("inb_mid", null), ...read.slice(120), message("inb_oldest", null)];
+    const got: string[] = [];
+    expect(await createMail(env).pollInbound(async (email) => void got.push(email.messageId))).toBe(3);
+    expect(got).toEqual(["inb_oldest", "inb_mid", "inb_newest"]);
+    expect(seen.filter((request) => request.url.includes("/messages?")).length).toBe(2);
   });
 
   it("leaves a message unread when the handler throws", async () => {
