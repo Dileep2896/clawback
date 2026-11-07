@@ -225,3 +225,28 @@ Use the `hallmark` skill and run its audit; fix what it flags. Before calling it
 **depends on:** signup-connect, savings-views
 
 **parallel with:** nothing
+
+## Design pass 2 for `landing-live` (human, 2026-11-07, after viewing the preview)
+
+Human, verbatim: "use proper coloring and format is bad. With modern design. and graphics animations"
+
+Finish the two review fixes first, then do this pass in the same lane. Keep the "agents at work" idea and every real number; change how it looks.
+
+**Colour.** Today is one dark green-black plus mint: monotone and flat. Build a real palette and write it into docs/plan/design.md:
+- Background: deep ink (near-black with a slight blue, not green), with one or two very soft radial glows behind the hero graphic, and a faint grid or dot texture. No purple gradients.
+- One vivid brand accent for money recovered (keep green, but brighter and cleaner, like emerald or lime-green), one warm signal colour for "overcharge found" (amber), red only for wrong numbers on a bill, and a cool secondary (sky or cyan) for agents working. Each colour has one meaning.
+- Cards: slightly lighter ink surfaces with 1px hairline borders and a subtle inner highlight; no heavy shadows.
+
+**Format.** Today the run panel sits above the headline and the page reads as a terminal dump.
+- Hero: headline and subcopy on the left, the animated graphic on the right, both above the fold at 1920x1080; a short row of three proof numbers under the headline ($12,606.06 refund claimed, $18,319.32 a year, 1 approval).
+- Clear type scale: big confident headline (tight tracking), readable 18px body, small caps labels. Generous spacing, a 12-column grid.
+- Sections below: each with one idea, one graphic, short copy. Cut anything that repeats.
+
+**Graphics and animation** (SVG plus CSS or small client code; use a motion library only if one is already installed). Real data from the recorded run in every graphic:
+1. Hero graphic: the agents as connected nodes (Collector, Auditor, Approver, Negotiator, Finance) with a pulse travelling along the edges as each one works; the active node expands into a small card showing what it is doing (the real lines you already have).
+2. A kWh chart that draws itself: billed versus meter readings for Fremont, the two lines splitting at the September 2025 meter change, the gap shaded amber, the overcharge labelled.
+3. The call: an animated audio waveform while the transcript lines appear.
+4. The money: a counter that rolls up to $12,606.06 and a stacked bar that fills into "You keep $21,647.77" versus "Clawback's fee $9,277.61".
+- Motion is smooth (ease-out, 200 to 600 ms), sequenced, and plays only when on screen. prefers-reduced-motion shows the finished state.
+
+**Bar to clear:** compare your screenshots against Linear, Ramp, Mercury and Vercel landing pages for polish (do not copy them). Run the hallmark audit. Ship frames at 1920x1080 (hero at 3 moments, plus each section) and 390x844.
