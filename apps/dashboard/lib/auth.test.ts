@@ -59,10 +59,16 @@ describe("safeNext", () => {
   it("keeps a path on this site", () => {
     expect(safeNext("/overview")).toBe("/overview");
     expect(safeNext("/bills?site=1#top")).toBe("/bills?site=1#top");
+    expect(safeNext("/./money")).toBe("/money");
+  });
+
+  it("refuses a path that is not one of the app's pages", () => {
+    for (const bad of ["/", "/login", "/api/approve", "/overview/x", "/bills/../api/sms"]) expect(safeNext(bad), bad).toBeNull();
   });
 
   it("refuses anything a browser could take to another host", () => {
-    for (const bad of ["//evil.example", "/\\evil.example", "/\t/evil.example", "/\n/evil.example", "/\r//evil.example", "/ /evil.example", "/\u0000/x", "https://evil.example", "evil.example", "", null, undefined, 1]) {
+    for (const bad of ["//evil.example", "/\\evil.example", "/\t/evil.example", "/\n/evil.example", "/\r//evil.example", "/ /evil.example", "/\u0000/x", "https://evil.example", "evil.example", "", null, undefined, 1,
+      "/.//evil.example", "/./evil.example", "/%2e//evil.example", "/%2E//evil.example", "/x/..//evil.example", "/x/%2e%2e//evil.example"]) {
       expect(safeNext(bad), JSON.stringify(bad)).toBeNull();
     }
   });

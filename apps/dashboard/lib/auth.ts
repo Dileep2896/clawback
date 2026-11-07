@@ -63,13 +63,14 @@ const PUBLIC = ["/", "/signup", "/login", "/api/sms"];
 export const isPublicPath = (path: string) => PUBLIC.includes(path) || path.startsWith("/_next/") || path === "/favicon.ico";
 
 const SELF = "http://self.invalid";
+const APP_ROUTES = new Set(["/overview", "/bills", "/findings", "/money", "/agents", "/onboarding"]);
 
 /**
- * Only a path on this site, so ?next= cannot send a signed-in user somewhere else. Browsers drop tabs and newlines and read
- * "\" as "/", so "/\t/evil.example" would become "//evil.example": refuse those characters, then check where the URL really lands.
+ * Only one of this site's own pages, so ?next= cannot send a signed-in user somewhere else. Browsers drop tabs and newlines,
+ * read "\\" as "/" and resolve dot segments ("/.//evil.example" is "//evil.example"), so the parsed path must be a known route.
  */
 export function safeNext(value: unknown): string | null {
   if (typeof value !== "string" || !value.startsWith("/") || /[\u0000- \u007f\\]/.test(value)) return null;
   const url = new URL(value, SELF);
-  return url.origin === SELF ? `${url.pathname}${url.search}${url.hash}` : null;
+  return url.origin === SELF && APP_ROUTES.has(url.pathname) ? `${url.pathname}${url.search}${url.hash}` : null;
 }
