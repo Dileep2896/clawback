@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, or } from "drizzle-orm";
 import type { Db } from "@bill-fighter/db/client";
 import {
+  accounts,
   actions,
   approvals,
   auditLog,
@@ -9,6 +10,7 @@ import {
   customers,
   findings,
   ledger,
+  locations,
   runs,
   smsMessages,
 } from "@bill-fighter/db/schema";
@@ -25,6 +27,8 @@ export type LiveData = {
   approval: Row<typeof approvals> | null;
   boardCards: Row<typeof boardCards>[];
   findings: Row<typeof findings>[];
+  /** Location name by account id: rule titles do not name the site. */
+  findingSites: Record<string, string>;
   actions: Row<typeof actions>[];
   calls: Row<typeof calls>[];
   ledger: Row<typeof ledger>[];
@@ -45,6 +49,7 @@ const NO_RUN: LiveData = {
   approval: null,
   boardCards: [],
   findings: [],
+  findingSites: {},
   actions: [],
   calls: [],
   ledger: [],
@@ -77,7 +82,15 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
     )
     .orderBy(asc(actions.id));
 
-  const [humanActions, cards, runCalls, ledgerRows, sms, audit, auditTotal] = await Promise.all([
+  const siteAccountIds = customerFindings.flatMap((f) => f.accountId ?? []);
+
+  const [sites, humanActions, cards, runCalls, ledgerRows, sms, audit, auditTotal] = await Promise.all([
+    db
+      .select({ accountId: accounts.id, name: locations.name })
+      .from(accounts)
+      .innerJoin(locations, eq(accounts.locationId, locations.id))
+      .where(inArray(accounts.id, siteAccountIds))
+      .orderBy(asc(accounts.id)),
     // Counts decided rows, not clicks or texts: decideApproval lets one decision win, so button plus SMS is still 1.
     db.$count(approvals, and(eq(approvals.runId, run.id), eq(approvals.status, "approved"))),
     db.select().from(boardCards).where(eq(boardCards.runId, run.id)).orderBy(asc(boardCards.updatedAt), asc(boardCards.id)),
@@ -101,6 +114,7 @@ export async function liveSnapshot(db: Db): Promise<LiveData> {
     approval,
     boardCards: cards,
     findings: customerFindings,
+    findingSites: Object.fromEntries(sites.map((site) => [site.accountId, site.name])),
     actions: runActions,
     calls: runCalls,
     ledger: ledgerRows,

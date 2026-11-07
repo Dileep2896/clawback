@@ -21,6 +21,10 @@ export const SAMPLE_RUN_ID = "sample-run";
 export const updateSampleRun = (db: Db, values: { costUsd: number; status: string }) =>
   db.update(runs).set(values).where(eq(runs.id, SAMPLE_RUN_ID));
 
+/** For the live check, for the same reason. */
+export const moveSampleCard = (db: Db, id: string, status: "todo" | "doing" | "done" | "blocked") =>
+  db.update(boardCards).set({ status }).where(eq(boardCards.id, id));
+
 /** Other lanes and the real demo use the shared database, so a made-up run must never land there. Scripts call this first. */
 export function assertNotSharedDb(url: string = databaseUrl()) {
   if (new URL(url).pathname === "/billfighter") {
@@ -38,6 +42,47 @@ const METER_BILLS = Array.from({ length: 14 }, (_, i) => {
     billedKwh: swapped ? intervalKwh * 2 : intervalKwh,
     intervalKwh,
     kwhRatio: swapped ? 2 : 1,
+    billedCents: swapped ? 205_000 : 100_000,
+    correctCents: 100_000,
+    // The 12 bills after the swap add up to the finding's refund.
+    overbilledCents: swapped ? 105_000 : 0,
+  };
+});
+const CLAIMED_BILLS = METER_BILLS.slice(2);
+
+// 12 months in the shape rateOptimization writes. They add up to the schedules below and the finding's savings.
+const RATE_MONTHS = Array.from({ length: 12 }, (_, i) => {
+  const currentCents = 300_000 + i * 1000;
+  const proposedCents = currentCents - (i < 8 ? 10_000 : 9000);
+  return {
+    billId: `sample-bill-oak-${i}`,
+    periodStart: `${2025 + Math.floor((10 + i) / 12)}-${String(((10 + i) % 12) + 1).padStart(2, "0")}-01`,
+    currentCents,
+    proposedCents,
+    savingsPct: Number((((currentCents - proposedCents) / currentCents) * 100).toFixed(2)),
+  };
+});
+
+// One finding per line, as unusedLines writes them. The first keeps its id, because the ledger and the call point at it.
+const LINE_COUNT = 7;
+const LINE_MONTHLY_CENTS = 6000;
+const LINE_ANNUAL_CENTS = LINE_MONTHLY_CENTS * 12;
+const LINE_FINDINGS = Array.from({ length: LINE_COUNT }, (_, i) => {
+  const number = `+1555000400${i + 1}`;
+  return {
+    id: i === 0 ? "sample-finding-lines" : `sample-finding-lines-${i + 1}`,
+    customerId: CUSTOMER.id,
+    type: "unusedLines",
+    title: `Unused line ${number} costs $720.00 a year`,
+    explanation: `Back office line ${number} had no calls in 12 months and costs $60.00 a month. Cancelling it saves $720.00 a year.`,
+    evidenceJson: {
+      billIds: ["sample-bill-tel"],
+      billLineIds: [`sample-bill-tel-${i + 1}`],
+      phoneLineIds: [`sample-line-${i + 1}`],
+      detail: { number, label: "Back office line", purpose: "unknown", callsLast12mo: 0, monthlyCents: LINE_MONTHLY_CENTS, action: "cancel" },
+    },
+    annualSavingsCents: LINE_ANNUAL_CENTS,
+    confidence: 0.9,
   };
 });
 
@@ -102,10 +147,19 @@ export async function insertSampleRun(db: Db) {
         title: "Fremont #1 is billed for twice its real usage",
         explanation: "Since the meter swap, billed kWh is exactly 2 times the interval data.",
         evidenceJson: {
-          billIds: METER_BILLS.map((b) => b.billId),
+          billIds: CLAIMED_BILLS.map((b) => b.billId),
           billLineIds: [],
           phoneLineIds: [],
-          detail: { swapMonth: "2025-09", oldMeter: "BEM-1009011", newMeter: "BEM-2204417", oldMultiplier: 1, newMultiplier: 2, kwhRatio: 2, bills: METER_BILLS },
+          detail: {
+            swapMonth: "2025-09",
+            oldMeter: "BEM-1009011",
+            newMeter: "BEM-2204417",
+            oldMultiplier: 1,
+            newMultiplier: 2,
+            kwhRatio: 2,
+            claimWindowStart: "2023-08-31",
+            bills: METER_BILLS,
+          },
         },
         refundCents: 1_260_000,
         annualSavingsCents: 1_080_000,
@@ -118,23 +172,41 @@ export async function insertSampleRun(db: Db) {
         title: "Oakland #1 and #2 qualify for a cheaper rate",
         explanation: "Both peak near 40 kW, under the 75 kW limit for schedule B-6.",
         evidenceJson: {
-          billIds: ["sample-bill-oak-1", "sample-bill-oak-2"],
+          billIds: RATE_MONTHS.map((m) => m.billId),
           billLineIds: [],
           phoneLineIds: [],
-          detail: { currentSchedule: "B-10", proposedSchedule: "B-6", maxDemandKw: 40 },
+          detail: {
+            currentSchedule: "B-10",
+            proposedSchedule: "B-6",
+            windowStart: "2025-11-01",
+            windowEnd: "2026-10-31",
+            peakKw: 40,
+            heldKw: 38,
+            schedules: [
+              { schedule: "B-10", annualCents: 3_666_000, savingsPct: 0 },
+              { schedule: "B-6", annualCents: 3_550_000, savingsPct: 3.16 },
+              { schedule: "B-1", annualCents: 3_780_000, savingsPct: -3.11 },
+            ],
+            months: RATE_MONTHS,
+          },
         },
         annualSavingsCents: 116_000,
         confidence: 0.9,
       },
+      ...LINE_FINDINGS,
       {
-        id: "sample-finding-lines",
+        id: "sample-finding-alarm",
         customerId: CUSTOMER.id,
         type: "unusedLines",
-        title: "Seven phone lines had no calls in 12 months",
-        explanation: "Each costs $60 a month. Two alarm lines are left alone.",
-        evidenceJson: { billIds: [], billLineIds: [], phoneLineIds: ["sample-line-1", "sample-line-2"], detail: { monthlyCents: 6000, lines: 7 } },
-        annualSavingsCents: 504_000,
-        confidence: 0.95,
+        title: "Confirm with alarm company: +15550004008",
+        explanation: "Alarm line +15550004008 is an alarm line with 2 calls in 12 months. Confirm with the alarm company what depends on it.",
+        evidenceJson: {
+          billIds: ["sample-bill-tel"],
+          billLineIds: ["sample-bill-tel-8"],
+          phoneLineIds: ["sample-line-8"],
+          detail: { number: "+15550004008", label: "Alarm line", purpose: "alarm", callsLast12mo: 2, monthlyCents: LINE_MONTHLY_CENTS, action: "confirmWithAlarmCompany" },
+        },
+        confidence: 0.5,
       },
     ]);
 
