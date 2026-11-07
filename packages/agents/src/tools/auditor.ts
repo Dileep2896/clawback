@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { runAudit } from "@bill-fighter/core/rules/index";
 import { compareRates } from "@bill-fighter/core/rules/rate-optimization";
 import { db as sharedDb, type Db } from "@bill-fighter/db/client";
-import { billLines, bills, findings, phoneLines } from "@bill-fighter/db/schema";
+import { actions, billLines, bills, findings, phoneLines } from "@bill-fighter/db/schema";
 import type { Finding } from "@bill-fighter/shared/finding";
-import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notExists, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { PARSED_DIR } from "../audit-input.ts";
 import { customerAccounts, customerBills, loadCustomerAuditInput, runPaths, RUNS_DIR } from "../customer-data.ts";
@@ -140,14 +140,15 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
           const { evidence, ...columns } = finding;
           return { ...columns, id: findingId(finding), evidenceJson: evidence };
         });
-        await db.transaction(async (tx) => {
+        const ids = rows.map((row) => row.id);
+        const stored = await db.transaction(async (tx) => {
           if (rows.length > 0) {
             await tx
               .insert(findings)
               .values(rows)
               .onConflictDoUpdate({
                 target: findings.id,
-                // Not status: rerunning the audit must not undo an approval.
+                // Not status, and only while proposed: an approved, filed or won finding keeps what was decided on.
                 set: {
                   title: sql`excluded.title`,
                   explanation: sql`excluded.explanation`,
@@ -156,16 +157,24 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
                   annualSavingsCents: sql`excluded.annual_savings_cents`,
                   confidence: sql`excluded.confidence`,
                 },
+                setWhere: eq(findings.status, "proposed"),
               });
           }
-          // The audit no longer reports these. Updated, not deleted, so any actions keep their finding.
+          // The audit no longer reports these. One with actions stays, so its actions keep their finding.
           await tx
-            .update(findings)
-            .set({ status: "rejected" })
-            .where(and(eq(findings.customerId, customerId), eq(findings.status, "proposed"), notInArray(findings.id, rows.map((row) => row.id))));
+            .delete(findings)
+            .where(
+              and(
+                eq(findings.customerId, customerId),
+                eq(findings.status, "proposed"),
+                notInArray(findings.id, ids),
+                notExists(tx.select({ id: actions.id }).from(actions).where(eq(actions.findingId, findings.id))),
+              ),
+            );
+          return tx.select().from(findings).where(inArray(findings.id, ids));
         });
         return {
-          findings: rows.map(({ id, type, accountId, title, refundCents, annualSavingsCents, confidence }) => ({
+          findings: stored.map(({ id, type, accountId, title, refundCents, annualSavingsCents, confidence, status }) => ({
             id,
             type,
             accountId,
@@ -173,9 +182,10 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
             refundCents,
             annualSavingsCents,
             confidence,
+            status,
           })),
-          refundCents: run.refundCents,
-          annualSavingsCents: run.annualSavingsCents,
+          refundCents: stored.reduce((sum, row) => sum + row.refundCents, 0),
+          annualSavingsCents: stored.reduce((sum, row) => sum + row.annualSavingsCents, 0),
         };
       },
     }),

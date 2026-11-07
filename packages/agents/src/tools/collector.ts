@@ -66,9 +66,15 @@ async function logIn(session: BrowserSession, provider: Provider) {
   }
 }
 
+/** A login redirect or error page has no rows either, so without this it would read as zero records. */
+async function openPage(session: BrowserSession, url: string, marker: string) {
+  await session.goto(url);
+  if (!(await session.isVisible(marker))) throw new Error(`The portal did not show the expected page at ${url} (no ${marker})`);
+}
+
 async function eachAccountPage(session: BrowserSession, visit: () => Promise<void>) {
   for (let page = 1; page <= MAX_ACCOUNT_PAGES; page++) {
-    await session.goto(`${portalUrl()}/accounts?page=${page}`);
+    await openPage(session, `${portalUrl()}/accounts?page=${page}`, testId("account-count"));
     await visit();
     if (!(await session.isVisible(NEXT_PAGE))) return;
   }
@@ -167,7 +173,7 @@ export function createCollectorTools({ db, browser, root = RUNS_DIR }: { db: Db;
           const billsByAccount: Record<string, number> = {};
           for (const accountId of accountIds) {
             sessionFor(runId, provider);
-            await session.goto(`${portalUrl()}/bills?account=${encodeURIComponent(accountId)}`);
+            await openPage(session, `${portalUrl()}/bills?account=${encodeURIComponent(accountId)}`, testId("bill-count"));
             const billIds = (await session.attributes(testId("bill-row"), "data-bill-id")).map(safeId);
             const dir = join(downloadedBills, accountId);
             await mkdir(dir, { recursive: true });

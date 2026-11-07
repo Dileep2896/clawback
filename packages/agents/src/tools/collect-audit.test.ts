@@ -95,10 +95,12 @@ type PortalPages = {
   usageRows?: string[];
   loginError?: string;
   usageCsv?: (accountId: string) => string;
+  // URLs containing this answer with some other page, such as a login redirect: no marker, no rows.
+  wrongPageAt?: string;
 };
 
 /** Plays the portal's pages, so these tests need no browser. The e2e script drives the real one. */
-function fakeBrowser({ accountPages = [[]], billsByAccount = {}, usageRows = [], loginError, usageCsv = () => "" }: PortalPages) {
+function fakeBrowser({ accountPages = [[]], billsByAccount = {}, usageRows = [], loginError, usageCsv = () => "", wrongPageAt }: PortalPages) {
   const filled: { selector: string; vaultName: string }[] = [];
   const closed = vi.fn();
   let url = "";
@@ -120,13 +122,16 @@ function fakeBrowser({ accountPages = [[]], billsByAccount = {}, usageRows = [],
       if (selector.includes("session-modal-dismiss")) modal = false;
     },
     isVisible: async (selector) => {
+      if (wrongPageAt && url.includes(wrongPageAt)) return false;
       if (selector.includes("session-modal")) return modal;
       if (selector.includes("account-count")) return loginAnswered && !loginError;
+      if (selector.includes("bill-count")) return true;
       if (selector.includes('rel="next"')) return accountPage() < accountPages.length;
       return false;
     },
     texts: async (selector) => (selector.includes("login-error") && loginAnswered && loginError ? [loginError] : []),
     attributes: async (selector) => {
+      if (wrongPageAt && url.includes(wrongPageAt)) return [];
       if (selector.includes("bill-row")) return billsByAccount[new URL(url).searchParams.get("account") ?? ""] ?? [];
       const onPage = accountPages[accountPage() - 1] ?? [];
       return selector.includes("account-usage") ? onPage.filter((id) => usageRows.includes(id)) : onPage;
@@ -248,6 +253,21 @@ describe("collector", () => {
       });
       expect(readdirSync(join(runPaths(RUN, root).downloadedBills, "a1"))).toHaveLength(16);
     }));
+
+  it.each([
+    ["download_bills", "/accounts", "account-count"],
+    ["download_usage", "/accounts", "account-count"],
+    ["download_bills", "/bills", "bill-count"],
+  ])("%s reports a provider as failed, not zero records, when %s shows some other page", (name, wrongPageAt, marker) =>
+    withCustomer(async (db) => {
+      const { tool } = collector(db, { accountPages: [["a1"]], billsByAccount: { a1: ["a1-1"] }, wrongPageAt });
+      await login(tool);
+      expect(await tool(name).handler({ providers: ["bayconnect"] }, CTX)).toEqual({
+        downloaded: [],
+        failed: [{ provider: "bayconnect", reason: expect.stringContaining(marker) }],
+      });
+    }),
+  );
 
   it("will not make a file name from an unsafe id on the page", () =>
     withCustomer(async (db) => {
@@ -388,33 +408,85 @@ describe("auditor", () => {
     }),
   );
 
-  it("moves only this customer's proposed findings out of proposed once the audit stops reporting them", () =>
+  it("deletes only this customer's proposed findings with no actions once the audit stops reporting them", () =>
     withCustomer(async (db) => {
       await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));
       await auditor(db, "run_audit").handler(INPUT, CTX);
       const [live] = await db.select().from(findings).where(eq(findings.type, "arithmeticCheck"));
-      await db.insert(actions).values({ id: "act1", findingId: live!.id, kind: "letter", status: "pending" });
       await db.insert(customers).values({ id: "c2", name: "Other", contactName: "O", contactEmail: "o@x.local", contactPhone: "+15550001112" });
       await db.insert(findings).values([
         { ...live!, id: "stale" },
+        { ...live!, id: "kept-with-action" },
         { ...live!, id: "kept-approved", status: "approved" },
         { ...live!, id: "kept-filed", status: "filed" },
         { ...live!, id: "kept-won", status: "won" },
         { ...live!, id: "kept-rejected", status: "rejected" },
         { ...live!, id: "other-customer", customerId: "c2" },
       ]);
+      await db.insert(actions).values({ id: "act1", findingId: "kept-with-action", kind: "letter", status: "pending" });
       const statuses = async () => Object.fromEntries((await db.select().from(findings)).map((row) => [row.id, row.status]));
-      const untouched = { "kept-approved": "approved", "kept-filed": "filed", "kept-won": "won", "kept-rejected": "rejected", "other-customer": "proposed" };
+      const untouched = {
+        "kept-with-action": "proposed",
+        "kept-approved": "approved",
+        "kept-filed": "filed",
+        "kept-won": "won",
+        "kept-rejected": "rejected",
+        "other-customer": "proposed",
+      };
 
       await auditor(db, "run_audit").handler(INPUT, CTX);
-      expect(await statuses()).toMatchObject({ ...untouched, stale: "rejected", [live!.id]: "proposed" });
+      expect(await statuses()).toEqual({ ...untouched, [live!.id]: "proposed" });
+      expect(await db.select().from(actions)).toMatchObject([{ id: "act1", findingId: "kept-with-action" }]);
+    }));
+
+  it("deletes a finding when its issue is corrected, and upserts it fresh as proposed when the issue returns", () =>
+    withCustomer(async (db) => {
+      await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));
+      await auditor(db, "run_audit").handler(INPUT, CTX);
+      const [before] = await db.select().from(findings).where(eq(findings.type, "arithmeticCheck"));
 
       // Corrected: the total now equals the lines, so arithmeticCheck has nothing to report.
       await db.update(bills).set({ parsedJson: { ...PARSED, totalCents: 5000 } }).where(eq(bills.id, "b1"));
-      const output = (await auditor(db, "run_audit").handler(INPUT, CTX)) as { findings: { type: string }[] };
-      expect(output.findings.map(({ type }) => type)).not.toContain("arithmeticCheck");
-      expect(await statuses()).toMatchObject({ ...untouched, stale: "rejected", [live!.id]: "rejected" });
-      expect(await db.select().from(actions)).toMatchObject([{ id: "act1", findingId: live!.id }]);
+      const corrected = (await auditor(db, "run_audit").handler(INPUT, CTX)) as { findings: { type: string }[] };
+      expect(corrected.findings.map(({ type }) => type)).not.toContain("arithmeticCheck");
+      expect(await db.select().from(findings).where(eq(findings.id, before!.id))).toEqual([]);
+
+      await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));
+      const returned = (await auditor(db, "run_audit").handler(INPUT, CTX)) as { findings: { id: string; status: string }[] };
+      expect(returned.findings.find(({ id }) => id === before!.id)?.status).toBe("proposed");
+      expect(await db.select().from(findings).where(eq(findings.id, before!.id))).toEqual([before]);
+    }));
+
+  it.each(["approved", "filed", "won"] as const)("keeps a %s finding's content when inputs change, and reports the stored row", (status) =>
+    withCustomer(async (db) => {
+      await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));
+      await auditor(db, "run_audit").handler(INPUT, CTX);
+      // Core reports no refund for this rule, so 777 can only come from the stored row.
+      const [before] = await db.update(findings).set({ status, refundCents: 777 }).where(eq(findings.type, "arithmeticCheck")).returning();
+
+      await db.update(bills).set({ parsedJson: { ...PARSED, totalCents: 5200 } }).where(eq(bills.id, "b1"));
+      const changed = runAudit(await loadCustomerAuditInput(db, CUSTOMER)).findings.find((f) => f.type === "arithmeticCheck")!;
+      expect(changed.explanation).not.toBe(before!.explanation);
+
+      const output = (await auditor(db, "run_audit").handler(INPUT, CTX)) as { findings: { id: string }[]; refundCents: number };
+      expect(await db.select().from(findings).where(eq(findings.id, before!.id))).toEqual([before]);
+      expect(output.findings.find(({ id }) => id === before!.id)).toMatchObject({ status, title: before!.title, refundCents: 777 });
+      expect(output.refundCents).toBe(777);
+    }),
+  );
+
+  it("updates a proposed finding's content when inputs change", () =>
+    withCustomer(async (db) => {
+      await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));
+      await auditor(db, "run_audit").handler(INPUT, CTX);
+      const [before] = await db.select().from(findings).where(eq(findings.type, "arithmeticCheck"));
+
+      await db.update(bills).set({ parsedJson: { ...PARSED, totalCents: 5200 } }).where(eq(bills.id, "b1"));
+      const changed = runAudit(await loadCustomerAuditInput(db, CUSTOMER)).findings.find((f) => f.type === "arithmeticCheck")!;
+      await auditor(db, "run_audit").handler(INPUT, CTX);
+      const [after] = await db.select().from(findings).where(eq(findings.id, before!.id));
+      expect(changed.explanation).not.toBe(before!.explanation);
+      expect(after).toMatchObject({ status: "proposed", explanation: changed.explanation, evidenceJson: changed.evidence });
     }));
 
   it("saves findings exactly as core reports them, with their bill and line ids", () =>
