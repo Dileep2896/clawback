@@ -4,7 +4,7 @@ import { isGatedTool } from "@bill-fighter/shared/gated-tools";
 import { getPlatform } from "../factory.ts";
 import type { AgentDef, AgentRuntime, ApprovalGate, Audit, Budget, RunEvent, RunSpec } from "../types.ts";
 import { listAll, microUsd, type NaiveApi, naiveApi, usdFromMicro } from "./runtime-http.ts";
-import { startToolServer, toolPath } from "./mcp-server.ts";
+import { releasedInRun, startToolServer, toolPath } from "./mcp-server.ts";
 import { setBoardOwner } from "./mirror.ts";
 
 /** The human's limit: no naïve run may spend more than this. */
@@ -15,7 +15,9 @@ const SERVER = "clawback";
 const VAULT_NAME = "clawback-mcp";
 const POLL_MS = 1500;
 const MODEL_IDLE_MS = 180_000;
-const COORDINATOR_TOOLS = ["send_to_agent", "wait_for_agents", "list_agents"];
+const COORDINATOR_TOOLS = ["wait_for_agents", "list_agents"];
+// Asks so the loop sees its args: only wait: true (a thread on this run's budget) may run, never an independent handoff.
+const DELEGATE = "send_to_agent";
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 // Root stop reasons that end the run; awaiting_approval and awaiting_delegation keep it going.
 const FINISHED = new Set(["end_turn", "awaiting_input"]);
@@ -36,7 +38,7 @@ export type Deps = {
   idleMs?: number;
 };
 
-type PendingAction = { kind?: string; tool_call_id: string; name: string; args?: Record<string, unknown> };
+type PendingAction = { kind?: string; tool_call_id: string; name: string; args?: Record<string, unknown>; parked_seq?: number };
 type Session = {
   id: string;
   status: string;
@@ -64,7 +66,10 @@ export async function pickModel(api: NaiveApi): Promise<string> {
 export function toolsetFor(def: AgentDef, coordinator: boolean) {
   const configs: Record<string, { enabled: boolean; permission: "allow" | "ask" }> = {};
   for (const tool of def.tools) configs[`${SERVER}.${tool}`] = { enabled: true, permission: isGatedTool(tool) ? "ask" : "allow" };
-  if (coordinator) for (const tool of COORDINATOR_TOOLS) configs[tool] = { enabled: true, permission: "allow" };
+  if (coordinator) {
+    configs[DELEGATE] = { enabled: true, permission: "ask" };
+    for (const tool of COORDINATOR_TOOLS) configs[tool] = { enabled: true, permission: "allow" };
+  }
   return { default_config: { permission: "deny" }, configs };
 }
 
@@ -97,6 +102,18 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
   let api: NaiveApi = naiveApi;
   let rootId: string | undefined;
   let rootDone = false;
+  type Owned = { agent: string; afterSeq: number; consumed: number; session?: Session };
+  // shortcut: the sessions this run owns live in memory for the life of run(), so the loop below only ever answers
+  // calls on them. That holds one run at a time (the demo rule); upgrade to a table if runs ever overlap.
+  const owned = new Map<string, Owned>();
+  /** Adds the unrecorded part of a session's cumulative spend to Budget. */
+  const account = async (entry: Owned, consumed: number) => {
+    if (consumed <= entry.consumed || !deps) return;
+    const delta = usdFromMicro(consumed - entry.consumed);
+    entry.consumed = consumed;
+    costUsd += delta;
+    if ((await deps.budget.add(spec.runId, delta)).over) over = true;
+  };
 
   try {
     deps = await getDeps();
@@ -183,14 +200,11 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
       body: { agent_id: mainId, message: spec.prompt, budget_micro_usd: microUsd(capUsd), metadata: { run_id: spec.runId } },
     });
     rootId = root.id;
-
-    // shortcut: the sessions this run owns live in memory for the life of run(), so the loop below only ever answers
-    // calls on them. That holds one run at a time (the demo rule); upgrade to a table if runs ever overlap.
-    const owned = new Map<string, { agent: string; afterSeq: number; consumed: number; session?: Session }>([
-      [root.id, { agent: main, afterSeq: 0, consumed: 0 }],
-    ]);
-    // By call id across sessions: naïve also lists a member's parked call on the coordinator (seen in the probe).
+    owned.set(root.id, { agent: main, afterSeq: 0, consumed: 0 });
+    // One key per parked occurrence: naïve reuses a call's id when the same call is proposed in a later turn, and
+    // parked_seq tells the two apart.
     const handled = new Set<string>();
+    const occurrence = (sessionId: string, action: PendingAction) => `${sessionId}:${action.tool_call_id}:${action.parked_seq ?? ""}`;
     const ours = new Set(spec.tools.map((def) => def.name));
     const memberOf = (naive: unknown) => {
       const name = String(naive ?? "");
@@ -233,12 +247,16 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     };
 
     /** The single approval rule: approved bundle → allow; pending bundle holding the action → wait; anything else → deny. */
-    const decide = async (sessionId: string, action: PendingAction) => {
+    const decide = async (sessionId: string, action: PendingAction): Promise<boolean> => {
       const actionId = action.args?.actionId;
       const bare = action.name.startsWith(`${SERVER}.`) ? action.name.slice(SERVER.length + 1) : "";
       let decision: "allow" | "deny";
       let reason: string | undefined;
-      if (!ours.has(bare)) {
+      if (action.name === DELEGATE && sessionId === root.id) {
+        // wait: false would start a top-level session on its own budget, outside this run's tracking and cap.
+        decision = action.args?.wait === true ? "allow" : "deny";
+        if (decision === "deny") reason = "Delegate with wait: true; independent handoffs are not allowed in this run.";
+      } else if (!ours.has(bare)) {
         decision = "deny";
         reason = `${action.name} is not a tool of this run`;
       } else if (!isGatedTool(bare)) {
@@ -248,41 +266,45 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
       } else if (typeof actionId !== "string" || !actionId) {
         decision = "deny";
         reason = `${action.name} needs an actionId to be approved`;
-      } else if (await gate.isReleased(actionId)) {
+      } else if (await releasedInRun(gate, spec.runId, actionId)) {
         decision = "allow";
       } else {
         const approval = await gate.get(spec.runId);
-        if (approval?.status === "pending" && approval.actionIds.includes(actionId)) return; // Linda has not answered yet.
+        if (approval?.status === "pending" && approval.actionIds.includes(actionId)) return false; // Linda has not answered yet.
         decision = "deny";
         reason = `Action ${actionId} did not run and nothing was changed: the owner denied its approval request, or it was never in one. It is not pending.`;
       }
       await api(`/sessions/${sessionId}/tool_confirmations`, { method: "POST", body: { tool_call_id: action.tool_call_id, decision, ...(reason ? { reason } : {}) } });
-      handled.add(action.tool_call_id);
       if (decision === "deny") pending.push({ type: "denied", agent: owned.get(sessionId)!.agent, tool: action.name.replace(`${SERVER}.`, ""), reason: reason! });
+      return true;
     };
 
     for (;;) {
       let waitingOnOwner = false;
-      for (const [sessionId, entry] of [...owned]) {
+      const parkedRows: { sessionId: string; action: PendingAction }[] = [];
+      // Live iteration: a thread found in this round's events is polled in the same round.
+      for (const [sessionId, entry] of owned) {
         if (entry.session && TERMINAL.has(entry.session.status)) continue;
         // State first, then events: every event up to that state is read before the loop acts on it.
         const session = (entry.session = await api<Session>(`/sessions/${sessionId}`));
         await readEvents(sessionId);
-        const consumed = session.consumed_micro_usd ?? 0;
-        if (consumed > entry.consumed) {
-          const delta = usdFromMicro(consumed - entry.consumed);
-          entry.consumed = consumed;
-          costUsd += delta;
-          if ((await budget.add(spec.runId, delta)).over) over = true;
-        }
-        if (session.stop_reason === "awaiting_approval") {
-          // Branch on kind, never on name: a question row is never a tool call.
-          for (const action of session.pending_actions.filter((a) => (a.kind ?? "tool") === "tool")) {
-            if (handled.has(action.tool_call_id)) continue;
-            await decide(sessionId, action);
-            if (!handled.has(action.tool_call_id)) waitingOnOwner = true;
-          }
-        }
+        await account(entry, session.consumed_micro_usd ?? 0);
+        // Branch on kind, never on name: a question row is never a tool call.
+        if (session.stop_reason === "awaiting_approval")
+          for (const action of session.pending_actions.filter((a) => (a.kind ?? "tool") === "tool")) parkedRows.push({ sessionId, action });
+      }
+      // naïve also lists a member's parked call on the coordinator (seen in the probe): answer each call once, on the
+      // member, and count every listing of it seen with it as handled.
+      const byCall = new Map<string, typeof parkedRows>();
+      for (const row of parkedRows) byCall.set(row.action.tool_call_id, [...(byCall.get(row.action.tool_call_id) ?? []), row]);
+      for (const rows of byCall.values()) {
+        const fresh = rows.filter((row) => !handled.has(occurrence(row.sessionId, row.action)));
+        const onMember = rows.some((row) => row.sessionId !== root.id);
+        // A coordinator copy is never answered while the member holds the call.
+        const pick = fresh.find((row) => row.sessionId !== root.id) ?? (onMember ? undefined : fresh[0]);
+        if (!pick) continue;
+        if (await decide(pick.sessionId, pick.action)) for (const row of fresh) handled.add(occurrence(row.sessionId, row.action));
+        else waitingOnOwner = true;
       }
       yield* pending.splice(0);
       const rootSession = owned.get(root.id)!.session!;
@@ -318,6 +340,12 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     // A run that stops early must not leave naïve working or parked: cancel the root, which stops its threads.
     if (rootId && !rootDone) await api(`/sessions/${rootId}/cancel`, { method: "POST" }).catch(() => {});
     await Promise.all(inFlight);
+    // Reconcile: a cancelled in-flight call is still billed, so read every owned session's final cumulative spend.
+    for (const [sessionId, entry] of owned) {
+      await api<Session>(`/sessions/${sessionId}`)
+        .then((session) => account(entry, session.consumed_micro_usd ?? 0))
+        .catch((error) => console.warn(`naïve final usage for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`));
+    }
     for (const step of cleanup.reverse()) await step().catch((error) => console.warn(`naïve cleanup: ${error instanceof Error ? error.message : String(error)}`));
   }
 

@@ -210,13 +210,74 @@ describe("naïve runtime", () => {
     expect(calls.some((c) => c.path.includes("ses_other"))).toBe(false);
   });
 
-  it("stops over budget and cancels the root session", async () => {
-    const { api, calls } = fakeNaive((sessions) => {
-      sessions.get("ses_root")!.consumed_micro_usd = 6_000_000;
+  it("stops over budget, cancels the root session, and books what the cancelled call still cost", async () => {
+    const { api, calls, sessions } = fakeNaive((all) => {
+      const root = all.get("ses_root")!;
+      root.consumed_micro_usd = Math.max(root.consumed_micro_usd, 6_000_000);
     });
-    const events = await collect(runtime(api, fakeGate(null).gate, fakeBudget(5), fakeAudit().audit).run(SPEC));
-    expect(events.at(-1)).toMatchObject({ type: "result", status: "over_budget" });
+    const budget = fakeBudget(5);
+    const cancelling = api;
+    const billed = (async (path: string, init?: NaiveRequest) => {
+      const out = await cancelling(path, init);
+      // The in-flight model call is billed as it is cancelled.
+      if (path === "/sessions/ses_root/cancel") sessions.get("ses_root")!.consumed_micro_usd = 6_250_000;
+      return out;
+    }) as NaiveApi;
+    const events = await collect(runtime(billed, fakeGate(null).gate, budget, fakeAudit().audit).run(SPEC));
+    expect(events.at(-1)).toMatchObject({ type: "result", status: "over_budget", costUsd: 6.25 });
+    expect(budget.totalUsd).toBeCloseTo(6.25);
     expect(calls).toContainEqual({ method: "POST", path: "/sessions/ses_root/cancel", body: undefined });
+  });
+
+  it("answers a call again when naïve parks it in a later turn, and a coordinator copy of a member call only once", async () => {
+    const { gate } = fakeGate({ status: "approved", actionIds: ["a1"] });
+    const { api, calls } = fakeNaive((sessions, tick) => {
+      const root = sessions.get("ses_root")!;
+      const again = (seq: number) => ({ ...parked("c1", "a1"), parked_seq: seq });
+      if (tick === 0) {
+        root.events.push({ seq: 1, type: "thread.created", data: { thread_id: "ses_m", member: "clawback-filer" } });
+        root.status = "idle";
+        root.stop_reason = "awaiting_approval";
+        root.pending_actions = [again(1)];
+        sessions.set("ses_m", { id: "ses_m", status: "idle", stop_reason: "awaiting_approval", pending_actions: [again(4)], consumed_micro_usd: 0, events: [] });
+      }
+      // The same call, same id, proposed again in a later turn.
+      if (tick === 3) Object.assign(sessions.get("ses_m")!, { stop_reason: "awaiting_approval", pending_actions: [again(9)] });
+      if (tick === 6) {
+        sessions.get("ses_m")!.status = "completed";
+        Object.assign(root, { stop_reason: "end_turn", pending_actions: [] });
+      }
+    });
+    await collect(runtime(api, gate, fakeBudget(), fakeAudit().audit).run(SPEC));
+    expect(calls.filter((c) => c.path.endsWith("/tool_confirmations")).map((c) => c.path)).toEqual([
+      "/sessions/ses_m/tool_confirmations",
+      "/sessions/ses_m/tool_confirmations",
+    ]);
+  });
+
+  it("denies an independent handoff and a call approved only in another run", async () => {
+    const { gate } = fakeGate({ status: "pending", actionIds: [] });
+    gate.isReleased = async () => true; // approved in some other run's bundle
+    const { api, calls } = fakeNaive((sessions, tick) => {
+      const root = sessions.get("ses_root")!;
+      if (tick === 0) {
+        root.status = "idle";
+        root.stop_reason = "awaiting_approval";
+        root.pending_actions = [
+          { kind: "tool", tool_call_id: "h1", name: "send_to_agent", args: { agent: "clawback-filer", message: "go", wait: false } },
+          { kind: "tool", tool_call_id: "h2", name: "send_to_agent", args: { agent: "clawback-filer", message: "go", wait: true } },
+          parked("c1", "a-elsewhere"),
+        ];
+      }
+      if (tick === 2) root.stop_reason = "end_turn";
+    });
+    await collect(runtime(api, gate, fakeBudget(), fakeAudit().audit).run(SPEC));
+    const confirms = calls.filter((c) => c.path.endsWith("/tool_confirmations")).map((c) => c.body as { tool_call_id: string; decision: string });
+    expect(confirms.map((c) => [c.tool_call_id, c.decision])).toEqual([
+      ["h1", "deny"],
+      ["h2", "allow"],
+      ["c1", "deny"],
+    ]);
   });
 
   it("refuses to start without a public https tool URL", async () => {

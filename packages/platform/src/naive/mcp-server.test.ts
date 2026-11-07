@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
-import type { ToolDef } from "../types.ts";
+import type { Approval, ToolDef } from "../types.ts";
 import { startToolServer, toolPath } from "./mcp-server.ts";
 
 const ran: string[] = [];
@@ -33,7 +33,8 @@ async function serve(released: string[]) {
       ],
       tools: [tool("submit_claim"), tool("draft_letter"), tool("get_customer")],
       token: "secret-token",
-      gate: { isReleased: async (id) => released.includes(id) },
+      // Another run's approval of a-other must not release it here.
+      gate: { get: async (runId) => (runId === "run-1" ? ({ status: "approved", actionIds: released } as Approval) : null) },
       onDenied: (agent, name) => denied.push(`${agent}:${name}`),
       ended: () => false,
       running: (work) => work(),

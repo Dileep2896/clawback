@@ -13,12 +13,18 @@ export type ToolServerDeps = {
   tools: ToolDef[];
   /** The bearer naïve injects from our vault. */
   token: string;
-  gate: Pick<ApprovalGate, "isReleased">;
+  gate: Pick<ApprovalGate, "get">;
   onDenied: (agent: string, tool: string, reason: string) => void;
   ended: () => boolean;
   /** Tracks a handler so the run waits for it before it ends. */
   running: <T>(work: () => Promise<T>) => Promise<T>;
 };
+
+/** Released only by this run's own approved bundle; an approval in another run never counts. */
+export async function releasedInRun(gate: Pick<ApprovalGate, "get">, runId: string, actionId: string) {
+  const approval = await gate.get(runId);
+  return approval?.status === "approved" && approval.actionIds.includes(actionId);
+}
 
 export const toolPath = (agent: string) => `/mcp/${encodeURIComponent(agent)}`;
 
@@ -44,7 +50,7 @@ function serverFor(def: AgentDef, deps: ToolServerDeps) {
           // gated call that reached us any other way still does nothing.
           if (isGatedTool(tool.name)) {
             const { actionId } = input as { actionId?: unknown };
-            if (typeof actionId !== "string" || !actionId || !(await deps.gate.isReleased(actionId))) {
+            if (typeof actionId !== "string" || !actionId || !(await releasedInRun(deps.gate, deps.runId, actionId))) {
               const reason = `${tool.name} ran without an approved actionId`;
               deps.onDenied(def.name, tool.name, reason);
               return textResult(reason, true);
