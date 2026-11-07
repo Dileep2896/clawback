@@ -118,10 +118,26 @@ describe("recordingProblems", () => {
     expect(problems).toMatch(/1 secrets/);
     expect(problems).not.toContain("Reply YES");
   });
+
+  it.each([
+    ["quotes", 'pa"ss'],
+    ["backslashes", "pa\\ss"],
+    ["newlines", "pa\nss"],
+    ["all three", 'a"b\\c\nd'],
+  ])("finds a secret holding %s, which JSON escapes", (_name, secret) => {
+    const leaked = recordingOf([...GOOD_EVENTS, up(500, "sms_messages", { id: "s2", direction: "inbound", to: "x", from: "y", body: `code ${secret} end`, created_at: RECORDED_AT })]);
+    expect(recordingProblems(leaked, [secret]).join()).toMatch(/1 secrets/);
+  });
+
+  it("refuses a recording that could not be played", () => {
+    expect(recordingProblems({ ...good, durationMs: 1 }, []).join()).toMatch(/header says/);
+  });
 });
 
 describe("parseRecording", () => {
-  const text = (event: unknown) => `${JSON.stringify({ recordedAt: RECORDED_AT, durationMs: 1 })}\n${JSON.stringify(event)}\n`;
+  const header = { recordedAt: RECORDED_AT, durationMs: 0 };
+  const lines = (...rows: unknown[]) => rows.map((row) => JSON.stringify(row)).join("\n");
+  const text = (event: unknown) => lines(header, event);
 
   it("reads a good file", () => {
     expect(parseRecording(text(up(0, "runs", runRow("running")))).events).toHaveLength(1);
@@ -138,6 +154,27 @@ describe("parseRecording", () => {
 
   it("refuses a file with no header", () => {
     expect(() => parseRecording("{}\n")).toThrow(/header/);
+  });
+
+  const run = up(0, "runs", runRow("running"));
+  it.each([
+    ["a header with no events", lines(header), /no events/],
+    ["a date that is not a date", lines({ ...header, recordedAt: "yesterday" }, run), /header/],
+    ["a date that does not exist", lines({ ...header, recordedAt: "2026-02-30T10:00:00.000Z" }, run), /header/],
+    ["a negative duration", lines({ ...header, durationMs: -1 }, run), /header/],
+    ["a negative time", lines(header, { ...run, t: -1 }, run), /bad event/],
+    ["events out of order", lines({ ...header, durationMs: 5 }, { ...run, t: 10 }, { ...run, t: 5 }), /bad event/],
+    ["a file cut short", lines({ ...header, durationMs: 9000 }, run), /header says/],
+    ["a child before its run", lines({ ...header, durationMs: 5 }, up(0, "findings", finding), { ...run, t: 5 }), /start with its run/],
+    ["no run", lines(header, up(0, "findings", finding)), /start with its run/],
+    ["a run deleted at the end", lines({ ...header, durationMs: 5 }, run, { t: 5, table: "runs", op: "delete", id: RUN }), /exactly one run/],
+  ])("refuses %s", (_name, file, problem) => {
+    expect(() => parseRecording(file)).toThrow(problem);
+  });
+
+  it("reads the committed recording", () => {
+    const recording = parseRecording(readFileSync(new URL("../data/replay/run.jsonl", import.meta.url), "utf8"));
+    expect(recordingProblems(recording, [])).toEqual([]);
   });
 });
 
@@ -270,6 +307,24 @@ describe("replay", () => {
     withTestDb("replay_no_seed", async (db) => {
       await expect(replay(await options(db, recordingOf(GOOD_EVENTS)))).rejects.toMatchObject({ code: "23503" });
       expect(await db.$count(runs)).toBe(0);
+    }));
+
+  const noStatus: Record<string, unknown> = runRow("success");
+  delete noStatus.status;
+  it.each([
+    ["no events", { recordedAt: RECORDED_AT, durationMs: 0, events: [] }, /no events/],
+    ["an invalid date", { ...recordingOf(GOOD_EVENTS), recordedAt: "not a date" }, /header/],
+    ["a negative duration", { ...recordingOf(GOOD_EVENTS.slice(0, 4)), durationMs: -5 }, /header/],
+    ["a run row missing a required field", recordingOf([...GOOD_EVENTS, up(600, "runs", noStatus)]), /null value in column "status"/],
+    ["a late row with a bad time", recordingOf([...GOOD_EVENTS, up(600, "ledger", { id: "l2", customer_id: CUSTOMER, finding_id: "f1", kind: "savings", amount_cents: 1, created_at: "soon" })]), /timestamp/],
+    ["a late row naming a missing seed row", recordingOf([...GOOD_EVENTS, up(600, "findings", { ...finding, id: "f2", customer_id: "nobody" })]), /foreign key/],
+  ])("refuses %s before clearing anything", (_name, recording, problem) =>
+    withTestDb("replay_invalid", async (db) => {
+      await seedRun(db, "kept");
+      await seedCustomer(db);
+      await db.$client.query("update runs set status = 'success' where id = 'kept'");
+      await expect(replay(await options(db, recording as Recording))).rejects.toThrow(problem);
+      expect((await db.select().from(runs)).map(({ id, status }) => [id, status])).toEqual([["kept", "success"]]);
     }));
 });
 

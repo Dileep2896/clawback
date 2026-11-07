@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { RUNS_DIR } from "@bill-fighter/agents/customer-data";
 import { databaseHost, databaseUrl, db, type Db } from "@bill-fighter/db/client";
 
-const RUN_TABLES = ["runs", "findings", "actions", "approvals", "calls", "ledger", "board_cards", "audit_log", "sms_messages", "scheduled_checks"];
+export const RUN_TABLES = ["runs", "findings", "actions", "approvals", "calls", "ledger", "board_cards", "audit_log", "sms_messages", "scheduled_checks"];
 const SEED_TABLES = ["customers", "locations", "accounts", "authorizations", "bills", "bill_lines", "usage_intervals", "phone_lines"];
 const SEED_COUNTS = `select ${SEED_TABLES.map((table) => `(select count(*)::int from ${table}) as ${table}`).join(", ")}, (select count(*)::int from bills where parsed_json is not null) as parsed_bills`;
 const LOCAL_HOSTS = ["localhost", "127.0.0.1", "::1", "[::1]"];

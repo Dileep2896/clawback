@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { RUNS_DIR } from "@bill-fighter/agents/customer-data";
 import { databaseUrl, db, type Db } from "@bill-fighter/db/client";
-import { checkConnected, checkTarget, demoReset } from "./demo-reset.ts";
+import { checkConnected, checkTarget, demoReset, RUN_TABLES } from "./demo-reset.ts";
 
 type Pool = Db["$client"];
 type Row = Record<string, unknown>;
@@ -76,24 +76,45 @@ export function recordingProblems(recording: Recording, secrets: string[]) {
   if (calls.length === 0) problems.push("no call");
   if (calls.some(({ mode }) => mode !== "sim")) problems.push("a call is not sim");
   if (calls.some(({ transcript_json: rows }) => (rows as { kind?: string }[] | null)?.some(({ kind }) => kind === "fallback"))) problems.push("a call fell back from live");
+  try {
+    checkRecording(recording);
+  } catch (error) {
+    problems.push((error as Error).message);
+  }
   const text = JSON.stringify(recording);
-  const leaks = secrets.filter((secret) => text.includes(secret)).length;
+  // Escaped the way the file escapes it, so a secret holding quotes, backslashes or newlines still matches.
+  // shortcut: misses a secret re-encoded inside a string (JSON in JSON, base64), upgrade if tool data ever enters the file.
+  const leaks = secrets.filter((secret) => text.includes(JSON.stringify(secret).slice(1, -1))).length;
   if (leaks > 0) problems.push(`${leaks} secrets appear in the recording`);
   return problems;
 }
 
 const serialize = ({ events, ...header }: Recording) => [header, ...events].map((line) => JSON.stringify(line)).join("\n") + "\n";
+const isIsoTime = (text: unknown) => typeof text === "string" && !Number.isNaN(Date.parse(text)) && new Date(text).toISOString() === text;
 
-export function parseRecording(text: string): Recording {
-  const [header, ...lines] = text.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
-  const events = lines as ReplayEvent[];
-  if (typeof header?.recordedAt !== "string" || typeof header.durationMs !== "number") throw new Error("The recording has no valid header");
+/** Throws on a recording that cannot play as one labelled run. Called before anything is cleared. */
+export function checkRecording({ recordedAt, durationMs, events }: Recording) {
+  if (!isIsoTime(recordedAt) || !Number.isFinite(durationMs) || durationMs < 0) throw new Error("The recording has no valid header");
+  if (events.length === 0) throw new Error("The recording has no events");
+  let last = 0;
   for (const { t, table, op, id, row } of events) {
     // These names go into SQL. The file is committed, but a bad line must stop here rather than half way through a demo.
-    if (typeof t !== "number" || !TABLES.includes(table) || !["upsert", "delete"].includes(op) || typeof id !== "string") throw new Error(`The recording has a bad event: ${table} ${id}`);
+    if (!Number.isFinite(t) || t < last || !TABLES.includes(table) || !["upsert", "delete"].includes(op) || typeof id !== "string") throw new Error(`The recording has a bad event: ${table} ${id} at ${t}`);
     if (op === "upsert" && (!row || row.id !== id || !Object.keys(row).every((column) => /^\w+$/.test(column)))) throw new Error(`The recording has a bad row: ${table} ${id}`);
+    last = t;
   }
-  return { recordedAt: header.recordedAt, durationMs: header.durationMs, events };
+  // A cut-off file ends early, and its header still says how long the run was.
+  if (durationMs !== last) throw new Error(`The recording ends at ${last} ms but its header says ${durationMs} ms`);
+  // The run row carries the replay label, so it must be there from the first tick.
+  if (events.find(({ table, op }) => table === "runs" && op === "upsert")?.t !== 0) throw new Error("The recording does not start with its run");
+  if (isRow(finalRows(events), "runs").length !== 1) throw new Error("The recording does not end with exactly one run");
+}
+
+export function parseRecording(text: string): Recording {
+  const [header, ...events] = text.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
+  const recording = { recordedAt: header?.recordedAt, durationMs: header?.durationMs, events } as Recording;
+  checkRecording(recording);
+  return recording;
 }
 
 export type CaptureOptions = {
@@ -191,19 +212,37 @@ export function checkSpeed(speed: number) {
   if (!Number.isFinite(speed) || speed < MIN_SPEED || speed > MAX_SPEED) throw new Error(`--speed must be a number from ${MIN_SPEED} to ${MAX_SPEED}`);
 }
 
-async function applyTick(client: Pick<Pool, "query">, events: ReplayEvent[], label: Row) {
+type Client = Pick<Pool, "query">;
+
+async function applyEvents(client: Client, events: ReplayEvent[], label: Row) {
   const order = (event: ReplayEvent) => TABLES.indexOf(event.table);
   const deletes = events.filter(({ op }) => op === "delete").sort((a, b) => order(b) - order(a));
   const upserts = events.filter(({ op }) => op === "upsert").sort((a, b) => order(a) - order(b));
+  for (const { table, id } of deletes) await client.query(`delete from ${table} where id = $1`, [id]);
+  for (const { table, row } of upserts) {
+    // On every run update, so no poll can ever read this run without its label.
+    const values = table === "runs" ? { ...row, replay: label } : row!;
+    const sets = Object.keys(values).filter((column) => column !== "id").map((column) => `"${column}" = excluded."${column}"`);
+    await client.query(`insert into ${table} select * from jsonb_populate_record(null::${table}, $1::jsonb) on conflict (id) do update set ${sets.join(", ")}`, [JSON.stringify(values)]);
+  }
+}
+
+/** Plays every tick into an empty copy of the run tables and rolls it all back, so a row this database cannot hold (a missing field, a bad value, a seed row it lacks) fails before the reset clears the last run. */
+async function rehearse(client: Client, ticks: Iterable<ReplayEvent[]>, label: Row) {
   await client.query("BEGIN");
   try {
-    for (const { table, id } of deletes) await client.query(`delete from ${table} where id = $1`, [id]);
-    for (const { table, row } of upserts) {
-      // On every run update, so no poll can ever read this run without its label.
-      const values = table === "runs" ? { ...row, replay: label } : row!;
-      const sets = Object.keys(values).filter((column) => column !== "id").map((column) => `"${column}" = excluded."${column}"`);
-      await client.query(`insert into ${table} select * from jsonb_populate_record(null::${table}, $1::jsonb) on conflict (id) do update set ${sets.join(", ")}`, [JSON.stringify(values)]);
-    }
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query(`TRUNCATE ${RUN_TABLES.join(", ")}`);
+    for (const events of ticks) await applyEvents(client, events, label);
+  } finally {
+    await client.query("ROLLBACK");
+  }
+}
+
+async function applyTick(client: Client, events: ReplayEvent[], label: Row) {
+  await client.query("BEGIN");
+  try {
+    await applyEvents(client, events, label);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -214,6 +253,7 @@ async function applyTick(client: Pick<Pool, "query">, events: ReplayEvent[], lab
 /** Timestamps go in exactly as recorded, so every time on screen is true. Each tick is timed from the start, so errors cannot add up. */
 export async function replay({ pool, url, runsDir, allowNonlocal, recording, speed, force }: ReplayOptions) {
   checkSpeed(speed);
+  checkRecording(recording);
   checkTarget({ url, mailpitApi: null, allowNonlocal });
   await checkConnected({ pool, url });
 
@@ -228,12 +268,14 @@ export async function replay({ pool, url, runsDir, allowNonlocal, recording, spe
       throw new Error(`Run ${live.join(", ")} is still marked running. If it may be alive, restart \`pnpm dev:webhooks\` so it cannot write into the replay, then add --force.`);
     }
 
+    const ticks = new Map<number, ReplayEvent[]>();
+    for (const event of recording.events) ticks.set(event.t, [...(ticks.get(event.t) ?? []), event]);
+    await rehearse(client, ticks.values(), { recordedAt: recording.recordedAt, speed, startedAt: new Date().toISOString() });
+
     await demoReset({ pool, url, mailpitApi: null, runsDir, allowNonlocal });
 
     const start = Date.now();
     const label = { recordedAt: recording.recordedAt, speed, startedAt: new Date(start).toISOString() };
-    const ticks = new Map<number, ReplayEvent[]>();
-    for (const event of recording.events) ticks.set(event.t, [...(ticks.get(event.t) ?? []), event]);
     for (const [t, events] of ticks) {
       const wait = start + t / speed - Date.now();
       if (wait > 0) await sleep(wait);
