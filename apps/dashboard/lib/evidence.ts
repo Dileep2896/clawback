@@ -58,7 +58,7 @@ const DETAIL = { meterMultiplierJump: meter, rateOptimization: rate, unusedLines
 
 /** Null when the row is not what the rules write, so the drawer can say so. */
 export function parseEvidence(type: string, evidenceJson: unknown): Evidence | null {
-  const schema = DETAIL[type as keyof typeof DETAIL];
+  const schema = Object.hasOwn(DETAIL, type) ? DETAIL[type as keyof typeof DETAIL] : null;
   const evidence = FindingEvidence.safeParse(evidenceJson);
   if (!schema || !evidence.success) return null;
   const detail = schema.safeParse(evidence.data.detail);

@@ -53,6 +53,11 @@ describe("parseEvidence", () => {
     expect(parseEvidence("unusedLines", { billIds: [], billLineIds: [], phoneLineIds: [], detail: {} })).toBeNull();
     expect(parseEvidence("notARule", { ...ids, detail: {} })).toBeNull();
   });
+
+  it("returns null for a type that only names something every object inherits", () => {
+    expect(parseEvidence("constructor", { ...ids, detail: {} })).toBeNull();
+    expect(parseEvidence("__proto__", { ...ids, detail: {} })).toBeNull();
+  });
 });
 
 describe("formatting", () => {
