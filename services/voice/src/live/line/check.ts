@@ -69,7 +69,7 @@ export function checkLineCall(messages: CallMessage[]): string[] {
   if (opening.length === 0) problems.push("the assistant spoke before the caller");
   else if (!`${openingText} `.startsWith(`${normalize(DISCLOSURE_LINE)} `)) problems.push("the caller did not open with the full disclosure");
   if (opening.some((m) => m.endTime > menu.time)) problems.push("the assistant spoke over the disclosure");
-  if (!normalize(menu.message ?? "").includes(normalize(MENU_LINE))) problems.push("the first thing said was not the menu");
+  if (!normalize(menu.message ?? "").startsWith(normalize(MENU_LINE))) problems.push("the first thing said was not the menu");
 
   const keypad = spoken.findIndex((m) => keypadDigit(m) === "2");
   const keyPress = spoken[keypad];
@@ -85,7 +85,7 @@ export function checkLineCall(messages: CallMessage[]): string[] {
   if (keyPress) {
     // The greeting, not just any line: an empty entry or the closing line alone is a hang up.
     const repFirst = spoken.slice(keypad + 1).find((m) => isBot(m) && normalize(m.message ?? ""));
-    if (!normalize(repFirst?.message ?? "").includes(normalize(REP_LINES.greeting))) {
+    if (!normalize(repFirst?.message ?? "").startsWith(normalize(REP_LINES.greeting))) {
       problems.push("the rep did not open with its greeting after the key press");
     }
   }

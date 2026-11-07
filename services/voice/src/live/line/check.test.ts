@@ -80,7 +80,7 @@ describe("checkLineCall", () => {
 
   it("flags a claimed tone as off script", () => {
     const problems = check([disclosure, bot(MENU_LINE), keypad("2"), bot(`Key press received. ${REP_LINES.greeting}`)]);
-    expect(problems).toEqual(['off script as the rep: "key press received"']);
+    expect(problems).toEqual(['off script as the rep: "key press received"', "the rep did not open with its greeting after the key press"]);
   });
 
   it("does not accept another digit", () => {
@@ -204,6 +204,18 @@ describe("checkLineCall", () => {
     it("fails a rep line before the greeting", () => {
       expect(check([disclosure, bot(MENU_LINE), keypad("2"), bot(REP_LINES.account), bot(REP_LINES.greeting)])).toContain(
         "the rep did not open with its greeting after the key press",
+      );
+    });
+
+    it("fails a rep line before the greeting in the same message", () => {
+      expect(check([disclosure, bot(MENU_LINE), keypad("2"), bot(`${REP_LINES.account} ${REP_LINES.greeting}`)])).toEqual([
+        "the rep did not open with its greeting after the key press",
+      ]);
+    });
+
+    it("fails the closing line before the menu in the same message", () => {
+      expect(check([disclosure, bot(`${CLOSING_LINE} ${MENU_LINE}`), keypad("2"), bot(REP_LINES.greeting)])).toContain(
+        "the first thing said was not the menu",
       );
     });
 
