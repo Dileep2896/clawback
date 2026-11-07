@@ -8,6 +8,18 @@ STARTED 2026-11-07 by the human. See "Changes after recon". Follow section 16 ex
 
 **Needs from the human:** `NAIVE_API_KEY`, `NAIVE_COMPANY_ID`, `NAIVE_IDENTITY_ID`, `NAIVE_CARD_ID`, DNS access for a custom domain, and a public URL or tunnel for the portal and webhook.
 
+## Changes after recon (2026-11-07), these override the task text below
+
+Started by the human on 2026-11-07 ("Yes, start the recon"). `naive-recon` shipped `docs/plan/naive-notes.md`; read it first, it is the source of truth for API names and blockers. Human decisions:
+- **Key:** new `NAIVE_API_KEY` in root `.env` with agents, sessions, audit:read, webhooks:*, admin, billing:read; no billing:write. Copy the `NAIVE_*` lines into your worktree `.env`; never print or commit them.
+- **No phone number.** Approval on naïve is the emailed request plus the dashboard tap. Drop every "YES by text" and "inbound SMS wake" check; `Sms` send reports not available.
+- **Card:** naïve card issuing is off (501). Use the local mock card, reported honestly as not naïve.
+- **Org:** renamed "ClawBack". The system domain stays `new-company-qffcxs.usenaive.ai` (human: "keep it for now"). Sending was `pending_verification` at 13:20; check `GET /v1/domains/{id}` before relying on sends.
+- **Tunnel:** a `cloudflared` quick tunnel is allowed only while a naïve run or test is going, exposing only the MCP tool server (bearer token from a naïve vault) and the session-event webhook. Close it afterwards. The portal stays local; the Collector keeps Playwright and the local vault.
+- **Spend:** naïve sessions spend the human's $250 naïve credit. Unit tests and mocks are free. Before the **first live session in each lane**, ask the orchestrator in `questions.md` with the expected cost; set an agent `budget` cap on every agent (at most $2 a run). Read-only API calls are fine without asking. Voice stays `VOICE_MODE=sim`.
+- **Stage:** `PLATFORM=local` stays the stage default until `naive-rehearsal` passes three runs and the human chooses.
+- Reviewers: verify claims against the live docs at `usenaive.ai/docs/<path>.md`.
+
 ## Notes from earlier research
 
 From partial docs reads on 2026-11-06. Research stopped early by instruction, and several pages could not be opened. Recheck all of this in `naive-recon`.
