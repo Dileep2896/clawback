@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { RUNS_DIR } from "@bill-fighter/agents/customer-data";
 import { databaseUrl, db, type Db } from "@bill-fighter/db/client";
+import type { Vault } from "@bill-fighter/platform/types";
 import { checkConnected, checkTarget, demoReset, RUN_TABLES } from "./demo-reset.ts";
 
 type Pool = Db["$client"];
@@ -291,14 +292,14 @@ export async function replay({ pool, url, runsDir, allowNonlocal, recording, spe
 const minutes = (ms: number) => `${Math.floor(ms / 60_000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
 /** Loaded only here, so plain replay never touches the platform, the vault or anything else that could need a network. */
-async function secretValues() {
-  const { getPlatform } = await import("@bill-fighter/platform/factory");
+export async function secretValues(vault?: Vault) {
   const { Provider } = await import("@bill-fighter/shared/fixtures");
   const { portalVaultName } = await import("@bill-fighter/shared/portal");
-  const vault = await getPlatform().vault();
-  const passwords = await Promise.all(Provider.options.map((provider) => vault.get(portalVaultName(provider, "password"))));
+  vault ??= await (await import("@bill-fighter/platform/factory")).getPlatform().vault();
+  const fields = ["username", "password"] as const;
+  const credentials = await Promise.all(Provider.options.flatMap((provider) => fields.map((field) => vault.get(portalVaultName(provider, field)))));
   const fromEnv = Object.entries(process.env).flatMap(([name, value]) => (/(_KEY|_TOKEN|_SECRET)$/.test(name) && value ? [value] : []));
-  return [...passwords, ...fromEnv];
+  return [...credentials, ...fromEnv];
 }
 
 function explain(error: unknown) {

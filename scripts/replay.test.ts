@@ -8,7 +8,7 @@ import { databaseUrl, type Db } from "@bill-fighter/db/client";
 import { actions, approvals, auditLog, calls, customers, findings, ledger, runs, smsMessages } from "@bill-fighter/db/schema";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { capture, checkSpeed, diffRows, parseRecording, recordingProblems, replay, type Recording, type ReplayEvent } from "./replay.ts";
+import { capture, checkSpeed, diffRows, parseRecording, recordingProblems, replay, secretValues, type Recording, type ReplayEvent } from "./replay.ts";
 
 vi.setConfig({ testTimeout: 60_000 });
 
@@ -127,6 +127,12 @@ describe("recordingProblems", () => {
   ])("finds a secret holding %s, which JSON escapes", (_name, secret) => {
     const leaked = recordingOf([...GOOD_EVENTS, up(500, "sms_messages", { id: "s2", direction: "inbound", to: "x", from: "y", body: `code ${secret} end`, created_at: RECORDED_AT })]);
     expect(recordingProblems(leaked, [secret]).join()).toMatch(/1 secrets/);
+  });
+
+  it.each(["username", "password"])("refuses a capture holding a vault %s", async (field) => {
+    const vault = { put: async () => {}, get: async (name: string) => `${name}-value` };
+    const leaked = recordingOf([...GOOD_EVENTS, up(500, "sms_messages", { id: "s2", direction: "inbound", to: "x", from: "y", body: `it is portal/baycurrent/${field}-value`, created_at: RECORDED_AT })]);
+    expect(recordingProblems(leaked, await secretValues(vault)).join()).toMatch(/1 secrets/);
   });
 
   it("refuses a recording that could not be played", () => {
