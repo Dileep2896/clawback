@@ -153,6 +153,48 @@ async function checkLanding(page: Page, name: string) {
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/landing-${name}.png`, fullPage: true });
 }
 
+// The hero at 320px: every piece of text in the playback sits inside the figure, which clips with overflow-hidden.
+const CLIPPED_IN_HERO = `(() => {
+  const figure = document.querySelector("figure");
+  const box = figure.getBoundingClientRect();
+  const clipped = [];
+  const walker = document.createTreeWalker(figure, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (!node.textContent.trim() || node.parentElement.closest(".sr-only")) continue;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const r = range.getBoundingClientRect();
+    if (r.left < box.left - 0.5 || r.right > box.right + 0.5) clipped.push(node.textContent.trim());
+  }
+  return clipped;
+})()`;
+async function checkLandingNarrowest(page: Page) {
+  await page.emulateMedia({ reducedMotion: "reduce" }); // the finished run: every row, the evidence and the refund showing
+  await page.goto(BASE);
+  await page.getByText("Claimed, due only when granted").waitFor();
+  assert.deepEqual(await page.evaluate<string[]>(CLIPPED_IN_HERO), [], "landing 320: hero text clipped");
+  const { scrollWidth, innerWidth } = await page.evaluate<PageMeasure>(MEASURE_PAGE);
+  assert.ok(scrollWidth <= innerWidth, `landing 320: page scrolls sideways, ${scrollWidth}px wide in ${innerWidth}px`);
+  if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/landing-320.png` });
+}
+
+// Turning reduced motion on while the hero plays stops it on the finished run, with no Pause button left.
+async function checkLandingReducedMotionChange(page: Page) {
+  await page.goto(BASE);
+  const pause = page.getByRole("button", { name: "Pause" });
+  await pause.waitFor();
+  await page.waitForTimeout(1000);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByText("Claimed, due only when granted").waitFor({ timeout: 2000 });
+  assert.equal(await pause.isVisible(), false, "landing: Pause still shown under reduced motion");
+  const progress = () => page.locator("figure [style*=scaleX]").getAttribute("style");
+  const before = await progress();
+  await page.waitForTimeout(1000);
+  assert.equal(await progress(), before, "landing: playback still moving under reduced motion");
+  assert.match(before ?? "", /scaleX\(1\)/, "landing: reduced motion does not show the finished run");
+}
+
 // Every nav link reaches its page, and the current page is marked.
 async function checkNav(page: Page) {
   await page.goto(`${BASE}/agents`);
@@ -196,6 +238,8 @@ try {
   await checkNarrow(await (await signedInContext(browser, BASE, { viewport: { width: 390, height: 844 } })).newPage());
   await checkLanding(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage(), "1920");
   await checkLanding(await (await signedInContext(browser, BASE, { viewport: { width: 390, height: 844 } })).newPage(), "390");
+  await checkLandingNarrowest(await (await signedInContext(browser, BASE, { viewport: { width: 320, height: 640 } })).newPage());
+  await checkLandingReducedMotionChange(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage());
   await checkNav(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage());
   console.info("dashboard-shell check passed");
 } finally {

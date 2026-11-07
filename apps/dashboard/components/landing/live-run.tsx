@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { advance, CALL, COUNT_END, COUNT_START, FADE_AT, FINISHED, markAt, REFUND_CENTS, refundCentsAt, startAt, STEPS, typedAt, type Mark } from "./timeline.ts";
 
 // What the playback shows besides the timeline, all from the recorded demo run (data/replay/run.jsonl).
@@ -76,7 +76,7 @@ function Row({ step, t }: { step: (typeof STEPS)[number]; t: number }) {
   const mark = markAt(step, t);
   return (
     // The status column has a fixed width, so a row never re-wraps when its word changes ("" → "on the call" → "done").
-    <div className={`grid grid-cols-[1.5rem_minmax(0,1fr)_6.5rem] items-center gap-x-3 py-2.5 ${mark === "idle" ? "text-band-faded" : ""}`}>
+    <div className={`grid grid-cols-[1.5rem_minmax(0,1fr)_5.5rem] items-center gap-x-2 sm:grid-cols-[1.5rem_minmax(0,1fr)_6.5rem] sm:gap-x-3 py-2.5 ${mark === "idle" ? "text-band-faded" : ""}`}>
       <Glyph mark={mark} />
       <span className="flex min-w-0 flex-wrap gap-x-4">
         <span className="w-[10ch] shrink-0 font-sans font-semibold">{step.agent}</span>
@@ -87,7 +87,16 @@ function Row({ step, t }: { step: (typeof STEPS)[number]; t: number }) {
   );
 }
 
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+const onReducedMotionChange = (notify: () => void) => {
+  const query = matchMedia(REDUCED_MOTION);
+  query.addEventListener("change", notify);
+  return () => query.removeEventListener("change", notify);
+};
+
 function useRunClock() {
+  // Live, so turning reduced motion on mid-loop stops the clock and shows the finished run.
+  const reduced = useSyncExternalStore(onReducedMotionChange, () => matchMedia(REDUCED_MOTION).matches, () => false);
   const [t, setT] = useState(0);
   const [canPlay, setCanPlay] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -99,10 +108,9 @@ function useRunClock() {
   }, [paused]);
 
   useEffect(() => {
-    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
     setT(startAt(reduced));
+    setCanPlay(!reduced);
     if (reduced) return;
-    setCanPlay(true);
     let visible = true;
     let elapsed = 0;
     let last = performance.now();
@@ -122,7 +130,7 @@ function useRunClock() {
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, []);
+  }, [reduced]);
 
   return { t, ref, canPlay, paused, setPaused };
 }
@@ -159,11 +167,11 @@ export function LiveRun() {
             <Row step={STEPS[0]!} t={t} />
             <Row step={STEPS[1]!} t={t} />
             <dl
-              className={`mb-1 ml-9 grid grid-cols-[auto_auto] justify-start gap-x-6 text-base whitespace-nowrap sm:grid-cols-[auto_auto_auto] ${flagged ? "" : "invisible"}`}
+              className={`mb-1 ml-9 grid grid-cols-1 justify-start gap-x-6 text-base sm:grid-cols-[auto_auto_auto] sm:whitespace-nowrap ${flagged ? "" : "invisible"}`}
             >
               {EVIDENCE.map((row) => (
                 <div key={row.month} className={`col-span-full grid grid-cols-subgrid ${flagged ? "live-flash" : ""}`}>
-                  <dt className="col-span-2 text-band-faded sm:col-span-1">{row.month}</dt>
+                  <dt className="text-band-faded">{row.month}</dt>
                   <dd className="text-band-alert tabular-nums">billed {row.billed} kWh</dd>
                   <dd className="text-band-faded tabular-nums">meter {row.meter}</dd>
                 </div>
@@ -207,7 +215,7 @@ export function LiveRun() {
             {/* The refund appears only once Finance starts counting it: no $0.00 while other agents work. */}
             <div className={`grid gap-2 ${t < COUNT_START ? "invisible" : ""}`}>
               <span className="text-base text-band-faded">Refund across 14 Fremont bills</span>
-              <span className="grid font-figure text-[clamp(3rem,4.4vw,5.25rem)] leading-none text-band-money">
+              <span className="grid font-figure text-[clamp(2.25rem,11vw,3rem)] sm:text-[clamp(3rem,4.4vw,5.25rem)] leading-none text-band-money">
                 <span className="invisible col-start-1 row-start-1">{usd.format(REFUND_CENTS / 100)}</span>
                 <span className="col-start-1 row-start-1">{usd.format(cents / 100)}</span>
               </span>
