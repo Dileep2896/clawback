@@ -286,6 +286,30 @@ describe("naïve runtime", () => {
     ]);
   });
 
+  it("answers each member that holds the same call id, and the coordinator copy not at all", async () => {
+    const { gate } = fakeGate({ status: "approved", actionIds: ["a1"] });
+    const { api, calls } = fakeNaive((sessions, tick) => {
+      const root = sessions.get("ses_root")!;
+      const member = (id: string) => ({ id, status: "idle", stop_reason: "awaiting_approval", pending_actions: [parked("c1", "a1")], consumed_micro_usd: 0, events: [] });
+      if (tick === 0) {
+        root.events.push({ seq: 1, type: "thread.created", data: { thread_id: "ses_m", member: "clawback-filer" } });
+        root.events.push({ seq: 2, type: "thread.created", data: { thread_id: "ses_m2", member: "clawback-filer" } });
+        Object.assign(root, { status: "idle", stop_reason: "awaiting_approval", pending_actions: [parked("c1", "a1")] });
+        sessions.set("ses_m", member("ses_m"));
+        sessions.set("ses_m2", member("ses_m2"));
+      }
+      if (tick === 3) {
+        for (const id of ["ses_m", "ses_m2"]) sessions.get(id)!.status = "completed";
+        Object.assign(root, { stop_reason: "end_turn", pending_actions: [] });
+      }
+    });
+    await collect(runtime(api, gate, fakeBudget(), fakeAudit().audit).run(SPEC));
+    expect(calls.filter((c) => c.path.endsWith("/tool_confirmations")).map((c) => c.path)).toEqual([
+      "/sessions/ses_m/tool_confirmations",
+      "/sessions/ses_m2/tool_confirmations",
+    ]);
+  });
+
   it("denies an independent handoff and a call approved only in another run", async () => {
     const { gate } = fakeGate({ status: "pending", actionIds: [] });
     gate.isReleased = async () => true; // approved in some other run's bundle

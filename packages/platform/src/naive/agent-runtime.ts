@@ -308,20 +308,21 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
         if (session.stop_reason === "awaiting_approval")
           for (const action of session.pending_actions.filter((a) => (a.kind ?? "tool") === "tool")) parkedRows.push({ sessionId, action });
       }
-      // naïve also lists a member's parked call on the coordinator (seen in the probe): answer each call once, on the
-      // member, and count every listing of it seen with it as handled.
+      // naïve also lists a member's parked call on the coordinator (seen in the probe): answer every member's
+      // occurrence on its own session, and only count the coordinator copy as handled with it.
       const byCall = new Map<string, typeof parkedRows>();
       for (const row of parkedRows) byCall.set(row.action.tool_call_id, [...(byCall.get(row.action.tool_call_id) ?? []), row]);
       for (const rows of byCall.values()) {
-        // Over budget, nothing more is confirmed: the run stops and cancels below.
-        if (over) break;
         const fresh = rows.filter((row) => !handled.has(occurrence(row.sessionId, row.action)));
-        const onMember = rows.some((row) => row.sessionId !== root.id);
-        // A coordinator copy is never answered while the member holds the call.
-        const pick = fresh.find((row) => row.sessionId !== root.id) ?? (onMember ? undefined : fresh[0]);
-        if (!pick) continue;
-        if (await decide(pick.sessionId, pick.action)) for (const row of fresh) handled.add(occurrence(row.sessionId, row.action));
-        else waitingOnOwner = true;
+        const copies = fresh.filter((row) => row.sessionId === root.id);
+        // A coordinator copy is never answered while a member holds the call.
+        const picks = rows.some((row) => row.sessionId !== root.id) ? fresh.filter((row) => row.sessionId !== root.id) : copies.slice(0, 1);
+        for (const pick of picks) {
+          // Over budget, nothing more is confirmed: the run stops and cancels below.
+          if (over) break;
+          if (await decide(pick.sessionId, pick.action)) for (const row of [pick, ...copies]) handled.add(occurrence(row.sessionId, row.action));
+          else waitingOnOwner = true;
+        }
       }
       yield* pending.splice(0);
       const rootSession = owned.get(root.id)!.session!;
