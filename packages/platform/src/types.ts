@@ -118,6 +118,8 @@ export interface BrowserSession {
   click(selector: string): Promise<void>;
   isVisible(selector: string): Promise<boolean>;
   texts(selector: string): Promise<string[]>;
+  /** One value per matching element, "" where the element lacks the attribute. */
+  attributes(selector: string, name: string): Promise<string[]>;
   /** Clicks selector and saves the resulting download to destPath. */
   download(selector: string, destPath: string): Promise<void>;
   close(): Promise<void>;
