@@ -36,7 +36,7 @@ export default async function check() {
     const message = (await (await fetch(`${api}/api/v1/message/${summary.ID}`)).json()) as Message;
     assert.equal(message.Subject, subject);
     assert.equal(message.Text.trim(), "check body");
-    assert.equal(message.From.Address, "bills@billfighter.local");
+    assert.equal(message.From.Address, env.COMPANY_EMAIL || "bills@billfighter.local");
     assert.deepEqual(message.To.map((to) => to.Address), ["owner@billfighter.local"]);
   } finally {
     await remove(summary.ID);
