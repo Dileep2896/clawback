@@ -175,6 +175,73 @@ All checked with stubbed tests only. No call, chat rehearsal or `provision` was 
 
 `pnpm exec tsx --env-file=.env services/voice/src/live/line/cli.ts provision | rehearse | readback <call id>`. None of them can place a call. With no card on Vapi, `rehearse` stops at its first request with a 402 message.
 
+## Live caller (`voice-live-caller`)
+
+Code is in `services/voice/src/live/caller/`. **One real call has run (2026-11-07, Retell `call_5063699ba3b221ad214366fd7ff`, Vapi `01a1b4ea-f9a6-7000-91d4-86fc33175855`).** Both sides were provisioned for it. The test script passed, but the line check did not. See below.
+
+### Acceptance checks
+
+| Check | Result |
+|---|---|
+| A real call reaches the line and completes with no human on it | **Met.** 160.9 s, ended `agent_hangup`. |
+| The disclosure is first, word for word, in recording and transcript | **Met.** See "Disclosure check" below. Vapi's independent check reported "the caller did not open with the full disclosure"; the recording overrides it. |
+| `ALLOWED_CALL_NUMBERS` holds only the Vapi number, and any other number never dials | Met on stubs: zero requests for another number, an empty or wider list, or any other path that places a call. The real call went to the Vapi number. |
+| A ticket number is saved in `calls.outcome_json` with `calls.mode=live` | **Met.** `BT-48213`, with all seven lines and three promo accounts. |
+| The cost of each live call is logged, and calls are kept short | Logged, about $0.45. **Not short:** 161 s against the demo script's 50 s. |
+| A forced failure falls back to sim automatically, with the on-screen label | Met on stubs, including an empty `RETELL_API_KEY`, which sends no request. The label is proven on the row. `panels-action` has not shipped the panel that shows it. |
+
+### Disclosure check
+
+Evidence from the recording of the one real call, which is mono and 160.9 s:
+
+- **Human listen, relayed by the orchestrator, verbatim:** "okay it looks good".
+- **Whisper `small.en`, whole recording, 0.00 to 6.06 s:** "Hi, this is an AI assistant calling on behalf of Golden Gate Noodle Company." "This call is being recorded."
+- **Whisper `base.en` and `medium.en`, the first 8.2 s cut out on its own, identical text:** "Hi, this is an AI assistant calling on behalf of Golden Gate Noodle Company. This call is being recorded."
+- **Order:** the audio level shows the disclosure ending at about 5.9 s and the next speech starting at about 8.2 s. That speech is the menu: "Thanks for calling Baytel Business. For billing, press 2." (`small.en` and `medium.en`).
+
+The transcripts ran locally, so the audio went to no outside service.
+
+**The discrepancy:** the recording shows the full disclosure before the menu, so Vapi's report does not reflect what the recording holds. As the line's open risks say, this check allows no word differences and a problem needs comparing with the recording. Why Vapi's check failed is not confirmed, because `cli.ts` does not print Vapi's text and it was not re-read. This is Retell's recording, so it does not show what reached Vapi's end in the first moments of the call.
+
+### Human's decisions (2026-11-06, relayed by the orchestrator)
+
+- **During a call the screen shows an in-progress row, and the whole transcript when the call ends.** No tunnel. Retell only gives the transcript after the call ends (`get-call`), and its live webhook needs a public URL.
+- **The read-back is short:** it counts the lines and accounts. Each item already has the rep's own yes.
+- **A call that ends normally with no ticket is a failed live call.** The partial row stays, and sim takes over with the label.
+- **`recording_url` is stored plain.** Revisit before any non-demo use.
+
+### How it behaves
+
+- **One call per action, ever.** The row goes in before the dial, so a retry or crash cannot pay for a second call. `scripts/voice-live-test.ts` uses a throwaway database, so each run is a fresh call, and it needs `--place-real-call`.
+- **The row starts empty of speech.** It holds only `status` rows until the call ends, then Retell's own record, so it never claims speech that has not happened.
+- **The Retell call id is on the row** as a `status` row, for reading back by hand.
+- **A call is judged on content, not on why it ended.** `user_hangup` with a ticket is good. `max_duration_reached` with no ticket is not.
+- **`provision` prints `RETELL_CALLER_AGENT_ID` and `RETELL_CALLER_AGENT_VERSION`, which must be set in the environment.** The engine reads both at call time and refuses to dial without them.
+
+### Open risks
+
+- **The line check failed on the one real call, and the causes are not confirmed.** `checkLineCall` reported the disclosure problem above, "the rep did not open with its greeting" with the greeting logged as "paytel billing...", and seven "off script" entries for "yes that is canceled". The seven look like spelling only, since the check does not treat "canceled" and "cancelled" as equal the way `extractOutcome` does. The recording settles the disclosure (see "Disclosure check") but not why the check failed. The greeting is not settled by transcript: `small.en` heard "Baytel billing", `base.en` heard "Beto Billing", and `medium.en` missed those words.
+- **The caller spoke over the rep's account question** on that call. The rep still accepted the account. The human has heard the recording, and the prompt is unchanged in this lane. The human wants the caller to answer the rep's questions instead of following a fixed script, which is a new lane after this one ships.
+- **One real call is one sample.** Speech-to-text also gave "Baytown Billing" and an added "Um", which changed no outcome.
+- **`extractOutcome` needs the rep's exact words.** If Retell's speech-to-text turns "that is" into "that's", the item stays out, and with no ticket the call falls back.
+- **Normalising only handles single digits.** "Double five" or "seven thousand one" leaves the item out.
+- **Vapi's share of the run budget is an estimate** ($0.07 a minute, about $0.19 on the real call, which matched). The real figure comes from `cli.ts readback`.
+- **The live agent dials `RETELL_CALLER_AGENT_VERSION`, the version `provision` read back.** Whether an updated draft stays on the same version is not confirmed.
+- **The call took 161 s, and the demo script gives a call 50 s.** Seven lines and three promos, one at a time, will not fit that. This is the rehearsal decision noted in `HANDOVER.md`.
+
+### Cost log
+
+| Date | What | Cost |
+|---|---|---|
+| 2026-11-07 | Full test 1, 160.9 s: Retell $0.2575, Vapi $0.19, both from read-back | **$0.4475** |
+
+### Commands
+
+Each of these talks to a paid account. Run one only with the word for that exact step.
+
+- `pnpm exec tsx --env-file=.env services/voice/src/live/caller/cli.ts provision | readback <retell call id> | readback-line <retell start ms>`
+- `pnpm exec tsx --env-file=.env scripts/voice-live-test.ts --place-real-call` **places a real call**
+
 ## Sources (read 2026-11-06)
 
 - Retell: [create phone call](https://docs.retellai.com/api-references/create-phone-call), [get call](https://docs.retellai.com/api-references/get-call), [create agent](https://docs.retellai.com/api-references/create-agent), [create Retell LLM](https://docs.retellai.com/api-references/create-retell-llm), [press digit](https://docs.retellai.com/build/single-multi-prompt/press-digit), [versions](https://docs.retellai.com/agent/version), [pricing](https://www.retellai.com/pricing)
