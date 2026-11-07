@@ -44,7 +44,7 @@ export const MEMBERS: AgentDef[] = [
 
 const ROSTER = [CEO, ...MEMBERS];
 
-/** The only way to get a RunSpec, so every tool a run holds has been through the wrapper. */
+/** Wraps every tool it hands to a run, so build specs here rather than by hand. */
 export function buildRunSpec({
   runId,
   prompt,
