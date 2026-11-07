@@ -24,7 +24,7 @@ export default function Landing() {
   return (
     <div className="min-h-dvh overflow-x-clip">
       <div className="band bg-band text-band-text">
-        <header className="mx-auto flex max-w-[1320px] items-center gap-3 px-4 py-4 sm:px-6">
+        <header className="mx-auto flex max-w-[1320px] flex-wrap items-center gap-3 px-4 py-4 sm:px-6">
           <span className="text-[1.5rem] [&_svg]:text-band-money">
             <Wordmark />
           </span>
