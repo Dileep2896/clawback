@@ -1,11 +1,12 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { pdfText } from "@bill-fighter/core/parser/pdf";
 import { runAudit } from "@bill-fighter/core/rules/index";
 import { dollars } from "@bill-fighter/core/rules/input";
 import type { Db } from "@bill-fighter/db/client";
-import { accounts, actions, approvals, findings } from "@bill-fighter/db/schema";
+import { accounts, actions, approvals, customers, findings } from "@bill-fighter/db/schema";
 import { withTestDb } from "@bill-fighter/db/test-db";
 import { createApprovalGate } from "@bill-fighter/platform/local/approval-gate";
 import { isGatedTool } from "@bill-fighter/shared/gated-tools";
@@ -108,6 +109,21 @@ describe("draft_letter", () => {
     const { call } = await setup(db);
     await seedFindings(db, "other", dir);
     await expect(call("draft_letter", { letters: [{ findingId: "other-meter", wording: WORDING }] })).rejects.toThrow(/not a finding of this run/);
+  });
+
+  test("waits for an audit holding the customer lock, so it never drafts on a finding the audit removed", async (db) => {
+    const { draft, id } = await setup(db);
+    const [finding] = await db.select().from(findings).where(eq(findings.id, id("meter")));
+    let drafting!: Promise<void>;
+    await db.transaction(async (tx) => {
+      await tx.select({ id: customers.id }).from(customers).where(eq(customers.id, finding!.customerId)).for("update");
+      drafting = expect(draft("meter")).rejects.toThrow(/not a finding of this run/);
+      // Without the lock, this is long enough for the draft to read the finding and create its action.
+      await sleep(200);
+      await tx.delete(findings).where(eq(findings.id, id("meter")));
+    });
+    await drafting;
+    expect(await db.select().from(actions)).toEqual([]);
   });
 
   test("a redraft overwrites its one action, and odd characters cannot crash the render", async (db) => {
