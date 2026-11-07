@@ -88,7 +88,8 @@ export function stopProblems(s: StopSnapshot): string[] {
   }
   const call = s.bundle.find((action) => action.kind === "call")?.payloadJson as { cancelLines?: string[]; promoAccounts?: string[] } | undefined;
   add(call?.cancelLines?.length === 7, `the call lists ${call?.cancelLines?.length} lines to cancel, not 7`);
-  add(call?.promoAccounts?.length === 3, `the call lists ${call?.promoAccounts?.length} promos, not 3`);
+  // Promos are off the call (rehearsal), so they stay open findings.
+  add(call?.promoAccounts?.length === 0, `the call lists ${call?.promoAccounts?.length} promos, not 0`);
   for (const action of s.bundle.filter(({ kind }) => kind === "cancel" || kind === "letter")) {
     const finding = s.findings.find(({ id }) => id === action.findingId);
     const lineIds = (finding?.evidenceJson as { phoneLineIds?: string[] } | undefined)?.phoneLineIds ?? [];

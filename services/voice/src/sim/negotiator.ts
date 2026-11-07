@@ -1,5 +1,4 @@
 import type { Llm } from "@bill-fighter/platform/types";
-import { SPOKEN_TICKET } from "../live/line/script.ts";
 import type { TranscriptRow } from "../transcript.ts";
 
 export type MoveKind =
@@ -10,7 +9,6 @@ export type MoveKind =
   | "restore_promo"
   | "read_back"
   | "ask_ticket"
-  | "repeat_ticket"
   | "goodbye";
 
 export type Move = { move: MoveKind; target: string };
@@ -21,7 +19,7 @@ Moves and their target:
 - press_digit: the single key the phone menu asks for
 - cancel_line: a phone number from the lines to cancel
 - restore_promo: an account number from the promo accounts
-- give_account, give_verification, read_back, ask_ticket, repeat_ticket, goodbye: an empty string`;
+- give_account, give_verification, read_back, ask_ticket, goodbye: an empty string`;
 
 const logLine = (row: TranscriptRow) => {
   if (row.role === "system") return `System: ${row.content}`;
@@ -70,6 +68,5 @@ export const WORDS = {
     return parts.length ? `To confirm, ${parts.join(" and ")}. Is that correct?` : "To confirm, nothing was changed on this call. Is that correct?";
   },
   askTicket: "Can I have a ticket number, please?",
-  repeatTicket: `Let me repeat that: ${SPOKEN_TICKET}.`,
   goodbye: "That's everything, thank you. Goodbye.",
 };

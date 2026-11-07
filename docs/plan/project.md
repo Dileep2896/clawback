@@ -364,14 +364,17 @@ NAIVE_CARD_CAP_USD=5
 
 ## 19. Demo script (for reference)
 
-- 0:00 "Businesses lose money on bills nobody reads. We built a company with no employees that fights them, and only gets paid when you save."
-- 0:20 Run `demo-start`. A bill lands in the inbox; the board fills. "No one is typing."
-- 0:50 Collector logs into the portal on screen and pulls a year of bills for 12 stores.
-- 1:20 Findings: the Fremont meter doubled after a swap ($12,600 back under PG&E Rule 17.1), wrong rate plan, seven dead phone lines, three expired promos.
-- 2:00 Linda gets one text. She replies YES. "Human actions: 1".
-- 2:10 The AI calls the provider on speaker: disclosure, menu, cancels the lines, gets a ticket number.
-- 3:00 Ledger: about $12,600 back, about $20,000 a year saved, our 30% fee, invoice created in Stripe test mode; audit log scrolls; run cost shown.
-- 3:30 "That ran on its own. Next: real restaurants in the Bay Area."
+Option A, chosen in rehearsal (2026-11-07) for a 3 to 4 minute slot. Times from live run 2. The run is started before the talk and waits at the approval, which has no timeout.
+
+- Before the talk: `demo-reset`, then `demo-start`. Bills, portal login, findings and the approval text happen off stage (about 2 minutes).
+- 0:00 "Businesses lose money on bills nobody reads. We built a company with no employees that fights them, and only gets paid when you save." Show the board, the findings and the portal pulls already done.
+- 0:20 Findings: the Fremont meter doubled after a swap ($12,600 back under PG&E Rule 17.1), wrong rate plan, seven dead phone lines. Three expired promos are found and stay open: this run does not act on them.
+- 0:40 Linda's one text. She replies YES. "Human actions: 1".
+- 0:45 The AI calls the provider on speaker: disclosure, menu, the rep asks the address and the approver, it cancels the seven lines and gets a ticket number. No promos on the call, no ticket repeat-back. About 2:23.
+- 3:35 Ledger: about $12,600 back, about $18,300 a year saved, our 30% fee ($9,277.61), invoice in Stripe test mode; audit log scrolls; run cost shown.
+- 3:50 "That ran on its own. Next: real restaurants in the Bay Area."
+
+Backup: `pnpm demo:replay --speed 1.4` plays the recorded run in 3:11 with speech on, localhost only. See `rehearsal-notes.md`.
 
 ---
 

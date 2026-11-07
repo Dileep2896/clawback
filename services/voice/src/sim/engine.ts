@@ -10,7 +10,7 @@ import { repReply, SIM_REFUSAL_LINE } from "./rep.ts";
 
 export type CallPlan = { accountNumber: string; cancelLines: string[]; promoAccounts: string[] };
 
-type Stage = "menu" | "account" | "verify" | "items" | "read_back" | "ticket" | "repeat" | "goodbye";
+type Stage = "menu" | "account" | "verify" | "items" | "read_back" | "ticket" | "goodbye";
 
 // Stops a looping model. A clean call takes about 17 turns.
 const MAX_TURNS = 40;
@@ -21,7 +21,6 @@ const STAGE_MOVES: Record<Exclude<Stage, "items">, MoveKind> = {
   verify: "give_verification",
   read_back: "read_back",
   ticket: "ask_ticket",
-  repeat: "repeat_ticket",
   goodbye: "goodbye",
 };
 
@@ -124,8 +123,6 @@ export async function runSimCall(input: {
       await speak(WORDS.readBack(granted.lines, granted.promos));
     } else if (move === "ask_ticket") {
       await speak(WORDS.askTicket);
-    } else if (move === "repeat_ticket") {
-      await speak(WORDS.repeatTicket);
     } else {
       await speak(WORDS.goodbye);
     }
@@ -146,8 +143,8 @@ export async function runSimCall(input: {
       if (type === "promo" && said(REP_LINES.promo)) granted.promos.push(item);
       itemDone();
     } else if (stage === "read_back" && said(REP_LINES.confirm)) stage = "ticket";
-    else if (stage === "ticket" && said(REP_LINES.ticket)) stage = "repeat";
-    else if (stage === "repeat" && said(REP_LINES.confirm)) stage = "goodbye";
+    // No repeat-back, to keep the call short (human's decision, rehearsal).
+    else if (stage === "ticket" && said(REP_LINES.ticket)) stage = "goodbye";
   };
 
   try {

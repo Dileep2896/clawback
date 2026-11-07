@@ -80,7 +80,7 @@ describe("request_approval: the call-provider-tool contract", () => {
     return { unused };
   }
 
-  test("creates the call action as the sim engine's plan, with seven cancels and no alarm line", async (db) => {
+  test("creates the call action as the sim engine's plan, with seven cancels, no alarm line and no promos", async (db) => {
     const { unused } = await seedDemo(db);
     const bundle = await setup(db).request();
 
@@ -90,7 +90,10 @@ describe("request_approval: the call-provider-tool contract", () => {
     expect(Object.keys(plan).sort()).toEqual(["accountNumber", "cancelLines", "promoAccounts"]);
     expect(plan.accountNumber).toBe(SEED_PLAN.accountNumber);
     expect([...plan.cancelLines].sort()).toEqual([...SEED_PLAN.cancelLines].sort());
-    expect(plan.promoAccounts).toEqual([...SEED_PLAN.promoAccounts].sort());
+    // Promos are off the call to keep it short, so the owner is told they stay open.
+    expect(plan.promoAccounts).toEqual([]);
+    expect(bundle!.summary).toContain("We found 3 expired promo rates. This approval does not act on them.");
+    expect(bundle!.summary).not.toMatch(/restore/);
     expect(plan.cancelLines.filter((line) => ALARM_LINES.includes(line))).toEqual([]);
 
     const cancels = (await db.select().from(actions).where(eq(actions.kind, "cancel"))).map((action) => action.findingId).sort();
@@ -99,7 +102,7 @@ describe("request_approval: the call-provider-tool contract", () => {
 
     expect(bundle.actionIds).toEqual(expect.arrayContaining([`call-${RUN}`, `invoice-${RUN}`, ...cancels.map((findingId) => `cancel-${RUN}-${findingId}`)]));
     expect(bundle.actionIds).not.toContain("unrelated-action");
-    expect(bundle.summary).toContain("On the BayTel call we will cancel 7 unused lines and ask to restore 3 promo rates.");
+    expect(bundle.summary).toContain("On the BayTel call we will cancel 7 unused lines.");
   });
 });
 
@@ -174,10 +177,11 @@ describe("request_approval", () => {
     await seedFindings(db, RUN);
     const { summary } = await setup(db).request();
     const [call] = await db.select().from(actions).where(eq(actions.id, `call-${RUN}`));
-    expect(call!.payloadJson).toEqual({ accountNumber: `BT-${RUN}`, cancelLines: [FAX_NUMBER], promoAccounts: [`BC-${RUN}`] });
+    expect(call!.payloadJson).toEqual({ accountNumber: `BT-${RUN}`, cancelLines: [FAX_NUMBER], promoAccounts: [] });
     expect(JSON.stringify(call!.payloadJson)).not.toContain(ALARM_NUMBER);
-    // 175_000 refund; 123_400 + 80_000 + 72_000 + 108_000 yearly.
-    expect(summary).toContain("Refund to claim: $1,750.00. Yearly savings: $3,834.00.");
+    // 175_000 refund; 123_400 + 80_000 + 72_000 yearly. The 108_000 promo is not acted on, so it is not counted.
+    expect(summary).toContain("Refund to claim: $1,750.00. Yearly savings: $2,754.00.");
+    expect(summary).toContain("We found 1 expired promo rate. This approval does not act on it.");
   });
 
   test("refuses a summary with its own numbers, and an unknown action id", async (db) => {
@@ -219,12 +223,12 @@ describe("what the owner is told the bundle does", () => {
     await seedFindings(db, RUN);
     const { tools, request } = setup(db);
     const { summary } = await request();
-    const sentence = "On the BayTel call we will cancel 1 unused line and ask to restore 1 promo rate.";
+    const sentence = "On the BayTel call we will cancel 1 unused line.";
     expect(summary).toContain(sentence);
     expect(summary).toContain("We will invoice you for our fee.");
-    // The panel shows the top of the summary, so the code-built lines and figures come before the model's wording.
-    expect(summary.startsWith(sentence)).toBe(true);
-    expect(summary.indexOf("Refund to claim:")).toBeLessThan(summary.indexOf(SUMMARY));
+    // The panel shows the top of the summary, so the figures come first, then the code-built lines, then the model's wording.
+    expect(summary.startsWith("Refund to claim:")).toBe(true);
+    expect(summary.indexOf(sentence)).toBeLessThan(summary.indexOf(SUMMARY));
     expect(summary.endsWith(SUMMARY)).toBe(true);
 
     await runTool(tools, "send_sms", { body: "Your approval is waiting. Reply YES." }, RUN);

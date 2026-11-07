@@ -5,7 +5,7 @@ import { createLlm, type Query } from "@bill-fighter/platform/local/llm";
 import type { JsonSchema, Llm, LlmInput } from "@bill-fighter/platform/types";
 import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CLOSING_LINE, LINE_NUMBER, MENU_LINE, REP_LINES, SPOKEN_TICKET, SYSTEM_PROMPT } from "../live/line/script.ts";
+import { CLOSING_LINE, LINE_NUMBER, MENU_LINE, REP_LINES, SYSTEM_PROMPT } from "../live/line/script.ts";
 import type { TranscriptRow } from "../transcript.ts";
 import { runSimCall } from "./engine.ts";
 import { ALARM_LINES, SEED_PLAN, seedCallData, seedCallFacts } from "./fixture.ts";
@@ -81,8 +81,9 @@ describe("runSimCall", () => {
       "Please restore promo pricing on BayConnect internet account BC-7008.",
       "Please restore promo pricing on BayConnect internet account BC-7012.",
     ]);
-    expect(agent.at(-4)).toMatch(/^To confirm, you cancelled phone lines .*BayConnect accounts BC-7002, BC-7008, BC-7012\. Is that correct\?$/);
-    expect(agent.slice(-3)).toEqual(["Can I have a ticket number, please?", `Let me repeat that: ${SPOKEN_TICKET}.`, "That's everything, thank you. Goodbye."]);
+    expect(agent.at(-3)).toMatch(/^To confirm, you cancelled phone lines .*BayConnect accounts BC-7002, BC-7008, BC-7012\. Is that correct\?$/);
+    // No ticket repeat-back, to keep the call short.
+    expect(agent.slice(-2)).toEqual(["Can I have a ticket number, please?", "That's everything, thank you. Goodbye."]);
 
     const provider = said(rows, "provider");
     expect(provider.slice(0, 4)).toEqual([MENU_LINE, REP_LINES.greeting, REP_LINES.verify, REP_LINES.account]);
@@ -228,7 +229,7 @@ describe("runSimCall", () => {
 
   test("a rep hanging up before the goodbye was spoken fails the call", async (db) => {
     const { llm } = stubLlm({
-      rep: (input) => (input.prompt.split("\n").at(-1)!.startsWith("Caller: Let me repeat") ? { lines: [REP_LINES.confirm], endCall: true } : repAnswer(input.prompt)),
+      rep: (input) => (input.prompt.split("\n").at(-1)!.startsWith("Caller: Can I have a ticket") ? { lines: [REP_LINES.ticket], endCall: true } : repAnswer(input.prompt)),
     });
     await expect(runSimCall({ db, llm, actionId: "action", plan: SEED_PLAN })).rejects.toThrow(/early/);
     const { call, rows } = await transcript(db);
