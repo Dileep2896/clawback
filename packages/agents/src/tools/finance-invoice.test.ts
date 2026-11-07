@@ -364,10 +364,25 @@ describe("card_pay", () => {
     expect(await db.select().from(ledger).where(eq(ledger.kind, "card_spend"))).toHaveLength(1);
   });
 
-  test("a charge over the cap is refused and leaves the action open", async (db) => {
+  test("a failed update after the charge stays claimed, and a retry refuses without charging again", async (db) => {
+    await seedPay(db);
+    const { pay, charge } = setup(db);
+    const realUpdate = db.update.bind(db);
+    vi.spyOn(db, "update")
+      .mockImplementationOnce(realUpdate)
+      .mockImplementationOnce(() => ({ set: () => ({ where: () => Promise.reject(new Error("db down")) }) }) as never);
+
+    await expect(pay(PAY)).rejects.toThrow("db down");
+    await expect(pay(PAY)).rejects.toThrow("A human must check");
+    expect(charge).toHaveBeenCalledTimes(1);
+    expect(await db.select().from(ledger).where(eq(ledger.kind, "card_spend"))).toHaveLength(1);
+    expect((await db.select().from(actions).where(eq(actions.id, PAY)))[0]!.status).toBe("running");
+  });
+
+  test("a charge over the cap is refused and stays claimed for a human to check", async (db) => {
     await seedPay(db, "approved", { amountCents: 100_000, description: "Too much" });
     await expect(setup(db).pay(PAY)).rejects.toThrow("cap");
-    expect((await db.select().from(actions).where(eq(actions.id, PAY)))[0]!.status).toBe("proposed");
+    expect((await db.select().from(actions).where(eq(actions.id, PAY)))[0]!.status).toBe("running");
   });
 
   test("is blocked with no approval", async (db) => {

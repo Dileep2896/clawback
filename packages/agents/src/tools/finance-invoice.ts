@@ -4,7 +4,7 @@ import { db as sharedDb, type Db } from "@bill-fighter/db/client";
 import { actions, findings, ledger } from "@bill-fighter/db/schema";
 import { getPlatform } from "@bill-fighter/platform/factory";
 import type { ApprovalGate, Card } from "@bill-fighter/platform/types";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, notInArray } from "drizzle-orm";
 import Stripe from "stripe";
 import { z } from "zod";
 import { customerOfRun } from "../findings.ts";
@@ -118,8 +118,16 @@ export function financeInvoiceTools({
         if (action.status === "done") return { actionId, repeated: true };
 
         const customer = await customerOfRun(db, runId);
-        // shortcut: a crash between the charge and this update lets a retry charge again. Pass an idempotency key through Card if the naive card supports one.
-        const { ledgerId } = await (await card()).charge({ customerId: customer.id, ...payload });
+        const cardApi = await card();
+        // Claimed before charging and never released: a claim left behind may mean money moved, so only a human can clear it.
+        const [claimed] = await db
+          .update(actions)
+          .set({ status: "running" })
+          .where(and(eq(actions.id, actionId), notInArray(actions.status, ["running", "done"])))
+          .returning({ id: actions.id });
+        if (!claimed) throw new Error(`Card payment ${actionId} was started but is not marked done, so it may already have charged. Nothing was charged now. A human must check the card.`);
+
+        const { ledgerId } = await cardApi.charge({ customerId: customer.id, ...payload });
         await db.update(actions).set({ status: "done" }).where(eq(actions.id, actionId));
         return { actionId, ledgerId };
       }),
