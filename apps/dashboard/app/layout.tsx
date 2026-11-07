@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Bill Fighter dashboard",
-  description: "A live view of one Bill Fighter run, with fictional demo data.",
+  title: { default: "Clawback", template: "%s · Clawback" },
+  description: "Clawback audits your business bills and gets overcharges back. Fictional demo data.",
 };
 
 // Runs before first paint, so a saved dark theme does not flash light. Storage can throw in a private window.

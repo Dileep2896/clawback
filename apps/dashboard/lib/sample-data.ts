@@ -258,7 +258,7 @@ export async function insertSampleRun(db: Db) {
     ]);
 
     await tx.insert(smsMessages).values([
-      { id: "sample-sms-1", direction: "outbound", to: CUSTOMER.contactPhone, from: "+15550002222", body: "Bill Fighter found $12,600 in refunds and $17,000 a year in savings. Reply YES to approve all the fixes." },
+      { id: "sample-sms-1", direction: "outbound", to: CUSTOMER.contactPhone, from: "+15550002222", body: "Clawback found $12,600 in refunds and $17,000 a year in savings. Reply YES to approve all the fixes." },
     ]);
 
     const now = Date.now();
