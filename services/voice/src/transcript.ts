@@ -4,9 +4,10 @@ import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
 import { eq, sql } from "drizzle-orm";
 
 // `keypress` records that the caller pressed a key, never that a tone was heard. `refused` rows are never spoken.
+// A `fallback` row marks a sim call that replaced a failed live one: the dashboard's call panel labels it from this.
 export type TranscriptRow = {
   role: "agent" | "provider" | "system";
-  kind: "speech" | "keypress" | "refused";
+  kind: "speech" | "keypress" | "refused" | "fallback";
   content: string;
   at: string;
 };
