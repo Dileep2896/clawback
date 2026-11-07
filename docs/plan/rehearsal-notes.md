@@ -1,5 +1,55 @@
 # Rehearsal notes
 
+## Stage script (Clawback product UI, 2026-11-07)
+
+The slot is 3 to 4 minutes; target 3:30. Sim mode only until the human decides on a live rehearsal. Screen 1920×1080, one browser window.
+
+**Before the talk** (about 2 minutes, nobody watching):
+
+1. `pnpm demo:reset`. Restart `pnpm dev:webhooks` if a run was running.
+2. Open `http://localhost:3000`, Get started, sign up as Linda Park, Golden Gate Noodle Co., her seeded email (`CUSTOMER.contactEmail`), password of your choice.
+3. Onboarding: "Use the demo login" for BayCurrent, then Start my audit. The page moves to Overview.
+4. Wait until the Overview shows "Approval needed" (1:50 to 1:59 in rehearsal). The run waits there for as long as needed.
+5. Log out. The landing page is on screen when the talk starts.
+
+**On stage:**
+
+| Step | What the presenter does | Rehearsed |
+|---|---|---|
+| 1 | Get started, sign up the sample business (Sam Lee, Mission Dumplings, any `@missiondumplings.example` email), Upload, pick `data/sample-bills/mission-dumplings-baycurrent-2026-09.pdf`, wait for it to read | 0:06 to 0:07 scripted, about 0:30 by hand |
+| 2 | Log out, Log in as Linda. Overview shows Approval needed | 0:03 scripted, about 0:15 by hand |
+| 3 | Approve, then "Watch your agents work" (`/agents`) | under 1 s |
+| 4 | Talk over the board, the BayTel call and the ledger filling in, until Run status says Success | 2:22 to 2:36 |
+| 5 | Overview: refund $12,606.06, yearly savings $18,319.32, fee $9,277.61, you keep $21,647.77 | under 1 s |
+
+On stage it is 2:33 to 2:46 scripted; with hand typing and talking, about 3:20 to 3:30 (estimated, not yet timed by a person).
+
+`pnpm exec tsx --env-file-if-exists=.env scripts/rehearse-stage.ts [screenshot-folder]` plays all of the above in a browser, types at about presenter speed, prints each step's time, and fails unless the run ends in success with the three numbers. It starts one real sim run.
+
+## Rehearsal runs, product UI (2026-11-07)
+
+Own database `clawback_rehearsal`, `VOICE_MODE=sim`, `scripts/rehearse-stage.ts`. Approved on the Overview each time.
+
+| Run | Start to approval (before the talk) | Sample sign-up and upload | Log out, log in | Approve to Success | On stage total | Numbers | Cost |
+|---|---|---|---|---|---|---|---|
+| Sim 1 | 1:59 | 0:06 | 0:03 | 2:22 | 2:33 | $12,606.06 / $18,319.32 / $9,277.61 | about $0.41 |
+| Sim 2 | 1:53 | 0:07 | 0:03 | 2:31 | 2:43 | same | about $0.41 |
+| Sim 3 | 1:50 | 0:06 | 0:03 | 2:36 | 2:46 | same | $0.41 |
+
+Every run ended in success with the same three numbers on the Overview. Sim 3's database showed 13 ledger rows.
+
+## Backup: the replay at 1.4×
+
+The recording did not need recapturing: it holds run-table rows only, and the new pages read the same rows. `scripts/replay-check.ts` passes on the new UI (312 samples, all labelled, call timer 1:39), and the REPLAY banner sits above the app on every page.
+
+**`pnpm demo:replay` starts with a full `demo:reset`, which deletes every sign-up, Linda's too.** A browser already signed in as Linda stays signed in, but logging in again fails until she signs up again. So:
+
+1. Before the talk: `pnpm demo:reset`, sign up as Linda (no need to connect or start), open `/agents`. Do not log out.
+2. On stage: `pnpm demo:replay --speed 1.4`, talk over `/agents`; the recording's approval came by SMS. Replay finished in 3:11.
+3. End on Overview: the same three numbers, "Approved by Linda Park, by SMS", the REPLAY banner on top.
+
+A sample-business sign-up can still be shown in a private window after the replay has started; it then survives.
+
 ## Migrate every database first
 
 Replay adds migration `0003_runs_replay` (`runs.replay`). `/api/live` selects every column of `runs`, so **a database that has not run `pnpm db:migrate` after this merges gets a 500 and an empty dashboard.** Migrate the stage database before rehearsing.
@@ -56,6 +106,8 @@ A new worktree lacks gitignored files, and a run then stops `incomplete`:
 2. `pnpm seed:portal`, or the portal says "Sign-in is not set up yet".
 3. `pnpm db:migrate`.
 
+If the main checkout already serves 3000 and 3001, run this worktree's dashboard and portal on other ports (`pnpm --filter @bill-fighter/dashboard exec next dev --port 3010 -H 127.0.0.1`, portal `--port 3011`) and set `DASHBOARD_URL`, `PORTAL_URL` and `ALLOWED_PORTAL_ORIGINS` to match in this worktree's `.env` only. The webhook port 3002 is fixed. `pnpm demo:reset` also empties the shared Mailpit inbox, which every worktree uses.
+
 ## Rehearsal runs (2026-11-07)
 
 Limit: 2 to 4 minutes per run, `RUN_BUDGET_USD` $5. Cost is Claude Code login usage (estimated) plus voice credit from read-back.
@@ -85,6 +137,8 @@ Option A takes the three expired promos off the call to keep it short. They stay
 | Ledger rows | 16 | 13 |
 
 ## Safety search
+
+Re-run 2026-11-07 for the product UI, with the same results as below. The agents' email still goes to `billfighter.local`: `clawback-rename` kept that domain.
 
 - `git ls-files` lists only `.env.example`; no `.env` is committed.
 - The only `sk_live_` string is the fake `sk_live_abc` in `finance-invoice.test.ts`, which tests that live keys are refused.
