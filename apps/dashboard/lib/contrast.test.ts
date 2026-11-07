@@ -44,6 +44,9 @@ const TEXT_PAIRS = [
   ["alert", "paper"],
   ["alert", "sheet"],
   ["register-text", "register"],
+  ["band-text", "band"],
+  ["band-faded", "band"],
+  ["band-money", "band"],
 ] as const;
 
 describe("theme contrast", () => {
