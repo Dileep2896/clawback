@@ -116,6 +116,30 @@ Human's answers, 2026-11-07:
 
 **parallel with:** signup-connect
 
+### `landing-tam`
+
+**Goal:** Add a "The market" section to the landing page at `/`, in the existing design, between "How it works" and the demo result. Human, 2026-11-07: "add the TAM to the landing page".
+
+Content (use these numbers exactly, labelled as estimates):
+- Headline figure: "$500B+" with "US businesses pay every year in electricity, gas, water and phone bills".
+- "1 to 3% of it is billed wrong or on the wrong plan" → "$5 to 16B a year left on the table".
+- One line: "Today only large companies pay auditors to get it back. Clawback's agents do it for every business."
+- Small source note under the section: "Estimates. Electricity: US EIA, 2025 retail sales ($290B commercial and industrial). Telecom: Grand View Research, 2022 ($187B). Error rates: bill-audit industry reports (3 to 5% recovered); we assume 1 to 3%."
+
+**Estimate:** 20 minutes
+
+**Acceptance checks:**
+- The section reads well at 1920x1080 and 390x844; screenshots in `.fleet-lane/`.
+- The demo customer's numbers on the page are unchanged; `scripts/dashboard-shell-check.ts` passes.
+- No other page changes.
+
+**Likely files:**
+- `apps/dashboard/app/page.tsx` or the landing component
+
+**depends on:** product-shell
+
+**parallel with:** rehearsal-product
+
 ### `rehearsal-product`
 
 **Goal:** Rehearse the new stage flow in sim mode: `demo:reset`, sign up, connect BayCurrent, start, watch `/agents`, approve, end on the Overview. Time it against the 3 to 4 minute slot, recapture the replay if the screens changed, and update `docs/plan/rehearsal-notes.md`. No live calls; the human decides on a live rehearsal afterwards.
