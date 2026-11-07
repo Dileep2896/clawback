@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createSocket } from "node:dgram";
 import { createServer, type RequestListener, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
+import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { createBrowser } from "./browser.ts";
 import { createVault } from "./vault.ts";
 
@@ -31,8 +33,18 @@ export default async function check() {
   tunnelled.server.on("connection", () => tunnelHits++);
   const tunnelledHttps = tunnelled.origin.replace("http:", "https:");
 
+  // A STUN server stand-in. WebRTC's sockets skip loopback, so it is reached on this machine's own LAN address if any.
+  let udpHits = 0;
+  const udp = createSocket("udp4").on("message", () => udpHits++);
+  await new Promise<void>((resolve) => udp.bind(0, "0.0.0.0", resolve));
+  const lanAddress = Object.values(networkInterfaces())
+    .flat()
+    .find((address) => address?.family === "IPv4" && !address.internal)?.address;
+  const stun = `stun:${lanAddress ?? "127.0.0.1"}:${udp.address().port}`;
+
+  const refusedOnce = new Set<string>();
   let posted = "";
-  const html = (body: string) => `<!doctype html><title>portal</title>${body}`;
+  const html =(body: string) => `<!doctype html><title>portal</title>${body}`;
   const portal = await listen((request, response) => {
     const send = (body: string) => response.setHeader("content-type", "text/html").end(html(body));
     const path = request.url ?? "/";
@@ -50,6 +62,19 @@ export default async function check() {
     else if (path === "/link") send(`<a id="out" href="${forbidden.origin}/link">out</a>`);
     else if (path === "/late-link") {
       send(`<a id="out" href="${forbidden.origin}/late" onclick="event.preventDefault();setTimeout(()=>location.href=this.href,20)">out</a>`);
+    } else if (path.startsWith("/refuses-once")) {
+      // The first visit leaves for the forbidden site once loaded, so the refusal lands after goto has returned.
+      const leave = refusedOnce.has(path) ? "" : `<script>onload=()=>setTimeout(()=>location.href="${forbidden.origin}/late",${path.split("=")[1]})</script>`;
+      refusedOnce.add(path);
+      send(`<h1 class="welcome">Welcome</h1>${leave}`);
+    } else if (path === "/webrtc") {
+      send(`<script>
+        const pc = new RTCPeerConnection({ iceServers: [{ urls: "${stun}" }] });
+        pc.createDataChannel("x");
+        pc.createOffer().then((offer) => pc.setLocalDescription(offer)).then(() => {
+          document.body.insertAdjacentHTML("beforeend", '<p id="rtc">opened</p>');
+        });
+      </script>`);
     } else if (path === "/slow") setTimeout(() => send(`<h1 class="welcome">Welcome</h1>`), 150);
     else if (path === "/image") send(`<img src="${forbidden.origin}/image.png">`);
     else if (path === "/popup") send(`<a id="out" target="_blank" href="${forbidden.origin}/popup">out</a>`);
@@ -93,6 +118,27 @@ export default async function check() {
       await session.goto(`${portal.origin}/slow`);
       assert.deepEqual(await session.texts(".welcome"), ["Welcome"]);
     }
+    // A refused click, a goto, then a read straight away, with the refusal landing at varying moments around that read.
+    for (const delay of [0, 1, 2, 3, 5, 8, 12, 20, 30, 50]) {
+      await session.goto(`${portal.origin}/late-link`);
+      await session.click("#out");
+      await session.goto(`${portal.origin}/refuses-once?delay=${delay}`);
+      assert.deepEqual(await session.texts(".welcome"), ["Welcome"], `read straight after goto, delay ${delay}`);
+    }
+    // The refusal has fully landed, so the page holds Chromium's error page, for both kinds of read.
+    await session.goto(`${portal.origin}/refuses-once?delay=settled`);
+    await sleep(300);
+    assert.equal(await session.isVisible(".welcome"), true, "isVisible read the error page");
+    await session.goto(`${portal.origin}/refuses-once?delay=settled2`);
+    await sleep(300);
+    assert.deepEqual(await session.texts(".welcome"), ["Welcome"], "texts read the error page");
+
+    // WebRTC is UDP, which the proxy cannot see. Waiting because nothing reports a STUN packet that was never sent.
+    await session.goto(`${portal.origin}/webrtc`);
+    await sleep(1000);
+    assert.deepEqual(await session.texts("#rtc"), ["opened"], "the page did not open an RTCPeerConnection");
+    assert.equal(udpHits, 0, "WebRTC reached a UDP listener outside the proxy");
+
     await session.goto(`${portal.origin}/image`);
     await session.goto(`${portal.origin}/popup`);
     await session.click("#out");
@@ -145,6 +191,7 @@ export default async function check() {
     portal.server.close();
     forbidden.server.close();
     tunnelled.server.close();
+    udp.close();
     await rm(dir, { recursive: true, force: true });
   }
 }

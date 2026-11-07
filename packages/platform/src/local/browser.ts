@@ -56,7 +56,12 @@ export function createBrowser(vault: Vault, getAllowlist: () => Allowlist = allo
       const proxy = await startAllowlistProxy(allowed);
       try {
         // <-loopback>: Chromium skips proxies for localhost by default, and our portals are on localhost.
-        const browser = await chromium.launch({ headless: true, proxy: { server: proxy.server, bypass: "<-loopback>" } });
+        // The WebRTC flag: UDP does not go through an HTTP proxy, so it would reach any STUN or TURN server unchecked.
+        const browser = await chromium.launch({
+          headless: true,
+          proxy: { server: proxy.server, bypass: "<-loopback>" },
+          args: ["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"],
+        });
         const context = await browser.newContext();
         let navFailed = false;
         const newPage = async () => {
@@ -78,9 +83,22 @@ export function createBrowser(vault: Vault, getAllowlist: () => Allowlist = allo
           page = await newPage();
           navFailed = false;
         };
+        let lastUrl = "about:blank";
+        // A refusal can commit just after goto returned, leaving the error page or destroying the read in progress.
+        const read = async <T>(fn: () => Promise<T>) => {
+          try {
+            if (!navFailed) return await fn();
+          } catch (error) {
+            if (!String(error).includes("Execution context was destroyed")) throw error;
+          }
+          await swapPage();
+          await page.goto(lastUrl);
+          return fn();
+        };
         return {
           async goto(url) {
             if (!allowed(url)) throw new Error(`Browser refused ${url}: outside ALLOWED_PORTAL_ORIGINS`);
+            lastUrl = url;
             if (navFailed) await swapPage();
             try {
               await page.goto(url);
@@ -89,8 +107,6 @@ export function createBrowser(vault: Vault, getAllowlist: () => Allowlist = allo
               if (!/interrupted by another navigation|ERR_ABORTED/.test(String(error))) throw error;
             }
             // A refused click can start after click() returns, so it can race this goto. Go again once on a fresh page.
-            // shortcut: a refusal that commits just after goto returns can still fail the next read (4 in 2400 under load),
-            // and the next goto recovers. Upgrade if an agent tool ever reads straight after a goto without retrying.
             await swapPage();
             await page.goto(url);
           },
@@ -104,8 +120,8 @@ export function createBrowser(vault: Vault, getAllowlist: () => Allowlist = allo
             }
           },
           click: (selector) => page.locator(selector).click(),
-          isVisible: (selector) => page.locator(selector).first().isVisible(),
-          texts: (selector) => page.locator(selector).allInnerTexts(),
+          isVisible: (selector) => read(() => page.locator(selector).first().isVisible()),
+          texts: (selector) => read(() => page.locator(selector).allInnerTexts()),
           async download(selector, destPath) {
             const [download] = await Promise.all([page.waitForEvent("download"), page.locator(selector).click()]);
             await download.saveAs(destPath);
