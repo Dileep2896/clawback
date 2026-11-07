@@ -5,10 +5,12 @@ import type { Retell } from "./retell.ts";
 type Json = Record<string, unknown>;
 
 /** Creates or updates the caller, and proves it from a read-back. Places no call. Costs no usage, though Retell's docs do not state that. */
-export async function provisionCaller(retell: Retell): Promise<{ agentId: string; llmId: string }> {
+export async function provisionCaller(retell: Retell): Promise<{ agentId: string; agentVersion: number; llmId: string }> {
   const { items = [] } = (await retell("POST", "/v2/list-agents", {})) as { items?: Json[] };
   const existing = items.find((agent) => agent.agent_name === AGENT_NAME);
-  const existingLlm = (existing?.response_engine as { llm_id?: string } | undefined)?.llm_id;
+  // The list only has summaries, with no response_engine, so the LLM id needs the agent's own details.
+  const details = existing ? ((await retell("GET", `/get-agent/${String(existing.agent_id)}`)) as Json) : undefined;
+  const existingLlm = (details?.response_engine as { llm_id?: string } | undefined)?.llm_id;
 
   const llmConfig = callerLlm();
   const savedLlm = (await (existingLlm ? retell("PATCH", `/update-retell-llm/${existingLlm}`, llmConfig) : retell("POST", "/create-retell-llm", llmConfig))) as Json;
@@ -27,7 +29,8 @@ export async function provisionCaller(retell: Retell): Promise<{ agentId: string
     ...subsetDiff(config, agent).map((path) => `agent read-back differs at ${path}`),
     ...(agent.voicemail_option ? ["voicemail handling is on"] : []),
     ...(agent.ivr_option ? ["IVR handling is on"] : []),
+    ...(Number.isInteger(agent.version) && Number(agent.version) >= 0 ? [] : [`agent read-back has no usable version: ${String(agent.version)}`]),
   ];
   if (problems.length) throw new Error(`Caller is not as designed:\n${problems.join("\n")}`);
-  return { agentId, llmId };
+  return { agentId, agentVersion: Number(agent.version), llmId };
 }

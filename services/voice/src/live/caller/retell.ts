@@ -2,6 +2,16 @@ import { type Allowlist, isAllowedCallNumber } from "@bill-fighter/shared/allowl
 
 export const REQUEST_TIMEOUT_MS = 15_000;
 
+/** Retell answered with an error status, as opposed to a request whose result is unknown. */
+export class RetellHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 export type Retell = (method: "GET" | "POST" | "PATCH", path: string, body?: unknown, timeoutMs?: number) => Promise<unknown>;
 
 export function retellClient(apiKey: string, allowlist: Allowlist, fetchImpl: typeof fetch = fetch): Retell {
@@ -21,7 +31,7 @@ export function retellClient(apiKey: string, allowlist: Allowlist, fetchImpl: ty
         signal,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
-      if (!res.ok) throw new Error(`Retell ${method} ${path}: HTTP ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new RetellHttpError(`Retell ${method} ${path}: HTTP ${res.status}: ${await res.text()}`, res.status);
       // stop-call answers 204 with no body.
       return res.status === 204 ? null : res.json();
     };

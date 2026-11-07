@@ -317,6 +317,7 @@ describe("the live engine behind call_provider, on a stubbed Retell", () => {
     vi.stubEnv("VOICE_MODE", "live");
     vi.stubEnv("VOICE_PROVIDER", "retell");
     vi.stubEnv("RETELL_API_KEY", "stub-key");
+    vi.stubEnv("RETELL_CALLER_AGENT_VERSION", "0");
     vi.stubEnv("ALLOWED_CALL_NUMBERS", LINE_NUMBER);
     vi.stubGlobal("fetch", () => {
       throw new Error("A test tried to use the real network");
@@ -353,6 +354,18 @@ describe("the live engine behind call_provider, on a stubbed Retell", () => {
     await setup(db, { live: liveWith(db, stub), budget: { add, status: async () => STATUS } }).call();
     expect(add).toHaveBeenCalledOnce();
     expect(add.mock.calls[0]![1]).toBeCloseTo(0.29 + 3 * 0.07);
+  });
+
+  test("a dial that timed out reaches the budget at the 5 minute cap, and falls back with no second dial", async (db) => {
+    const add = vi.fn<Budget["add"]>(async () => STATUS);
+    const fetchImpl = vi.fn<typeof fetch>(() => Promise.reject(new DOMException("timed out", "TimeoutError")));
+    const live = liveWith(db, { ...stubRetell([]), fetchImpl });
+    const result = await setup(db, { live, budget: { add, status: async () => STATUS } }).call();
+    expect(result).toMatchObject({ mode: "sim", fallbackReason: expect.stringContaining("timed out") });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(add).toHaveBeenCalledOnce();
+    // The sim fallback may add its own cost on top.
+    expect(add.mock.calls[0]![1]).toBeGreaterThanOrEqual(5 * 0.0882 + 0.0208 + 5 * 0.07);
   });
 
   test("a retry returns the finished live call and does not dial again", async (db) => {

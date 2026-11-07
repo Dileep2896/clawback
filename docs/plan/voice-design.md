@@ -203,7 +203,7 @@ Code is in `services/voice/src/live/caller/`. **Built and tested against stubs o
 - **The row starts empty of speech.** It holds only `status` rows until the call ends, then Retell's own record, so it never claims speech that has not happened.
 - **The Retell call id is on the row** as a `status` row, for reading back by hand.
 - **A call is judged on content, not on why it ended.** `user_hangup` with a ticket is good. `max_duration_reached` with no ticket is not.
-- **`CALLER_AGENT_ID` in `agent.ts` is empty until `provision` runs**, and the engine refuses to dial while it is empty.
+- **`provision` prints `RETELL_CALLER_AGENT_ID` and `RETELL_CALLER_AGENT_VERSION`, which must be set in the environment.** The engine reads both at call time and refuses to dial without them.
 
 ### Open risks
 

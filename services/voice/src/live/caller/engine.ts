@@ -10,7 +10,7 @@ import { appendRow, closeCall, transcriptRow, type TranscriptRow } from "../../t
 import { LINE_NUMBER, TICKET_NUMBER } from "../line/script.ts";
 import { CALLER_NUMBER, callVariables, MAX_CALL_MS } from "./agent.ts";
 import { RetellItem, retellToRows } from "./normalize.ts";
-import { REQUEST_TIMEOUT_MS, type Retell, retellClient } from "./retell.ts";
+import { REQUEST_TIMEOUT_MS, type Retell, retellClient, RetellHttpError } from "./retell.ts";
 
 // From the spike's billed lines (voice-design.md).
 const RETELL_USD_PER_MIN = 0.0882;
@@ -128,6 +128,8 @@ export async function runLiveCall(input: {
   const apiKey = process.env.RETELL_API_KEY;
   if (!apiKey) throw new Error("RETELL_API_KEY is not set");
   if (!agentId) throw new Error("RETELL_CALLER_AGENT_ID is not set, so the Retell caller is not provisioned");
+  const agentVersion = process.env.RETELL_CALLER_AGENT_VERSION ?? "";
+  if (!/^\d+$/.test(agentVersion)) throw new Error(`RETELL_CALLER_AGENT_VERSION is "${agentVersion}", so the Retell caller is not provisioned`);
 
   const { planned } = await checkPlan(db, plan);
 
@@ -143,17 +145,24 @@ export async function runLiveCall(input: {
   const retell = retellClient(apiKey, allowlist, fetchImpl);
   let saved = false;
   try {
-    const placed = (await retell("POST", "/v2/create-phone-call", {
-      from_number: CALLER_NUMBER,
-      to_number: LINE_NUMBER,
-      override_agent_id: agentId,
-      // Unpublished, as in the spike, so updating the draft is enough.
-      override_agent_version: 0,
-      retell_llm_dynamic_variables: callVariables(plan, planned),
-      metadata: { actionId },
-    })) as { call_id?: unknown };
-    if (typeof placed.call_id !== "string") throw new Error("Retell returned no call id");
-    const retellId = placed.call_id;
+    let retellId: string;
+    try {
+      const placed = (await retell("POST", "/v2/create-phone-call", {
+        from_number: CALLER_NUMBER,
+        to_number: LINE_NUMBER,
+        override_agent_id: agentId,
+        // The version provision proved, so a newer draft cannot change what is dialled.
+        override_agent_version: Number(agentVersion),
+        retell_llm_dynamic_variables: callVariables(plan, planned),
+        metadata: { actionId },
+      })) as { call_id?: unknown };
+      if (typeof placed.call_id !== "string") throw new Error("Retell returned no call id");
+      retellId = placed.call_id;
+    } catch (error) {
+      // Only a 4xx says no call was placed. Anything else may be a call running to the cap with no id to stop, so charge the cap. The row above blocks a second dial.
+      if (!(error instanceof RetellHttpError && error.status < 500)) chargeCall(null, "(dial outcome unknown)", onCost);
+      throw error;
+    }
     // Kept with the row, so the call can be read back by hand even after a crash.
     await appendRow(db, callId, transcriptRow("system", "status", `Live call in progress. Retell call ${retellId}.`));
 

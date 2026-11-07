@@ -9,12 +9,13 @@ type Json = Record<string, unknown>;
 function stub(options: { existing?: boolean; agentReadBack?: Json; llmReadBack?: Json } = {}) {
   const log: string[] = [];
   let llm: Json = {};
-  let agent: Json = {};
+  let agent: Json = options.existing ? { agent_name: AGENT_NAME, agent_id: "a1", response_engine: { type: "retell-llm", llm_id: "l1" } } : {};
   const retell: Retell = async (method, path, body) => {
     log.push(`${method} ${path}`);
-    if (path === "/v2/list-agents") return { items: options.existing ? [{ agent_name: "other", agent_id: "x" }, { agent_name: AGENT_NAME, agent_id: "a1", response_engine: { llm_id: "l1" } }] : [] };
+    // Summaries, as Retell's list gives them: no response_engine.
+    if (path === "/v2/list-agents") return { items: options.existing ? [{ agent_name: "other", agent_id: "x" }, { agent_name: AGENT_NAME, agent_id: "a1" }] : [] };
     if (path === "/create-retell-llm" || path.startsWith("/update-retell-llm/")) return (llm = { ...(body as Json), llm_id: "l1" });
-    if (path === "/create-agent" || path.startsWith("/update-agent/")) return (agent = { ...(body as Json), agent_id: "a1" });
+    if (path === "/create-agent" || path.startsWith("/update-agent/")) return (agent = { ...(body as Json), agent_id: "a1", version: 0 });
     if (path.startsWith("/get-retell-llm/")) return { ...llm, ...options.llmReadBack };
     if (path.startsWith("/get-agent/")) return { ...agent, ...options.agentReadBack };
     throw new Error(`Unexpected ${method} ${path}`);
@@ -25,14 +26,18 @@ function stub(options: { existing?: boolean; agentReadBack?: Json; llmReadBack?:
 describe("provisionCaller", () => {
   it("creates the LLM and agent, and proves them from a read-back", async () => {
     const { retell, log } = stub();
-    await expect(provisionCaller(retell)).resolves.toEqual({ agentId: "a1", llmId: "l1" });
+    await expect(provisionCaller(retell)).resolves.toEqual({ agentId: "a1", agentVersion: 0, llmId: "l1" });
     expect(log).toEqual(["POST /v2/list-agents", "POST /create-retell-llm", "POST /create-agent", "GET /get-retell-llm/l1", "GET /get-agent/a1"]);
   });
 
   it("updates the existing one on a re-run, rather than making another", async () => {
     const { retell, log } = stub({ existing: true });
     await provisionCaller(retell);
-    expect(log).toEqual(["POST /v2/list-agents", "PATCH /update-retell-llm/l1", "PATCH /update-agent/a1", "GET /get-retell-llm/l1", "GET /get-agent/a1"]);
+    expect(log).toEqual(["POST /v2/list-agents", "GET /get-agent/a1", "PATCH /update-retell-llm/l1", "PATCH /update-agent/a1", "GET /get-retell-llm/l1", "GET /get-agent/a1"]);
+  });
+
+  it("returns the version the read-back proved, not an assumed one", async () => {
+    await expect(provisionCaller(stub({ existing: true, agentReadBack: { version: 7 } }).retell)).resolves.toMatchObject({ agentVersion: 7 });
   });
 
   it("never places a call", async () => {
@@ -48,6 +53,8 @@ describe("provisionCaller", () => {
     ["an interruptible agent", { agentReadBack: { interruption_sensitivity: 1 } }, "interruption_sensitivity"],
     ["voicemail handling", { agentReadBack: { voicemail_option: { action: { type: "hangup" } } } }, "voicemail"],
     ["IVR handling", { agentReadBack: { ivr_option: { action: { type: "hangup" } } } }, "IVR"],
+    ["no version", { agentReadBack: { version: undefined } }, "no usable version"],
+    ["a version that is not a number", { agentReadBack: { version: "latest" } }, "no usable version"],
   ])("fails loudly on %s in the read-back", async (_, options, expected) => {
     await expect(provisionCaller(stub(options).retell)).rejects.toThrow(expected);
   });

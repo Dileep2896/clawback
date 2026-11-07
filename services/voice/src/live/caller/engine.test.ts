@@ -38,6 +38,7 @@ beforeEach(() => {
   vi.stubEnv("ALLOWED_CALL_NUMBERS", LINE_NUMBER);
   vi.stubEnv("VOICE_PROVIDER", "retell");
   vi.stubEnv("RETELL_API_KEY", "stub-key");
+  vi.stubEnv("RETELL_CALLER_AGENT_VERSION", "0");
   // Nothing in this file may reach the network: every request must go through a stub.
   vi.stubGlobal("fetch", () => {
     throw new Error("A test tried to use the real network");
@@ -134,6 +135,13 @@ describe("the agent id", () => {
     const stub = stubRetell([await goodCall(db)]);
     await run(db, stub, { agentId: undefined });
     expect(stub.dials()[0]!.body).toMatchObject({ override_agent_id: "agent-from-env" });
+  });
+
+  test("dials the verified version from the env, read when the call is placed", async (db) => {
+    vi.stubEnv("RETELL_CALLER_AGENT_VERSION", "7");
+    const stub = stubRetell([await goodCall(db)]);
+    await run(db, stub);
+    expect(stub.dials()[0]!.body).toMatchObject({ override_agent_version: 7 });
   });
 });
 
@@ -272,6 +280,29 @@ describe("cost", () => {
     await expect(run(db, stubRetell([{ call_status: "not_connected", disconnection_reason: "dial_failed" }]), { onCost })).rejects.toThrow();
     expect(onCost).not.toHaveBeenCalled();
   });
+
+  const unknownDial = (name: string, answer: () => Promise<Response>, message: string) =>
+    test(`is the worst case at the cap, with no second dial, after ${name}`, async (db) => {
+      const onCost = vi.fn();
+      const fetchImpl = vi.fn<typeof fetch>(answer);
+      await expect(run(db, { fetchImpl }, { onCost })).rejects.toThrow(message);
+      await expect(run(db, { fetchImpl }, { onCost })).rejects.toThrow("will not dial again");
+      expect(fetchImpl).toHaveBeenCalledOnce();
+      expect(onCost).toHaveBeenCalledOnce();
+      expect(onCost.mock.calls[0]![0]).toBeCloseTo(5 * 0.0882 + 0.0208 + 5 * 0.07);
+      expect(console.log).toHaveBeenCalledWith(expect.stringMatching(/dial outcome unknown.*300\.0 s.*\(estimate\)/));
+    });
+
+  unknownDial("a dial that timed out", () => Promise.reject(new DOMException("timed out", "TimeoutError")), "timed out");
+  unknownDial("a dropped connection", () => Promise.reject(new TypeError("fetch failed")), "fetch failed");
+  unknownDial("a server error", async () => new Response("oops", { status: 500 }), "HTTP 500");
+  unknownDial("an answer with no call id", async () => Response.json({}), "no call id");
+
+  test("is nothing for a dial Retell refused", async (db) => {
+    const onCost = vi.fn();
+    await expect(run(db, stubRetell([], { dialStatus: 402 }), { onCost })).rejects.toThrow("HTTP 402");
+    expect(onCost).not.toHaveBeenCalled();
+  });
 });
 
 describe("never dials", () => {
@@ -291,6 +322,8 @@ describe("never dials", () => {
   refused("with no provider", { VOICE_PROVIDER: "" }, "only retell is built");
   refused("with no key", { RETELL_API_KEY: "" }, "RETELL_API_KEY");
   refused("before the caller is provisioned", {}, "not provisioned", { agentId: "" });
+  refused("with no agent version", { RETELL_CALLER_AGENT_VERSION: "" }, "RETELL_CALLER_AGENT_VERSION");
+  refused("with an agent version that is not a number", { RETELL_CALLER_AGENT_VERSION: "latest" }, "RETELL_CALLER_AGENT_VERSION");
   refused("with an alarm line in the plan", {}, "alarm line", { plan: { ...SEED_PLAN, cancelLines: [ALARM_LINES[0]!] } });
   refused("with a line not on file", {}, "not on file", { plan: { ...SEED_PLAN, cancelLines: ["+15550009999"] } });
 
