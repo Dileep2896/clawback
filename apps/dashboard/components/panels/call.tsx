@@ -42,7 +42,7 @@ function Timer({ startedAt, endedAt, replay }: { startedAt: string; endedAt: str
     return () => clearInterval(timer);
   }, [endedAt]);
   return (
-    <span data-testid="call-timer" className="font-display text-[2.125rem] leading-none font-semibold tabular-nums">
+    <span data-testid="call-timer" className="text-[2.125rem] leading-none font-semibold tabular-nums">
       {duration(startedAt, endedAt ?? (replay ? recordedNow(replay, now) : now))}
     </span>
   );
@@ -51,15 +51,15 @@ function Timer({ startedAt, endedAt, replay }: { startedAt: string; endedAt: str
 function TranscriptRow({ row }: { row: Row }) {
   if (isDisclosure(row)) {
     return (
-      <li data-call-row="disclosure" className="rounded-[3px] bg-drum px-3 py-1 leading-tight text-drum-text">
-        <span className="block font-display text-[1.625rem] font-semibold">Disclosure</span>
+      <li data-call-row="disclosure" className="rounded-control bg-action px-3 py-1 leading-tight text-action-text">
+        <span className="block text-[1.625rem] font-semibold">Disclosure</span>
         {row.content}
       </li>
     );
   }
   if (row.kind === "refused") {
     return (
-      <li data-call-row="refused" className="rounded-[3px] border-2 border-stamp px-3 py-1 leading-tight font-semibold text-stamp">
+      <li data-call-row="refused" className="rounded-control border border-alert px-3 py-1 leading-tight font-semibold text-alert">
         System: {row.content}
       </li>
     );
@@ -83,19 +83,19 @@ function CallView({ call, replay }: { call: Snapshot["calls"][number]; replay: R
   return (
     <article data-call={call.id} className="grid gap-2">
       <div className="flex items-center justify-between gap-3">
-        <span data-testid="call-mode" className="rounded-[3px] border-2 border-ink px-3 font-display text-[1.75rem] font-semibold">
+        <span data-testid="call-mode" className="rounded-control border border-faded px-3 text-[1.75rem] font-semibold">
           {call.mode}
         </span>
         <Timer startedAt={call.startedAt} endedAt={call.endedAt} replay={replay} />
       </div>
       {view.fallback && (
-        <p data-testid="call-fallback" className="rounded-[3px] border-2 border-stamp px-3 py-1 leading-tight font-semibold text-stamp">
+        <p data-testid="call-fallback" className="rounded-control border border-alert px-3 py-1 leading-tight font-semibold text-alert">
           {view.fallback}
         </p>
       )}
       {view.state === "in-progress" && <p data-testid="call-in-progress">Call in progress. The transcript appears when the call ends.</p>}
       {view.state === "failed" && (
-        <p data-testid="call-failed" className="rounded-[3px] border-2 border-stamp px-3 py-1 leading-tight font-semibold text-stamp">
+        <p data-testid="call-failed" className="rounded-control border border-alert px-3 py-1 leading-tight font-semibold text-alert">
           {view.failure}
         </p>
       )}

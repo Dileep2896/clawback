@@ -84,7 +84,7 @@ try {
     if (!request.url().startsWith("data:") && !["localhost", "127.0.0.1"].includes(new URL(request.url()).hostname)) external.push(request.url());
   });
   await page.addInitScript(RECORD_SPEECH);
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
 
   // Fast, with no sound: the label, the controls and the timer.
   const fast = await watch(page, recording, 8);

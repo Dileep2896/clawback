@@ -6,7 +6,7 @@ import { db } from "@bill-fighter/db/client";
 import { chromium, type Page } from "playwright";
 import { assertNotSharedDb, insertSampleRun, moveSampleCard } from "../apps/dashboard/lib/sample-data.ts";
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.DASHBOARD_URL ?? "http://localhost:3000";
 const VIEWPORT = { width: 1920, height: 1080 };
 const MIN_FONT_PX = 22;
 const METER = "sample-finding-meter";
@@ -63,7 +63,7 @@ const seeCardIn = (page: Page, row: string) =>
   page.locator(`[data-board-row="${row}"] [data-card="${CARD}"]`).waitFor({ timeout: 5000 });
 
 async function checkBoardMovesLive(page: Page) {
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await seeCardIn(page, "todo");
   await page.evaluate("window.notReloaded = true");
   await shot(page, "board-start");
@@ -146,7 +146,7 @@ const FOCUS_IN_DRAWER = "!!document.activeElement?.closest('dialog')";
 const FOCUS_IN_PAGE = "!!document.activeElement?.closest('main, header') && !document.activeElement?.closest('dialog')";
 
 async function checkKeyboard(page: Page) {
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await page.locator(`[data-finding="${METER}"]`).waitFor();
   let focused: string | null = null;
   for (let i = 0; i < 40 && !focused; i++) {
@@ -202,7 +202,7 @@ async function checkUnreadableEvidence(page: Page) {
   const live = (await (await page.request.get(`${BASE}/api/live`)).json()) as { findings: { id: string; evidenceJson: { detail: unknown } }[] };
   for (const finding of live.findings) finding.evidenceJson.detail = {};
   await page.route("**/api/live", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(live) }));
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await page.locator(`[data-finding="${METER}"]`).click();
   await page.getByTestId("evidence-unreadable").waitFor({ timeout: 5000 });
   assert.equal((await page.locator(DRAWER).innerText()).includes("NaN"), false, "never show NaN");
@@ -217,7 +217,7 @@ async function checkEmpty(page: Page) {
       body: JSON.stringify({ run: null, customer: null, humanActions: 0, approval: null, boardCards: [], findings: [], findingSites: {}, actions: [], calls: [], ledger: [], sms: [], auditLog: [], auditTotal: 0 }),
     }),
   );
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await page.getByText("No cards yet").waitFor({ timeout: 5000 });
   await page.getByText("No findings yet").waitFor({ timeout: 5000 });
   await checkFits(page, "no run");

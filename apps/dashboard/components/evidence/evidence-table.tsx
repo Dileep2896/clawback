@@ -7,7 +7,7 @@ export function EvidenceTable({ caption, head, rows }: { caption: string; head: 
       <table className="w-full border-collapse tabular-nums">
         <caption className="sr-only">{caption}</caption>
         <thead>
-          <tr className="border-b-2 border-drum">
+          <tr className="border-b-2 border-action">
             {head.map((label, i) => (
               <th key={label} scope="col" className={`px-2 py-1 font-semibold ${i === 0 ? "text-left" : "text-right"}`}>
                 {label}

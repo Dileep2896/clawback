@@ -35,10 +35,15 @@ const TEXT_PAIRS = [
   ["ink", "sheet"],
   ["faded", "paper"],
   ["faded", "sheet"],
-  ["drum-text", "drum"],
+  ["money", "paper"],
+  ["money", "sheet"],
+  ["money", "money-soft"],
+  ["ink", "money-soft"],
+  ["action-text", "action"],
+  ["alert-text", "alert"],
+  ["alert", "paper"],
+  ["alert", "sheet"],
   ["register-text", "register"],
-  ["stamp", "paper"],
-  ["stamp", "sheet"],
 ] as const;
 
 describe("theme contrast", () => {

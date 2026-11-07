@@ -9,7 +9,7 @@ const BILLED_FILL = "bg-bar-billed bg-[repeating-linear-gradient(45deg,transpare
 function Swatch({ className, label }: { className: string; label: string }) {
   return (
     <span className="flex items-center gap-2">
-      <span aria-hidden="true" className={`inline-block size-5 rounded-[3px] ${className}`} />
+      <span aria-hidden="true" className={`inline-block size-5 rounded-control ${className}`} />
       {label}
     </span>
   );

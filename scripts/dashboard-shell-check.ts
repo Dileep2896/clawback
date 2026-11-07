@@ -47,7 +47,7 @@ async function checkFitsOneScreen(page: Page, theme: string) {
 }
 
 async function checkLiveUpdates(page: Page) {
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
 
   await seeText(page, "customer", "Golden Gate Noodle Co.");
   // A real reload wipes this. Counting navigation events would not do: the router's history calls fire them too.
@@ -111,7 +111,7 @@ async function checkConnectionLoss(page: Page) {
 // The real route is covered by lib/snapshot.test.ts, and faking it here leaves the rows of the running sample alone.
 async function checkNoRun(page: Page, noRunBody: string) {
   await page.route("**/api/live", (route) => route.fulfill({ contentType: "application/json", body: noRunBody }));
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await seeText(page, "no-run", "No run yet. Start one with pnpm demo:start");
   await seeText(page, "human-actions", "Human actions: 0");
   assert.equal(await page.getByTestId("customer").count(), 0, "no customer before any run");
@@ -123,7 +123,7 @@ async function checkNoRun(page: Page, noRunBody: string) {
 async function checkStoppedRun(page: Page) {
   await insertSampleRun(db);
   await updateSampleRun(db, { costUsd: 1, status: "error" });
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await seeText(page, "approval-stopped", "This run stopped, so nothing can be approved.");
   assert.equal(await page.getByTestId("approve").count(), 0, "no Approve button on a stopped run");
   const reply = await page.request.post(`${BASE}/api/approve`, { data: { runId: SAMPLE_RUN_ID } });
@@ -135,11 +135,31 @@ async function checkStoppedRun(page: Page) {
 
 // Stacked, the page may scroll down, but never sideways.
 async function checkNarrow(page: Page) {
-  await page.goto(BASE);
+  await page.goto(`${BASE}/agents`);
   await seeText(page, "customer", "Golden Gate Noodle Co.");
   const { scrollWidth, innerWidth } = await page.evaluate<PageMeasure>(MEASURE_PAGE);
   assert.ok(scrollWidth <= innerWidth, `narrow: page scrolls sideways, ${scrollWidth}px wide in ${innerWidth}px`);
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/narrow.png`, fullPage: true });
+}
+
+// The landing page: both ways in, and no sideways scroll at desktop or phone width.
+async function checkLanding(page: Page, name: string) {
+  await page.goto(BASE);
+  assert.equal(await page.getByTestId("get-started").getAttribute("href"), "/signup");
+  assert.equal(await page.getByTestId("log-in").getAttribute("href"), "/login");
+  const { scrollWidth, innerWidth } = await page.evaluate<PageMeasure>(MEASURE_PAGE);
+  assert.ok(scrollWidth <= innerWidth, `landing ${name}: page scrolls sideways, ${scrollWidth}px wide in ${innerWidth}px`);
+  if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/landing-${name}.png`, fullPage: true });
+}
+
+// Every nav link reaches its page, and the current page is marked.
+async function checkNav(page: Page) {
+  await page.goto(`${BASE}/agents`);
+  for (const [label, path] of [["Overview", "/overview"], ["Bills", "/bills"], ["Findings", "/findings"], ["Money", "/money"], ["Agents", "/agents"]] as const) {
+    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: label }).click();
+    await page.waitForURL(`**${path}`);
+    assert.equal(await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: label }).getAttribute("aria-current"), "page", `${label} is not marked current`);
+  }
 }
 
 const NO_RUN = {
@@ -173,6 +193,9 @@ try {
   await checkStoppedRun(await (await browser.newContext({ viewport: VIEWPORT })).newPage());
 
   await checkNarrow(await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage());
+  await checkLanding(await (await browser.newContext({ viewport: VIEWPORT })).newPage(), "1920");
+  await checkLanding(await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage(), "390");
+  await checkNav(await (await browser.newContext({ viewport: VIEWPORT })).newPage());
   console.info("dashboard-shell check passed");
 } finally {
   await browser.close();

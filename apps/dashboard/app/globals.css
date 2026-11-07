@@ -1,50 +1,64 @@
 @import "tailwindcss";
 @import "@fontsource/atkinson-hyperlegible-next/400.css";
 @import "@fontsource/atkinson-hyperlegible-next/600.css";
-@import "@fontsource/barlow-semi-condensed/600.css";
-@import "@fontsource/barlow-semi-condensed/700.css";
+@import "@fontsource/atkinson-hyperlegible-next/700.css";
+@import "@fontsource/source-serif-4/600.css";
 
-/* lib/contrast.test.ts reads these two blocks and checks every text pair, including under projector wash-out. */
+/* docs/plan/design.md explains each token. lib/contrast.test.ts reads these two blocks and checks every text pair, including under projector wash-out. */
 :root {
-  --paper: #e7efec;
-  --sheet: #f7faf8;
-  --ink: #102a33;
-  --faded: #304852;
-  --drum: #17313b;
-  --drum-text: #e7efec;
-  --register: #17313b;
-  --register-text: #f7faf8;
-  --stamp: #8e0c3e;
-  /* Chart bars only, never text. Run through the dataviz palette validator against --sheet, including for colour blindness. */
+  --paper: #edf1ee;
+  --sheet: #ffffff;
+  --ink: #13201b;
+  --faded: #3c4a44;
+  --line: #d3dcd6;
+  --money: #08573a;
+  --money-soft: #e5f3ea;
+  --action: #08573a;
+  --action-text: #ffffff;
+  --alert: #8e0c3e;
+  --alert-text: #ffffff;
+  --register: #13201b;
+  --register-text: #ffffff;
+  /* Chart bars only, never text. Run through the dataviz palette validator against white, including for colour blindness. */
   --bar-billed: #c2185b;
   --bar-real: #00889f;
 }
 
 :root[data-theme="dark"] {
-  --paper: #0e1f26;
-  --sheet: #18303a;
-  --ink: #e7efec;
-  --faded: #a9bfc6;
-  --drum: #061318;
-  --drum-text: #e7efec;
+  --paper: #0e1613;
+  --sheet: #16211c;
+  --ink: #e6eee9;
+  --faded: #a2b3aa;
+  --line: #2a3a33;
+  --money: #6fd9a6;
+  --money-soft: #173a2a;
+  --action: #4cc48c;
+  --action-text: #06140e;
+  --alert: #ff7ca8;
+  --alert-text: #1a0710;
   /* Light drums here: dark ones disappear into the dark page, and this is the one thing the room must see. */
-  --register: #e7efec;
-  --register-text: #0e1f26;
-  --stamp: #ff7ca8;
+  --register: #e6eee9;
+  --register-text: #0e1613;
   --bar-billed: #e0528a;
   --bar-real: #2aa5b8;
 }
 
 @theme inline {
   --font-sans: "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Barlow Semi Condensed", ui-sans-serif, system-ui, sans-serif;
+  --font-figure: "Source Serif 4", ui-serif, Georgia, serif;
+  --radius-card: 14px;
+  --radius-control: 8px;
   --color-paper: var(--paper);
   --color-sheet: var(--sheet);
   --color-ink: var(--ink);
   --color-faded: var(--faded);
-  --color-drum: var(--drum);
-  --color-drum-text: var(--drum-text);
-  --color-stamp: var(--stamp);
+  --color-line: var(--line);
+  --color-money: var(--money);
+  --color-money-soft: var(--money-soft);
+  --color-action: var(--action);
+  --color-action-text: var(--action-text);
+  --color-alert: var(--alert);
+  --color-alert-text: var(--alert-text);
   --color-bar-billed: var(--bar-billed);
   --color-bar-real: var(--bar-real);
 }
@@ -52,28 +66,34 @@
 body {
   background: var(--paper);
   color: var(--ink);
-  font-size: 22px;
-  line-height: 1.35;
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+/* Money figures: lining, equal-width digits so columns of amounts line up. */
+.font-figure {
+  font-variant-numeric: lining-nums tabular-nums;
+  font-weight: 600;
 }
 
 :focus-visible {
-  outline: 4px solid var(--stamp);
+  outline: 3px solid var(--action);
   outline-offset: 2px;
 }
 
 /* The meter register: each drum is a strip of ten digits that rolls behind a window. */
 .drum {
   display: block;
-  width: 3.25rem;
-  height: 4.5rem;
+  width: 3rem;
+  height: 4rem;
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: var(--radius-control);
   background: var(--register);
   color: var(--register-text);
-  font-family: var(--font-display);
-  font-size: 3.5rem;
-  font-weight: 700;
-  line-height: 4.5rem;
+  font-family: var(--font-figure);
+  font-size: 3rem;
+  font-weight: 600;
+  line-height: 4rem;
   text-align: center;
   /* The shadow lines at the top and bottom of a real drum's window. */
   box-shadow: inset 0 5px 0 rgb(0 0 0 / 0.35), inset 0 -5px 0 rgb(0 0 0 / 0.35);
@@ -86,18 +106,19 @@ body {
 
 .drum-strip > span {
   display: block;
-  height: 4.5rem;
+  height: 4rem;
 }
 
-/* A card arriving in a row starts in the title band's colours, so the room's eye catches the move. */
+/* A card arriving in a row starts in the action colours, so the room's eye catches the move. */
 @keyframes card-arrive {
   from {
-    background: var(--drum);
-    color: var(--drum-text);
+    background: var(--action);
+    color: var(--action-text);
   }
 }
 
 .board-card {
+  border-radius: 6px;
   animation: card-arrive 1200ms ease-out;
 }
 
