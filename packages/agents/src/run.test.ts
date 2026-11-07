@@ -6,7 +6,7 @@ import { auditLog, boardCards, ledger, runs } from "@bill-fighter/db/schema";
 import type { Db } from "@bill-fighter/db/client";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import type { AgentRuntime, Audit, RunEvent } from "@bill-fighter/platform/types";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { executeRun, stopActiveRuns } from "./run.ts";
 
@@ -22,6 +22,19 @@ const runtimeOf = (...events: RunEvent[]): AgentRuntime => ({
 const execute = (db: Db, runtime: AgentRuntime) => executeRun({ db, runId: RUN, prompt: "p", runtime, audit: noAudit, tools: [] });
 const row = async (db: Db) => (await db.select().from(runs).where(eq(runs.id, RUN)))[0]!;
 const titles = async (db: Db) => (await db.select().from(boardCards).where(eq(boardCards.agent, "run"))).map((card) => card.title);
+
+function holdRowLock(db: Db) {
+  let unlock: () => void = () => {};
+  const unlocked = new Promise<void>((resolve) => (unlock = resolve));
+  let isLocked: () => void = () => {};
+  const locked = new Promise<void>((resolve) => (isLocked = resolve));
+  const lock = db.transaction(async (tx) => {
+    await tx.select().from(runs).where(eq(runs.id, RUN)).for("update");
+    isLocked();
+    await unlocked;
+  });
+  return { locked, unlock, lock };
+}
 
 const test = (name: string, fn: (db: Db) => Promise<void>) =>
   it(name, () =>
@@ -97,6 +110,27 @@ describe("a run that stops", () => {
     release();
     await going;
   });
+
+  test("stopActiveRuns waits for a run saving its outcome, and leaves that outcome alone", async (db) => {
+    const { locked, unlock, lock } = holdRowLock(db);
+    await locked;
+    const going = execute(db, runtimeOf({ type: "result", status: "success", costUsd: 0 }));
+    await vi.waitFor(async () => {
+      const { rows } = await db.execute<{ waiting: number }>(sql`select count(*)::int as waiting from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`);
+      expect(rows[0]!.waiting).toBeGreaterThan(0);
+    });
+
+    let stopped = false;
+    const stop = stopActiveRuns(db).then(() => (stopped = true));
+    await sleep(200);
+    expect(stopped).toBe(false);
+
+    unlock();
+    await lock;
+    await Promise.all([going, stop]);
+    expect(await row(db)).toMatchObject({ status: "success", finishedAt: expect.any(Date) });
+    expect(await titles(db)).toEqual([]);
+  });
 });
 
 const portOpen = (port: number) =>
@@ -131,16 +165,8 @@ describe("SIGINT with a browser open", () => {
         expect(chromium.length).toBeGreaterThan(0);
 
         // A held row lock makes the handler's writes wait, for longer than Playwright takes to close a browser and exit.
-        let unlock: () => void = () => {};
-        const unlocked = new Promise<void>((resolve) => (unlock = resolve));
-        let locked: () => void = () => {};
-        const isLocked = new Promise<void>((resolve) => (locked = resolve));
-        const lock = db.transaction(async (tx) => {
-          await tx.select().from(runs).where(eq(runs.id, RUN)).for("update");
-          locked();
-          await unlocked;
-        });
-        await isLocked;
+        const { locked, unlock, lock } = holdRowLock(db);
+        await locked;
 
         child.kill("SIGINT");
         // A second Ctrl-C must not cut the wait short either.

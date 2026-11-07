@@ -18,6 +18,8 @@ export const scheduledRunPrompt = (accountNumber: string) =>
   `This month's scheduled bill check is due. No email arrived, so Intake identifies the customer from account number ${accountNumber}. Run the savings plan for it. A bill with no cached parse is a failure to report, so never work around it.`;
 
 const active = new Set<string>();
+// Runs whose outcome is known but not yet saved. Shutdown waits for these: marking one would overwrite how it really ended.
+const saving = new Set<Promise<unknown>>();
 
 /**
  * Runs the agents on a run row that already exists, because audit_log.run_id is a foreign key.
@@ -58,21 +60,34 @@ export async function executeRun({
     status = "error";
     console.error(`Run ${runId} failed:`, error);
   }
-  // Fixed wording on the screen, so the raw reason goes to the log.
-  if (status !== "success") {
-    if (reason) console.error(`Run ${runId} stopped: ${reason}`);
-    await reportStop(db, runId, stopMessage(status, reason));
-  }
   active.delete(runId);
-  await db.update(runs).set({ status, finishedAt: new Date() }).where(eq(runs.id, runId));
+  const save = (async () => {
+    // Fixed wording on the screen, so the raw reason goes to the log.
+    if (status !== "success") {
+      if (reason) console.error(`Run ${runId} stopped: ${reason}`);
+      await reportStop(db, runId, stopMessage(status, reason));
+    }
+    await db.update(runs).set({ status, finishedAt: new Date() }).where(eq(runs.id, runId));
+  })();
+  saving.add(save);
+  try {
+    await save;
+  } finally {
+    saving.delete(save);
+  }
   return status;
 }
 
 /** For a process being shut down: a run lives in its process, so otherwise its row reads "running" for good. */
 export async function stopActiveRuns(db: Db) {
   const ids = [...active];
-  await Promise.all(ids.map((runId) => reportStop(db, runId, INTERRUPTED)));
-  if (ids.length > 0) await db.update(runs).set({ status: "error", finishedAt: new Date() }).where(inArray(runs.id, ids));
+  try {
+    await Promise.all(ids.map((runId) => reportStop(db, runId, INTERRUPTED)));
+    if (ids.length > 0) await db.update(runs).set({ status: "error", finishedAt: new Date() }).where(inArray(runs.id, ids));
+  } finally {
+    // A failed save is logged by the run's own caller.
+    await Promise.allSettled(saving);
+  }
 }
 
 /**
