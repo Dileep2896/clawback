@@ -54,8 +54,41 @@ describe("Llm.structured", () => {
     ["a key instead of the login", [{ ...INIT, apiKeySource: "ANTHROPIC_API_KEY" }, success({ total: 5 })], /Refusing to run/],
     ["an account connector", [{ ...INIT, tools: ["mcp__claude_ai_Gmail__send_message"] }, success({ total: 5 })], /Refusing to run/],
     ["a plan rate limit", [INIT, { type: "rate_limit_event", rate_limit_info: { status: "rejected" } }, success({ total: 5 })], /rate limit/],
+    ["is_error with an empty message after a success", [INIT, success({ total: 5 }), { ...success(undefined), is_error: true }], /no message/],
+    ["is_error with no message at all", [INIT, success({ total: 5 }), { ...success({ total: 5 }), is_error: true, result: undefined }], /no message/],
+    ["an error subtype with is_error false", [INIT, success({ total: 5 }), { type: "result", subtype: "error_during_execution", is_error: false, errors: [] }], /error_during_execution/],
+    ["an error result followed by a success", [INIT, { ...success(undefined), is_error: true }, success({ total: 5 })], /no message/],
+    ["a later result with no output", [INIT, success({ total: 5 }), success(undefined)], /no structured output/],
+    ["an assistant message carrying an error", [INIT, { type: "assistant", error: "billing_error" }, success({ total: 5 })], /billing_error/],
+    ["an auth failure", [INIT, { type: "auth_status", error: "token expired" }, success({ total: 5 })], /token expired/],
+    ["a run with no init, so the login was never checked", [success({ total: 5 })], /Refusing to run/],
   ])("throws on %s", async (_name, messages, error) => {
     await expect(llmWith(messages).structured({ prompt: "x" }, SCHEMA)).rejects.toThrow(error);
+  });
+
+  it("throws when the SDK throws an empty error after a success", async () => {
+    const query: Query = async function* () {
+      yield* [INIT, success({ total: 5 })] as SDKMessage[];
+      throw new Error("");
+    };
+    await expect(createLlm(query, async () => {}).structured({ prompt: "x" }, SCHEMA)).rejects.toThrow(/no message/);
+  });
+
+  it.each([
+    ["at the root", { $async: true, ...SCHEMA }],
+    ["with a truthy value", { $async: 1, ...SCHEMA }],
+    ["on a nested property", { type: "object", properties: { total: { $async: true, type: "integer" } } }],
+    ["behind a $ref", { $ref: "#/$defs/total", $defs: { total: { $async: true, type: "integer" } } }],
+  ])("refuses $async %s, before calling the login or the model", async (_name, schema) => {
+    const calls: string[] = [];
+    const query: Query = async function* () {
+      calls.push("query");
+    };
+    const login = async () => {
+      calls.push("login");
+    };
+    await expect(createLlm(query, login).structured({ prompt: "x" }, schema)).rejects.toThrow(/async/);
+    expect(calls).toEqual([]);
   });
 
   it.each([
