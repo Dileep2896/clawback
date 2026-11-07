@@ -7,14 +7,17 @@ import { BillFixture } from "@bill-fighter/shared/fixtures";
 import type { RateSchedule, Tariff } from "@bill-fighter/shared/tariff";
 import { readParsedDir, type CachedParse } from "./parse-cache.ts";
 
-const PARSED_DIR = fileURLToPath(new URL("../../../data/parsed", import.meta.url));
+export const PARSED_DIR = fileURLToPath(new URL("../../../data/parsed", import.meta.url));
 
 // Section 7 of the project plan.
 export const EXPECTED_TOTALS = { refundCents: 1_260_000, annualSavingsCents: 2_000_000 };
 const MAX_DRIFT_PERCENT = 10;
 
 // Bills come only from cached parses. A miss throws, because there is no model here to fall back on.
-export function parsedBills(seed: Pick<Seed, "accounts" | "bills">, entries: CachedParse[]): BillFixture[] {
+export function parsedBills(
+  seed: { accounts: Pick<Seed["accounts"][number], "id" | "accountNumber">[]; bills: Pick<BillFixture, "id" | "accountId">[] },
+  entries: Pick<CachedParse, "source" | "status" | "bill" | "problems">[],
+): BillFixture[] {
   const problems: string[] = [];
   const entryBySource = new Map(entries.map((entry) => [entry.source, entry]));
   const seedBillIds = new Set(seed.bills.map((b) => b.id));
@@ -62,21 +65,25 @@ export function parsedBills(seed: Pick<Seed, "accounts" | "bills">, entries: Cac
   return bills;
 }
 
+export function tariffLoader(): AuditInput["tariffFor"] {
+  const tariffs = new Map<RateSchedule, Tariff>();
+  return (schedule) => {
+    const tariff = tariffs.get(schedule) ?? loadTariff(schedule);
+    tariffs.set(schedule, tariff);
+    return tariff;
+  };
+}
+
 // Offline: committed parsed JSON, plus the seed generator for what a bill does not carry.
 export function loadAuditInput(parsedDir = PARSED_DIR): AuditInput {
   const seed = generateSeed();
-  const tariffs = new Map<RateSchedule, Tariff>();
   return {
     customerId: seed.customer.id,
     accounts: seed.accounts,
     bills: parsedBills(seed, readParsedDir(parsedDir)),
     phoneLines: seed.phoneLines,
     intervals: seed.intervals,
-    tariffFor(schedule) {
-      const tariff = tariffs.get(schedule) ?? loadTariff(schedule);
-      tariffs.set(schedule, tariff);
-      return tariff;
-    },
+    tariffFor: tariffLoader(),
   };
 }
 

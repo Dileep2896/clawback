@@ -31,7 +31,8 @@ describe("insertSampleRun", () => {
       const snapshot = await liveSnapshot(db);
       expect(snapshot.humanActions).toBe(0);
       expect(snapshot.approval?.status).toBe("pending");
-      expect(snapshot.findings).toHaveLength(3);
+      // Meter, rate, seven unused lines and one alarm line.
+      expect(snapshot.findings).toHaveLength(10);
     });
   });
 });

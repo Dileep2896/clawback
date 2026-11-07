@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { db as sharedDb, type Db } from "@bill-fighter/db/client";
-import { accounts, actions, bills, findings } from "@bill-fighter/db/schema";
+import { accounts, actions, bills, customers, findings } from "@bill-fighter/db/schema";
 import { getPlatform } from "@bill-fighter/platform/factory";
 import type { ApprovalGate } from "@bill-fighter/platform/types";
 import { FindingEvidence } from "@bill-fighter/shared/finding";
@@ -95,45 +95,50 @@ export function filerTools({
         if (await (await gate()).get(runId)) throw new Error(`Run ${runId} has already asked for approval, so its letters can no longer change`);
         const customer = await customerOfRun(db, runId);
 
-        // Everything is checked and rendered before anything is written, so a refusal leaves no partial batch.
-        const rendered = [];
-        for (const { findingId, wording } of letters) {
-          assertNoOwnNumbers(wording);
-          const [row] = await db
-            .select({ finding: findings, accountNumber: accounts.accountNumber })
-            .from(findings)
-            .innerJoin(accounts, eq(findings.accountId, accounts.id))
-            .where(and(eq(findings.id, findingId), eq(findings.customerId, customer.id)));
-          if (!row) throw new Error(`Finding ${findingId} is not a finding of this run's customer`);
-          const { finding, accountNumber } = row;
-          const kind = LETTER_KINDS[finding.type as keyof typeof LETTER_KINDS];
-          if (!kind) throw new Error(`Findings of type ${finding.type} get no letter`);
-          if (finding.type === "unusedLines" && (await cancellableLines(db, finding)).length === 0) {
-            throw new Error(`Finding ${findingId} is not a line we may cancel. Alarm lines are never cancelled.`);
-          }
-          const pdf = await renderLetter({
-            finding: { ...finding, evidence: FindingEvidence.parse(finding.evidenceJson) },
-            accountNumber,
-            customerName: customer.name,
-            contactName: customer.contactName,
-            wording,
-          });
-          rendered.push({ findingId, kind, pdf });
-        }
+        return db.transaction(async (tx) => {
+          // Held to the end, so run_audit cannot change a finding between its letter being rendered and its action existing.
+          await tx.select({ id: customers.id }).from(customers).where(eq(customers.id, customer.id)).for("update");
 
-        // In sequence: a failure must not release the run's queue while a sibling write is still going.
-        const drafted = [];
-        for (const { findingId, kind, pdf } of rendered) {
-          const actionId = letterActionId(runId, findingId);
-          const path = await save(actionId, "", pdf);
-          const payloadJson: LetterPayload = { letterPath: path };
-          await db
-            .insert(actions)
-            .values({ id: actionId, findingId, kind, payloadJson, status: "proposed" })
-            .onConflictDoUpdate({ target: actions.id, set: { payloadJson } });
-          drafted.push({ actionId, findingId, kind, path });
-        }
-        return drafted;
+          // Everything is checked and rendered before anything is written, so a refusal leaves no partial batch.
+          const rendered = [];
+          for (const { findingId, wording } of letters) {
+            assertNoOwnNumbers(wording);
+            const [row] = await tx
+              .select({ finding: findings, accountNumber: accounts.accountNumber })
+              .from(findings)
+              .innerJoin(accounts, eq(findings.accountId, accounts.id))
+              .where(and(eq(findings.id, findingId), eq(findings.customerId, customer.id)));
+            if (!row) throw new Error(`Finding ${findingId} is not a finding of this run's customer`);
+            const { finding, accountNumber } = row;
+            const kind = LETTER_KINDS[finding.type as keyof typeof LETTER_KINDS];
+            if (!kind) throw new Error(`Findings of type ${finding.type} get no letter`);
+            if (finding.type === "unusedLines" && (await cancellableLines(tx, finding)).length === 0) {
+              throw new Error(`Finding ${findingId} is not a line we may cancel. Alarm lines are never cancelled.`);
+            }
+            const pdf = await renderLetter({
+              finding: { ...finding, evidence: FindingEvidence.parse(finding.evidenceJson) },
+              accountNumber,
+              customerName: customer.name,
+              contactName: customer.contactName,
+              wording,
+            });
+            rendered.push({ findingId, kind, pdf });
+          }
+
+          // In sequence: a failure must not release the run's queue while a sibling write is still going.
+          const drafted = [];
+          for (const { findingId, kind, pdf } of rendered) {
+            const actionId = letterActionId(runId, findingId);
+            const path = await save(actionId, "", pdf);
+            const payloadJson: LetterPayload = { letterPath: path };
+            await tx
+              .insert(actions)
+              .values({ id: actionId, findingId, kind, payloadJson, status: "proposed" })
+              .onConflictDoUpdate({ target: actions.id, set: { payloadJson } });
+            drafted.push({ actionId, findingId, kind, path });
+          }
+          return drafted;
+        });
       }),
     }),
 

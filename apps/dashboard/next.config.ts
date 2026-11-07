@@ -9,7 +9,7 @@ const config: NextConfig = {
   // The demo can run on next dev, and the badge would sit on a panel in front of the room.
   devIndicators: false,
   // Workspace packages export raw TypeScript.
-  transpilePackages: ["@bill-fighter/db", "@bill-fighter/shared"],
+  transpilePackages: ["@bill-fighter/core", "@bill-fighter/db", "@bill-fighter/shared"],
   serverExternalPackages: ["pg"],
 };
 

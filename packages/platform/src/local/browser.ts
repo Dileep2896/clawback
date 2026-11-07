@@ -125,6 +125,8 @@ export function createBrowser(vault: Vault, getAllowlist: () => Allowlist = allo
           click: (selector) => page.locator(selector).click(),
           isVisible: (selector) => read(() => page.locator(selector).first().isVisible()),
           texts: (selector) => read(() => page.locator(selector).allInnerTexts()),
+          attributes: (selector, name) =>
+            read(() => page.locator(selector).evaluateAll((elements, attr) => elements.map((el) => el.getAttribute(attr) ?? ""), name)),
           async download(selector, destPath) {
             const [download] = await Promise.all([page.waitForEvent("download"), page.locator(selector).click()]);
             await download.saveAs(destPath);
