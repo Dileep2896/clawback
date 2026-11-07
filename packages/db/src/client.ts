@@ -1,11 +1,14 @@
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import { Client, Pool } from "pg";
 import * as schema from "./schema.ts";
 
 // The docker-compose database, so a fresh worktree with no .env still works. Local only.
 export const databaseUrl = () => process.env.DATABASE_URL ?? "postgres://bill:bill@localhost:5433/billfighter";
 
 export const createDb = (url: string = databaseUrl()) => drizzle(new Pool({ connectionString: url }), { schema });
+
+/** The host pg will really connect to for this URL. Building a Client opens no connection. */
+export const databaseHost = (url: string) => new Client({ connectionString: url }).host;
 
 export type Db = ReturnType<typeof createDb>;
 
