@@ -9,6 +9,20 @@ export function createScheduler(db: Db): Scheduler & { fireDue(): Promise<void>;
   let task: ScheduledTask | undefined;
   let recovered: Promise<unknown> | undefined;
 
+  // A row still 'running' here was interrupted by an exit, so it goes back in the queue. Only until it first succeeds,
+  // so a later onFire cannot requeue a handler that is really running. A failure is forgotten so the next call retries;
+  // nothing has been claimed by then, because claims wait on this.
+  // shortcut: assumes one scheduler process, as local has. Upgrade to a lease if a second one ever runs.
+  const recover = () =>
+    (recovered ??= db
+      .update(scheduledChecks)
+      .set({ status: "pending" })
+      .where(eq(scheduledChecks.status, "running"))
+      .catch((error) => {
+        recovered = undefined;
+        throw error;
+      }));
+
   const scheduler = {
     async schedule({ customerId, runAt }: { customerId: string; runAt: Date }) {
       const [created] = await db
@@ -27,14 +41,7 @@ export function createScheduler(db: Db): Scheduler & { fireDue(): Promise<void>;
 
     onFire(next: (check: ScheduledCheck) => Promise<void>) {
       handler = next;
-      // A row still 'running' here was interrupted by an exit, so it goes back in the queue. Once only, so a second
-      // onFire cannot requeue a handler that is really running.
-      // shortcut: assumes one scheduler process, as local has. Upgrade to a lease if a second one ever runs.
-      recovered ??= db
-        .update(scheduledChecks)
-        .set({ status: "pending" })
-        .where(eq(scheduledChecks.status, "running"))
-        .catch((error) => console.error("[scheduler] could not requeue interrupted checks:", error));
+      recover().catch((error) => console.error("[scheduler] could not requeue interrupted checks:", error));
       // Due rows are read from Postgres each minute, so a restart loses nothing.
       task ??= cron.schedule("* * * * *", () => scheduler.fireDue(), { noOverlap: true });
     },
@@ -42,7 +49,7 @@ export function createScheduler(db: Db): Scheduler & { fireDue(): Promise<void>;
     async fire(checkId: string) {
       if (!handler) throw new Error("Scheduler has no onFire handler");
       // Otherwise the requeue could reset a row this call has just claimed, and it would run twice.
-      await recovered;
+      await recover();
       // An atomic claim, so a cron tick and a manual fire cannot both run one check.
       const [claimed] = await db
         .update(scheduledChecks)
@@ -67,7 +74,7 @@ export function createScheduler(db: Db): Scheduler & { fireDue(): Promise<void>;
     /** One cron tick. A failure is logged here because nothing else awaits a tick, and one bad check must not stop the rest. */
     async fireDue() {
       try {
-        await recovered;
+        await recover();
         const due = await db
           .select()
           .from(scheduledChecks)
@@ -76,7 +83,7 @@ export function createScheduler(db: Db): Scheduler & { fireDue(): Promise<void>;
           await scheduler.fire(check.id).catch((error) => console.error(`[scheduler] check ${check.id} failed:`, error));
         }
       } catch (error) {
-        console.error("[scheduler] could not read due checks:", error);
+        console.error("[scheduler] could not requeue interrupted checks or read due ones:", error);
       }
     },
 

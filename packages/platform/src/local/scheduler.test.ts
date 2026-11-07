@@ -90,6 +90,33 @@ describe("scheduler", () => {
       expect(await statusOf(db, failed.id)).toBe("failed");
     }));
 
+  it("claims nothing while recovery fails, then recovers on the next tick and fires the running row", () =>
+    withTestDb("scheduler_recovery_retry", async (db) => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const customerId = await addCustomer(db);
+      const scheduler = createScheduler(db);
+      const interrupted = await scheduler.schedule({ customerId, runAt: PAST });
+      const pending = await scheduler.schedule({ customerId, runAt: new Date(PAST.getTime() + 1000) });
+      await db.update(scheduledChecks).set({ status: "running" }).where(eq(scheduledChecks.id, interrupted.id));
+
+      vi.spyOn(db, "update").mockImplementationOnce(
+        () => ({ set: () => ({ where: () => Promise.reject(new Error("db down")) }) }) as never,
+      );
+      const handler = vi.fn(async () => {});
+      scheduler.onFire(handler);
+      scheduler.stop();
+
+      await scheduler.fireDue();
+      expect(handler).not.toHaveBeenCalled();
+      expect(await statusOf(db, interrupted.id)).toBe("running");
+      expect(await statusOf(db, pending.id)).toBe("pending");
+
+      await scheduler.fireDue();
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ id: interrupted.id }));
+      expect(await statusOf(db, interrupted.id)).toBe("fired");
+      expect(await statusOf(db, pending.id)).toBe("fired");
+    }));
+
   it("does not requeue a running handler on a second onFire", () =>
     withTestDb("scheduler_refire", async (db) => {
       const scheduler = createScheduler(db);
