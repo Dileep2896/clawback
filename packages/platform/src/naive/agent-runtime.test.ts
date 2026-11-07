@@ -229,6 +229,37 @@ describe("naïve runtime", () => {
     expect(calls).toContainEqual({ method: "POST", path: "/sessions/ses_root/cancel", body: undefined });
   });
 
+  it("confirms nothing once the spend crosses the cap, even a call approved in this run", async () => {
+    const { gate } = fakeGate({ status: "approved", actionIds: ["a1"] });
+    const { api, calls } = fakeNaive((sessions) => {
+      Object.assign(sessions.get("ses_root")!, { status: "idle", stop_reason: "awaiting_approval", pending_actions: [parked("c1", "a1")], consumed_micro_usd: 6_000_000 });
+    });
+    const events = await collect(runtime(api, gate, fakeBudget(5), fakeAudit().audit).run(SPEC));
+    expect(events.at(-1)).toMatchObject({ type: "result", status: "over_budget" });
+    expect(calls.some((c) => c.path.endsWith("/tool_confirmations"))).toBe(false);
+  });
+
+  it("records usage whose Budget write failed when the run reconciles", async () => {
+    const { api } = fakeNaive((sessions, tick) => {
+      const root = sessions.get("ses_root")!;
+      root.consumed_micro_usd = 100_000;
+      if (tick === 2) Object.assign(root, { status: "idle", stop_reason: "end_turn" });
+    });
+    const budget = fakeBudget();
+    const add = budget.add;
+    let failed = false;
+    budget.add = async (runId, usd) => {
+      if (!failed) {
+        failed = true;
+        throw new Error("db blip");
+      }
+      return add(runId, usd);
+    };
+    const events = await collect(runtime(api, fakeGate(null).gate, budget, fakeAudit().audit).run(SPEC));
+    expect(events.at(-1)).toMatchObject({ type: "result", costUsd: 0.1 });
+    expect(budget.totalUsd).toBeCloseTo(0.1);
+  });
+
   it("answers a call again when naïve parks it in a later turn, and a coordinator copy of a member call only once", async () => {
     const { gate } = fakeGate({ status: "approved", actionIds: ["a1"] });
     const { api, calls } = fakeNaive((sessions, tick) => {

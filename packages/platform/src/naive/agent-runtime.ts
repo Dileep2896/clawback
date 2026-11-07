@@ -102,17 +102,22 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
   let api: NaiveApi = naiveApi;
   let rootId: string | undefined;
   let rootDone = false;
-  type Owned = { agent: string; afterSeq: number; consumed: number; session?: Session };
+  // consumed: naïve's cumulative spend seen so far; persisted: how much of it Budget has recorded.
+  type Owned = { agent: string; afterSeq: number; consumed: number; persisted: number; session?: Session };
   // shortcut: the sessions this run owns live in memory for the life of run(), so the loop below only ever answers
   // calls on them. That holds one run at a time (the demo rule); upgrade to a table if runs ever overlap.
   const owned = new Map<string, Owned>();
-  /** Adds the unrecorded part of a session's cumulative spend to Budget. */
+  /** Reports a session's new cumulative spend, and adds whatever Budget has not recorded yet; a failed write is retried next time. */
   const account = async (entry: Owned, consumed: number) => {
-    if (consumed <= entry.consumed || !deps) return;
-    const delta = usdFromMicro(consumed - entry.consumed);
-    entry.consumed = consumed;
-    costUsd += delta;
-    if ((await deps.budget.add(spec.runId, delta)).over) over = true;
+    if (consumed > entry.consumed) {
+      costUsd += usdFromMicro(consumed - entry.consumed);
+      entry.consumed = consumed;
+    }
+    if (entry.consumed <= entry.persisted || !deps) return;
+    const target = entry.consumed;
+    const { over: hit } = await deps.budget.add(spec.runId, usdFromMicro(target - entry.persisted));
+    entry.persisted = target;
+    if (hit) over = true;
   };
 
   try {
@@ -142,7 +147,8 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
         token,
         gate,
         onDenied: (agent, tool, reason) => pending.push({ type: "denied", agent, tool, reason }),
-        ended: () => ended,
+        // Over budget, no new tool call starts, even before the loop notices.
+        ended: () => ended || over,
         running: (work) => {
           const handler = work();
           const settled = handler.then(
@@ -200,7 +206,7 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
       body: { agent_id: mainId, message: spec.prompt, budget_micro_usd: microUsd(capUsd), metadata: { run_id: spec.runId } },
     });
     rootId = root.id;
-    owned.set(root.id, { agent: main, afterSeq: 0, consumed: 0 });
+    owned.set(root.id, { agent: main, afterSeq: 0, consumed: 0, persisted: 0 });
     // One key per parked occurrence: naïve reuses a call's id when the same call is proposed in a later turn, and
     // parked_seq tells the two apart.
     const handled = new Set<string>();
@@ -230,7 +236,7 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
           } else if (event.type === "tool.completed") {
             pending.push({ type: "tool_result", agent: entry.agent, tool, output: data.output });
           } else if (event.type === "thread.created" && typeof data.thread_id === "string" && !owned.has(data.thread_id)) {
-            owned.set(data.thread_id, { agent: memberOf(data.member ?? data.agent_name), afterSeq: 0, consumed: 0 });
+            owned.set(data.thread_id, { agent: memberOf(data.member ?? data.agent_name), afterSeq: 0, consumed: 0, persisted: 0 });
           } else if (event.type === "tool.confirm.resolved") {
             const approval = await gate.get(spec.runId);
             await audit.record({
@@ -298,6 +304,8 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
       const byCall = new Map<string, typeof parkedRows>();
       for (const row of parkedRows) byCall.set(row.action.tool_call_id, [...(byCall.get(row.action.tool_call_id) ?? []), row]);
       for (const rows of byCall.values()) {
+        // Over budget, nothing more is confirmed: the run stops and cancels below.
+        if (over) break;
         const fresh = rows.filter((row) => !handled.has(occurrence(row.sessionId, row.action)));
         const onMember = rows.some((row) => row.sessionId !== root.id);
         // A coordinator copy is never answered while the member holds the call.
@@ -342,9 +350,10 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     await Promise.all(inFlight);
     // Reconcile: a cancelled in-flight call is still billed, so read every owned session's final cumulative spend.
     for (const [sessionId, entry] of owned) {
-      await api<Session>(`/sessions/${sessionId}`)
-        .then((session) => account(entry, session.consumed_micro_usd ?? 0))
-        .catch((error) => console.warn(`naïve final usage for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`));
+      const warn = (error: unknown) => console.warn(`naïve final usage for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
+      // A failed read still retries recording the usage already seen.
+      const consumed = await api<Session>(`/sessions/${sessionId}`).then((session) => session.consumed_micro_usd ?? 0, (error) => (warn(error), 0));
+      await account(entry, consumed).catch(warn);
     }
     for (const step of cleanup.reverse()) await step().catch((error) => console.warn(`naïve cleanup: ${error instanceof Error ? error.message : String(error)}`));
   }

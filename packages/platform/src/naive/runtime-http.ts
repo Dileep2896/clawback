@@ -22,7 +22,14 @@ export type NaiveRequest = {
 };
 export type NaiveApi = <T = unknown>(path: string, request?: NaiveRequest) => Promise<T>;
 
-export function createNaiveApi(fetchImpl: typeof fetch = fetch, apiKey: () => string | undefined = () => process.env.NAIVE_API_KEY): NaiveApi {
+// Every request, body included, ends by this deadline, so a stalled naïve cannot hold up cancel, cleanup or the run's end.
+const REQUEST_TIMEOUT_MS = 30_000;
+
+export function createNaiveApi(
+  fetchImpl: typeof fetch = fetch,
+  apiKey: () => string | undefined = () => process.env.NAIVE_API_KEY,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): NaiveApi {
   return async <T>(path: string, { method = "GET", body, query }: NaiveRequest = {}) => {
     const key = apiKey();
     if (!key) throw new Error("NAIVE_API_KEY is not set");
@@ -31,8 +38,23 @@ export function createNaiveApi(fetchImpl: typeof fetch = fetch, apiKey: () => st
     const headers: Record<string, string> = { authorization: `Bearer ${key}` };
     if (body !== undefined) headers["content-type"] = "application/json";
     if (method !== "GET") headers["idempotency-key"] = randomUUID();
-    const response = await fetchImpl(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    const text = await response.text();
+    const controller = new AbortController();
+    let timer: NodeJS.Timeout | undefined;
+    // Raced as well as aborted: a fetch that ignores the signal still cannot outlive the deadline.
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new NaiveError(0, "timeout", `naïve ${method} ${path}: no answer within ${timeoutMs / 1000} s`));
+      }, timeoutMs);
+    });
+    let response: Response;
+    let text: string;
+    try {
+      response = await Promise.race([fetchImpl(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal }), deadline]);
+      text = await Promise.race([response.text(), deadline]);
+    } finally {
+      clearTimeout(timer);
+    }
     let json: { error?: { code?: string; message?: string } } | null = null;
     try {
       json = text ? JSON.parse(text) : null;
