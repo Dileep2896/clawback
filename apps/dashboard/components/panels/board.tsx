@@ -25,7 +25,7 @@ export function Board() {
             const inRow = cards.filter((card) => row.statuses.includes(card.status));
             return (
               <section key={row.id} data-board-row={row.id}>
-                <h3 className="border-b-2 border-drum font-display text-[1.625rem] leading-tight font-semibold tabular-nums">
+                <h3 className="border-b border-line text-[1.625rem] leading-tight font-semibold tabular-nums">
                   {row.label} ({inRow.length})
                 </h3>
                 <ul>
@@ -34,7 +34,7 @@ export function Board() {
                     <li key={card.id} data-card={card.id} className="board-card px-1 leading-tight">
                       <span className="font-semibold">{agentName(card.agent)}:</span> {card.title}
                       {card.status === "blocked" && (
-                        <span data-testid="blocked-stamp" className="ml-2 inline-block rounded-[3px] border-2 border-stamp px-1 font-semibold text-stamp">
+                        <span data-testid="blocked-stamp" className="ml-2 inline-block rounded-control border border-alert px-1 font-semibold text-alert">
                           Blocked
                         </span>
                       )}

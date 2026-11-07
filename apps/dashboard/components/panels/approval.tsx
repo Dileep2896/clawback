@@ -36,7 +36,7 @@ export function Approval() {
           {/* First, so a long summary can never push it out of sight. */}
           {approval.status === "pending" && replay && <p data-testid="approval-replay" className="font-semibold">Waiting for the recorded reply</p>}
           {approval.status === "pending" && stopped && (
-            <p role="alert" data-testid="approval-stopped" className="font-semibold text-stamp">
+            <p role="alert" data-testid="approval-stopped" className="font-semibold text-alert">
               {STOPPED_TEXT}
             </p>
           )}
@@ -46,20 +46,20 @@ export function Approval() {
               data-testid="approve"
               disabled={busy}
               onClick={approve}
-              className="min-h-16 w-full cursor-pointer rounded-[3px] bg-drum font-display text-[2.125rem] font-semibold text-drum-text disabled:cursor-wait disabled:opacity-70"
+              className="min-h-16 w-full cursor-pointer rounded-control bg-action text-[2.125rem] font-semibold text-action-text disabled:cursor-wait disabled:opacity-70"
             >
               {busy ? "Approving" : "Approve"}
             </button>
           )}
           {failed && (
-            <p role="alert" data-testid="approve-error" className="font-semibold text-stamp">
+            <p role="alert" data-testid="approve-error" className="font-semibold text-alert">
               Approve failed. Try again.
             </p>
           )}
           {approval.status !== "pending" && (
             <p
               data-testid="approval-decision"
-              className={`rounded-[3px] px-3 py-1 font-semibold ${approval.status === "approved" ? "bg-drum text-drum-text" : "border-2 border-stamp text-stamp"}`}
+              className={`rounded-control px-3 py-1 font-semibold ${approval.status === "approved" ? "bg-action text-action-text" : "border border-alert text-alert"}`}
             >
               {approval.status === "approved" ? "Approved" : "Denied"} by {approval.approvedBy}
               {approval.channel && `, ${CHANNELS[approval.channel]}`}

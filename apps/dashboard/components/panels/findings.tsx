@@ -29,7 +29,7 @@ export function Findings() {
                 data-finding={finding.id}
                 aria-haspopup="dialog"
                 onClick={() => setOpenId(finding.id)}
-                className="block min-h-11 w-full cursor-pointer rounded-[3px] border-2 border-faded px-3 py-1 text-left"
+                className="block min-h-11 w-full cursor-pointer rounded-control border border-line px-3 py-1 text-left"
               >
                 {site && <span className="block font-semibold text-faded">{site}</span>}
                 <span className="block font-semibold">{finding.title}</span>

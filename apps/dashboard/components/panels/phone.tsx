@@ -55,16 +55,16 @@ export function Phone() {
               <li
                 key={message.id}
                 data-sms={message.direction}
-                className={`rounded-[3px] px-3 py-1 leading-tight ${inbound ? "ml-6 bg-drum text-drum-text" : "mr-6 border-2 border-faded"}`}
+                className={`rounded-control px-3 py-1 leading-tight ${inbound ? "ml-6 bg-action text-action-text" : "mr-6 border border-line"}`}
               >
-                <span className="block font-semibold">{inbound ? contact : "Bill Fighter"}</span>
+                <span className="block font-semibold">{inbound ? contact : "Clawback"}</span>
                 {message.body}
               </li>
             );
           })}
         </ul>
         {asked && stopped && snapshot?.approval?.status === "pending" && (
-          <p data-testid="sms-stopped" className="font-semibold text-stamp">
+          <p data-testid="sms-stopped" className="font-semibold text-alert">
             {STOPPED_TEXT}
           </p>
         )}
@@ -82,14 +82,14 @@ export function Phone() {
                 value={draft}
                 disabled={busy}
                 onChange={(event) => setDraft(event.target.value)}
-                className="min-h-11 min-w-0 flex-1 rounded-[3px] border-2 border-ink bg-sheet px-2"
+                className="min-h-11 min-w-0 flex-1 rounded-control border border-faded bg-sheet px-2"
               />
-              <button type="submit" data-testid="sms-send" disabled={busy} className="min-h-11 cursor-pointer rounded-[3px] border-2 border-ink px-3 font-semibold disabled:cursor-wait disabled:opacity-70">
+              <button type="submit" data-testid="sms-send" disabled={busy} className="min-h-11 cursor-pointer rounded-control border border-faded px-3 font-semibold disabled:cursor-wait disabled:opacity-70">
                 Send
               </button>
             </div>
             {failed && (
-              <p role="alert" data-testid="sms-error" className="font-semibold text-stamp">
+              <p role="alert" data-testid="sms-error" className="font-semibold text-alert">
                 Not sent. Try again.
               </p>
             )}

@@ -4,12 +4,12 @@ import { type ReactNode, useId } from "react";
 export function Panel({ title, children }: { title: string; children: ReactNode }) {
   const titleId = useId();
   return (
-    <section aria-labelledby={titleId} className="flex min-h-0 flex-col overflow-hidden rounded-[3px] border-2 border-drum bg-sheet max-[1099px]:min-h-72">
-      <h2 id={titleId} className="bg-drum px-4 py-1.5 font-display text-[1.75rem] leading-tight font-semibold text-drum-text">
+    <section aria-labelledby={titleId} className="flex min-h-0 flex-col overflow-hidden rounded-card border border-line bg-sheet max-[1099px]:min-h-72">
+      <h2 id={titleId} className="border-b border-line px-4 pt-2 pb-1.5 text-[1.625rem] leading-tight font-bold">
         {title}
       </h2>
       {/* Focusable so a scrolling panel can be scrolled by keyboard. Relative so sr-only text cannot stretch the page past this panel. */}
-      <div tabIndex={0} aria-labelledby={titleId} role="group" className="relative min-h-0 flex-1 overflow-y-auto p-4">
+      <div tabIndex={0} aria-labelledby={titleId} role="group" className="relative min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {children}
       </div>
     </section>
