@@ -57,13 +57,14 @@ function spokenAccount(account: string) {
   return `${spaced(letters)}, ${spaced(digits)}`;
 }
 
-type PlannedLine = { number: string; accountNumber: string };
+type PlannedLine = { number: string };
 
 type CallerPlan = { accountNumber: string; promoAccounts: string[] };
 
 export function callRequests(plan: CallerPlan, lines: PlannedLine[]) {
   return [
-    ...lines.map((line) => WORDS.cancel(spokenNumber(line.number), spokenAccount(line.accountNumber))),
+    // No account here, unlike WORDS.cancel: the rep script answers an account number with its own line, and a merged reply loses the item.
+    ...lines.map((line) => `Please cancel phone line ${spokenNumber(line.number)}.`),
     ...plan.promoAccounts.map((account) => WORDS.promo(spokenAccount(account))),
   ];
 }

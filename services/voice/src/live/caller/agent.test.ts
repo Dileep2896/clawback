@@ -2,12 +2,62 @@ import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
 import { describe, expect, it } from "vitest";
 import { extractOutcome } from "../../outcome.ts";
 import { transcriptRow } from "../../transcript.ts";
-import { REP_LINES } from "../line/script.ts";
+import { WORDS } from "../../sim/negotiator.ts";
+import { SEED_PLAN } from "../../sim/fixture.ts";
+import { REP_LINES, SYSTEM_PROMPT } from "../line/script.ts";
 import { callerAgent, callerLlm, callRequests, callVariables } from "./agent.ts";
 import { normalizeSpeech } from "./normalize.ts";
 
 const LINE = { number: "(415) 555-0102", accountNumber: "BT-7001" };
 const PLAN = { accountNumber: "BT-7001", promoAccounts: ["BC-7002"] };
+
+// shortcut: the rep script is a prompt with no code to call, so this reads its rules literally. Only a real call shows what the model does.
+const REP_RULES = [
+  { rule: "Gives an account number", line: REP_LINES.account, hears: /\bB[TC]-\d+/ },
+  { rule: "Asks to cancel one or more phone lines", line: REP_LINES.cancel, hears: /\bcancel phone line\b/i },
+  { rule: "Asks to restore promo pricing", line: REP_LINES.promo, hears: /\brestore promo pricing\b/i },
+];
+
+const repReply = (request: string) =>
+  REP_RULES.filter(({ hears }) => hears.test(normalizeSpeech(request)))
+    .map(({ line }) => line)
+    .join(" ");
+
+const outcomeOf = (requests: string[]) =>
+  extractOutcome(requests.flatMap((request) => [transcriptRow("agent", "speech", normalizeSpeech(request)), transcriptRow("provider", "speech", repReply(request))]));
+
+describe("generated requests against the rep script", () => {
+  const lines = SEED_PLAN.cancelLines.map((number) => ({ number }));
+  const requests = callRequests(SEED_PLAN, lines);
+  const cancels = requests.slice(0, lines.length);
+  const promos = requests.slice(lines.length);
+
+  it("models the rules the script really has, for seven lines and three promos", () => {
+    for (const { rule, line } of REP_RULES) expect(SYSTEM_PROMPT).toContain(`- ${rule}: "${line}"`);
+    expect(cancels).toHaveLength(7);
+    expect(promos).toHaveLength(3);
+  });
+
+  it("catches a cancellation that also names an account", () => {
+    expect(repReply(WORDS.cancel("4 1 5, 5 5 5, 0 1 0 2", "B T, 7 0 0 1"))).toBe(`${REP_LINES.account} ${REP_LINES.cancel}`);
+  });
+
+  it("gives the account once, at the start", () => {
+    expect(repReply(callVariables(SEED_PLAN, lines).account_line)).toBe(REP_LINES.account);
+  });
+
+  it("gets one reply per cancellation, and all seven count", () => {
+    for (const request of cancels) expect(repReply(request)).toBe(REP_LINES.cancel);
+    expect(outcomeOf(cancels).cancelled_lines).toHaveLength(7);
+  });
+
+  // Known gap, left open by instruction: extractOutcome needs the BC account in the request, and the script answers it as an account number too.
+  // When this is fixed, this test should fail and become one reply per promo with all three counted.
+  it("still gets two replies per promo, so none of the three count", () => {
+    for (const request of promos) expect(repReply(request)).toBe(`${REP_LINES.account} ${REP_LINES.promo}`);
+    expect(outcomeOf(promos).credits).toEqual([]);
+  });
+});
 
 describe("callerLlm", () => {
   it("speaks the exact disclosure first, from fixed text", () => {
