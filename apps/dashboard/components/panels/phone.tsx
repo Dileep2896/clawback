@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import { post } from "../../lib/post.ts";
+import { replayOf } from "../../lib/replay.ts";
 import { useFollow } from "../../lib/use-follow.ts";
 import { useLive } from "../../lib/use-live.tsx";
 import { Panel } from "../panel.tsx";
@@ -21,7 +22,7 @@ export function Phone() {
   }
   const contact = snapshot?.customer?.contactName ?? "Owner";
   const local = run?.platform === "local";
-  const canReply = local && sms.some((message) => message.direction === "outbound");
+  const canReply = local && !replayOf(run) && sms.some((message) => message.direction === "outbound");
   const anchor = useFollow(sms.length);
 
   async function send(event: FormEvent) {

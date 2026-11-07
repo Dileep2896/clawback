@@ -21,6 +21,20 @@ async function seedBundle(db: Db, runId = "r1") {
 const askOwner = (db: Db) => db.insert(smsMessages).values({ direction: "outbound", to: OWNER, from: COMPANY, body: "Reply YES to approve." });
 const bundle = async (db: Db, runId = "r1") => (await db.select().from(approvals).where(eq(approvals.runId, runId)))[0]!;
 
+describe("a replayed run", () => {
+  it("refuses the button and the phone, and changes nothing", async () => {
+    await withTestDb("replay_decisions", async (db) => {
+      await seedBundle(db);
+      await askOwner(db);
+      await db.update(runs).set({ replay: { recordedAt: "2026-11-06T10:00:00.000Z", speed: 1, startedAt: "2026-11-07T10:00:00.000Z" } }).where(eq(runs.id, "r1"));
+      await expect(approveRun(db, "r1")).rejects.toMatchObject({ status: 409 });
+      await expect(receiveSms(db, { runId: "r1", body: "YES" })).rejects.toMatchObject({ status: 409 });
+      expect((await bundle(db)).status).toBe("pending");
+      expect(await db.$count(smsMessages)).toBe(1);
+    });
+  });
+});
+
 describe("approveRun", () => {
   it("releases the whole bundle and records the customer's contact", async () => {
     await withTestDb("panels_action_one", async (db) => {

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { post } from "../../lib/post.ts";
+import { replayOf } from "../../lib/replay.ts";
 import { useLive } from "../../lib/use-live.tsx";
 import { Panel } from "../panel.tsx";
 
@@ -12,6 +13,7 @@ export function Approval() {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const approval = snapshot?.approval;
+  const replay = replayOf(snapshot?.run);
 
   async function approve() {
     if (!approval) return;
@@ -29,7 +31,8 @@ export function Approval() {
       {approval && (
         <div className="grid gap-2">
           {/* First, so a long summary can never push it out of sight. */}
-          {approval.status === "pending" && (
+          {approval.status === "pending" && replay && <p data-testid="approval-replay" className="font-semibold">Waiting for the recorded reply</p>}
+          {approval.status === "pending" && !replay && (
             <button
               type="button"
               data-testid="approve"
