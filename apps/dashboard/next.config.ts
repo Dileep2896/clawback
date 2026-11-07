@@ -1,0 +1,16 @@
+import { existsSync } from "node:fs";
+import type { NextConfig } from "next";
+
+// next runs from apps/dashboard without the root .env, and the scripts read it, so both must see the same database.
+// A DATABASE_URL already set wins.
+if (existsSync("../../.env")) process.loadEnvFile("../../.env");
+
+const config: NextConfig = {
+  // The demo can run on next dev, and the badge would sit on a panel in front of the room.
+  devIndicators: false,
+  // Workspace packages export raw TypeScript.
+  transpilePackages: ["@bill-fighter/db", "@bill-fighter/shared"],
+  serverExternalPackages: ["pg"],
+};
+
+export default config;
