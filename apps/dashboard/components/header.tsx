@@ -1,17 +1,12 @@
 "use client";
 
 import { replayLabel, replayOf } from "../lib/replay.ts";
-import { runProblems } from "../lib/run-state.ts";
+import { runProblems, statusLabel } from "../lib/run-state.ts";
 import { useLive } from "../lib/use-live.tsx";
 import { MeterRegister } from "./meter-register.tsx";
 
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const platformLabel = (platform: string) => (platform === "naive" ? "naïve" : platform);
-// runs.status is free text such as running, success or over_budget.
-const statusLabel = (status: string) => {
-  const words = status.replaceAll("_", " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
-};
 
 function Fact({ label, testId, figure, children }: { label: string; testId: string; figure?: boolean; children: string }) {
   return (
