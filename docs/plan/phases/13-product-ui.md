@@ -104,6 +104,7 @@ Human's answers, 2026-11-07:
 - Approve from the Overview releases the bundle exactly like the old Approval panel; a double click records one approval; SMS YES still works.
 - Pages update live during a run, using the existing live feed.
 - Promo findings show as found but not acted on, as today.
+- Ledger and findings today sum every run for the customer, so two runs double the numbers. The stage resets before each run; keep that behaviour, but test with a database holding exactly one run, and show the run date on the Overview.
 - Screenshots at 1920x1080 of every page after a sim run in `.fleet-lane/`.
 
 **Likely files:**
