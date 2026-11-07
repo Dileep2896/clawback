@@ -72,4 +72,8 @@ describe("safeNext", () => {
       expect(safeNext(bad), JSON.stringify(bad)).toBeNull();
     }
   });
+
+  it("returns null instead of throwing on paths URL cannot parse", () => {
+    for (const bad of ["//", "//%", "//["]) expect(safeNext(bad), bad).toBeNull();
+  });
 });

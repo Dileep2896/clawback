@@ -71,6 +71,11 @@ const APP_ROUTES = new Set(["/overview", "/bills", "/findings", "/money", "/agen
  */
 export function safeNext(value: unknown): string | null {
   if (typeof value !== "string" || !value.startsWith("/") || /[\u0000- \u007f\\]/.test(value)) return null;
-  const url = new URL(value, SELF);
+  let url: URL;
+  try {
+    url = new URL(value, SELF); // "//", "//%" and "//[" parse as a bad host and throw
+  } catch {
+    return null;
+  }
   return url.origin === SELF && APP_ROUTES.has(url.pathname) ? `${url.pathname}${url.search}${url.hash}` : null;
 }
