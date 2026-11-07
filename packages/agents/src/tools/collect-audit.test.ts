@@ -5,20 +5,25 @@ import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { runAudit } from "@bill-fighter/core/rules/index";
 import type { Db } from "@bill-fighter/db/client";
-import { accounts, actions, billLines, bills, customers, findings, locations, usageIntervals } from "@bill-fighter/db/schema";
+import { accounts, actions, billLines, bills, customers, findings, locations, phoneLines, usageIntervals } from "@bill-fighter/db/schema";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
+import { createApprovalGate } from "@bill-fighter/platform/local/approval-gate";
 import { createAudit } from "@bill-fighter/platform/local/audit";
 import type { Browser, BrowserSession, ToolDef } from "@bill-fighter/platform/types";
 import type { ParsedBill } from "@bill-fighter/shared/parsed-bill";
 import { eq } from "drizzle-orm";
+import { PDFDocument } from "pdf-lib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadCustomerAuditInput, runPaths } from "../customer-data.ts";
 import { SCHEMA_HASH } from "../parse-cache.ts";
 import { loadTools } from "../registry.ts";
 import { MEMBERS } from "../roster.ts";
+import { FAX_NUMBER, run as runTool } from "../test-fixtures.ts";
 import { type AgentTool, wrapTool } from "../tool-wrapper.ts";
+import { approverTools } from "./approver.ts";
 import { createAuditorTools } from "./auditor.ts";
 import { createCollectorTools } from "./collector.ts";
+import { filerTools } from "./filer.ts";
 import { createIntakeTools } from "./intake.ts";
 
 const RUN = "r1";
@@ -509,6 +514,55 @@ describe("auditor", () => {
       expect(output.refundCents).toBe(777);
     }),
   );
+
+  it("keeps a finding's content after a letter is drafted, approval requested and decided, when inputs change", () =>
+    withCustomer(async (db) => {
+      const pdfPath = join(root, "b3.pdf");
+      const pdf = await PDFDocument.create();
+      pdf.addPage();
+      writeFileSync(pdfPath, await pdf.save());
+      const description = `Fax ${FAX_NUMBER}`;
+      await db.update(bills).set({ parsedJson: PARSED }).where(eq(bills.id, "b1"));
+      await db.insert(accounts).values({ id: "a3", locationId: "l1", provider: "baytel", accountNumber: "BT-1", serviceType: "telecom" });
+      await db.insert(bills).values({
+        id: "b3",
+        accountId: "a3",
+        periodStart: "2026-01-01",
+        periodEnd: "2026-01-31",
+        totalCents: 6000,
+        pdfPath,
+        parsedJson: {
+          ...PARSED,
+          accountNumber: "BT-1",
+          providerName: "BayTel",
+          serviceType: "telecom",
+          lineItems: [{ description, quantity: 1, unit: "month", rate: 60, amountCents: 6000, lineType: "telecom" }],
+          totalCents: 6000,
+        },
+      });
+      await db.insert(billLines).values({ id: "b3-1", billId: "b3", description, amountCents: 6000 });
+      await db.insert(phoneLines).values({ id: "p1", accountId: "a3", number: FAX_NUMBER, label: "Fax", monthlyCents: 6000, callsLast12mo: 0, purpose: "fax" });
+
+      const gate = createApprovalGate(db);
+      const tools = [...createAuditorTools({ db, root, parsedDir }), ...filerTools({ db, gate: async () => gate, lettersDir: root }), ...approverTools({ db, gate: async () => gate })];
+      const call = <T>(name: string, input: unknown) => runTool(tools, name, input, RUN) as Promise<T>;
+
+      await call("run_audit", INPUT);
+      const [before] = await db.select().from(findings).where(eq(findings.type, "unusedLines"));
+      const [letter] = await call<{ actionId: string }[]>("draft_letter", { letters: [{ findingId: before!.id, wording: "Please cancel this unused line." }] });
+      await call("attach_evidence", { actionIds: [letter!.actionId] });
+      await call("request_approval", { actionIds: [letter!.actionId], summary: "Please approve this cancellation." });
+      await gate.decide({ runId: RUN, status: "approved", channel: "dashboard", approvedBy: "Linda" });
+
+      await db.update(phoneLines).set({ monthlyCents: 9000 }).where(eq(phoneLines.id, "p1"));
+      const changed = runAudit(await loadCustomerAuditInput(db, CUSTOMER)).findings.find((f) => f.type === "unusedLines")!;
+      expect(changed.annualSavingsCents).not.toBe(before!.annualSavingsCents);
+
+      const output = await call<{ findings: { id: string }[]; annualSavingsCents: number }>("run_audit", INPUT);
+      expect(await db.select().from(findings).where(eq(findings.id, before!.id))).toEqual([before]);
+      expect(output.findings.find(({ id }) => id === before!.id)).toMatchObject({ status: "proposed", title: before!.title, annualSavingsCents: before!.annualSavingsCents });
+      expect(output.annualSavingsCents).toBe(before!.annualSavingsCents);
+    }));
 
   it("updates a proposed finding's content when inputs change", () =>
     withCustomer(async (db) => {

@@ -153,7 +153,7 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
               .values(rows)
               .onConflictDoUpdate({
                 target: findings.id,
-                // Not status, and only while proposed: an approved, filed or won finding keeps what was decided on.
+                // Not status, and only while proposed with no action: approval leaves a finding proposed, so an action is what freezes the letter's facts.
                 set: {
                   title: sql`excluded.title`,
                   explanation: sql`excluded.explanation`,
@@ -162,7 +162,7 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
                   annualSavingsCents: sql`excluded.annual_savings_cents`,
                   confidence: sql`excluded.confidence`,
                 },
-                setWhere: eq(findings.status, "proposed"),
+                setWhere: and(eq(findings.status, "proposed"), notExists(tx.select({ id: actions.id }).from(actions).where(eq(actions.findingId, findings.id)))),
               });
           }
           // The audit no longer reports these. One with actions stays, so its actions keep their finding.
