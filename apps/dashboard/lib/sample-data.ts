@@ -83,6 +83,8 @@ const LINE_FINDINGS = Array.from({ length: LINE_COUNT }, (_, i) => {
     },
     annualSavingsCents: LINE_ANNUAL_CENTS,
     confidence: 0.9,
+    // Won, so the ledger panel has a confirmed row as well as filed ones.
+    status: "won" as const,
   };
 });
 
@@ -164,6 +166,7 @@ export async function insertSampleRun(db: Db) {
         refundCents: 1_260_000,
         annualSavingsCents: 1_080_000,
         confidence: 0.97,
+        status: "filed",
       },
       {
         id: "sample-finding-rate",
@@ -192,6 +195,7 @@ export async function insertSampleRun(db: Db) {
         },
         annualSavingsCents: 116_000,
         confidence: 0.9,
+        status: "filed",
       },
       ...LINE_FINDINGS,
       {
@@ -237,12 +241,20 @@ export async function insertSampleRun(db: Db) {
     });
 
     await tx.insert(ledger).values([
-      { id: "sample-ledger-refund", customerId: CUSTOMER.id, findingId: "sample-finding-meter", kind: "refund", amountCents: 1_260_000, description: "Fremont #1 meter refund, claimed" },
-      { id: "sample-ledger-savings-meter", customerId: CUSTOMER.id, findingId: "sample-finding-meter", kind: "savings", amountCents: 1_080_000, description: "Fremont #1 yearly savings" },
-      { id: "sample-ledger-savings-rate", customerId: CUSTOMER.id, findingId: "sample-finding-rate", kind: "savings", amountCents: 116_000, description: "Oakland rate change yearly savings" },
-      { id: "sample-ledger-savings-lines", customerId: CUSTOMER.id, findingId: "sample-finding-lines", kind: "savings", amountCents: 504_000, description: "Unused phone lines yearly savings" },
-      // 30% of the first-year value of the four rows above.
-      { id: "sample-ledger-fee", customerId: CUSTOMER.id, kind: "fee", amountCents: 888_000, description: "Bill Fighter's 30% of first-year value" },
+      { id: "sample-ledger-refund", customerId: CUSTOMER.id, findingId: "sample-finding-meter", kind: "refund", amountCents: 1_260_000, description: "Claimed, due only when granted" },
+      { id: "sample-ledger-savings-meter", customerId: CUSTOMER.id, findingId: "sample-finding-meter", kind: "savings", amountCents: 1_080_000, description: "Filed, due only when granted" },
+      { id: "sample-ledger-savings-rate", customerId: CUSTOMER.id, findingId: "sample-finding-rate", kind: "savings", amountCents: 116_000, description: "Filed, due only when granted" },
+      // One row per line, as record_savings writes them.
+      ...LINE_FINDINGS.map(({ id: findingId }, i) => ({
+        id: `sample-ledger-savings-line-${i + 1}`,
+        customerId: CUSTOMER.id,
+        findingId,
+        kind: "savings" as const,
+        amountCents: LINE_ANNUAL_CENTS,
+        description: "First year savings",
+      })),
+      // 30% of the refund and savings rows above.
+      { id: "sample-ledger-fee", customerId: CUSTOMER.id, kind: "fee", amountCents: 888_000, description: "30% of refund and first year savings" },
     ]);
 
     await tx.insert(smsMessages).values([
