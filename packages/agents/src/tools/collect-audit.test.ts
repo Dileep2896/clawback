@@ -183,7 +183,7 @@ describe("intake", () => {
       const output = await pick(createIntakeTools({ db, mail }), "get_customer").handler({ accountNumbers: ["BE-1"] }, CTX);
       expect(output).toMatchObject({
         matched: true,
-        customer: { id: CUSTOMER },
+        customer: { id: CUSTOMER, contactEmail: expect.stringContaining("@") },
         providers: ["bayconnect", "baycurrent"],
         accounts: [{ id: "a1", location: "Fremont #1" }, { id: "a2" }],
       });
