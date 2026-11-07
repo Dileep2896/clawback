@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runAudit } from "@bill-fighter/core/rules/index";
 import { compareRates } from "@bill-fighter/core/rules/rate-optimization";
+import { findingTotals } from "@bill-fighter/core/rules/totals";
 import { db as sharedDb, type Db } from "@bill-fighter/db/client";
 import { actions, billLines, bills, findings, phoneLines } from "@bill-fighter/db/schema";
 import type { Finding } from "@bill-fighter/shared/finding";
@@ -10,6 +11,7 @@ import { and, eq, inArray, notExists, notInArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { PARSED_DIR } from "../audit-input.ts";
 import { customerAccounts, customerBills, loadCustomerAuditInput, runPaths, RUNS_DIR } from "../customer-data.ts";
+import { assertRunCustomer } from "../findings.ts";
 import { createParseCache } from "../parse-cache.ts";
 import { defineTool } from "../tool-wrapper.ts";
 
@@ -34,6 +36,7 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
       inputSchema: customerInput,
       targets: () => [],
       async handler({ customerId }, { runId }) {
+        await assertRunCustomer(db, runId, customerId);
         const { storedBills } = runPaths(runId, root);
         // No llm, in any mode: a miss fails visibly and can never spend. New bills go through scripts/parse-bills.ts first.
         const cache = createParseCache({ dir: parsedDir });
@@ -92,7 +95,8 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
       description: "Prices each electric account's metered usage on its current schedule and every schedule it could move to.",
       inputSchema: customerInput,
       targets: () => [],
-      async handler({ customerId }) {
+      async handler({ customerId }, { runId }) {
+        await assertRunCustomer(db, runId, customerId);
         const input = await loadCustomerAuditInput(db, customerId);
         const accounts = input.accounts
           .filter((account) => account.serviceType === "electric")
@@ -118,7 +122,8 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
       description: "Runs every audit rule over the customer's parsed bills and usage, and saves the findings.",
       inputSchema: customerInput,
       targets: () => [],
-      async handler({ customerId }) {
+      async handler({ customerId }, { runId }) {
+        await assertRunCustomer(db, runId, customerId);
         const run = runAudit(await loadCustomerAuditInput(db, customerId));
 
         // Evidence is JSON, which no foreign key checks. A finding must only point at rows that exist.
@@ -184,8 +189,7 @@ export function createAuditorTools({ db, root = RUNS_DIR, parsedDir = PARSED_DIR
             confidence,
             status,
           })),
-          refundCents: stored.reduce((sum, row) => sum + row.refundCents, 0),
-          annualSavingsCents: stored.reduce((sum, row) => sum + row.annualSavingsCents, 0),
+          ...findingTotals(stored),
         };
       },
     }),

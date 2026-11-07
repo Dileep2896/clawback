@@ -13,6 +13,12 @@ export async function customerOfRun(db: Db, runId: string) {
   return row.customer;
 }
 
+/** The model chooses customerId, so a run may only touch the customer it belongs to. */
+export async function assertRunCustomer(db: Db, runId: string, customerId: string) {
+  const { id } = await customerOfRun(db, runId);
+  if (id !== customerId) throw new Error(`Customer ${customerId} is not the customer of run ${runId}`);
+}
+
 /** The lines a finding may cancel, or [] if it may cancel none. phone_lines decides what is an alarm line, not the finding's own text. */
 export async function cancellableLines(db: Db, finding: { type: string; evidenceJson: unknown }) {
   if (finding.type !== "unusedLines") return [];

@@ -9,6 +9,7 @@ import { portalVaultName } from "@bill-fighter/shared/portal";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { customerAccounts, customerBills, runPaths, RUNS_DIR } from "../customer-data.ts";
+import { assertRunCustomer } from "../findings.ts";
 import { defineTool, type Target } from "../tool-wrapper.ts";
 
 const testId = (id: string) => `[data-testid="${id}"]`;
@@ -225,6 +226,7 @@ export function createCollectorTools({ db, browser, root = RUNS_DIR }: { db: Db;
       inputSchema: customerInput,
       targets: () => [],
       async handler({ customerId }, { runId }) {
+        await assertRunCustomer(db, runId, customerId);
         const { downloadedBills, storedBills } = runPaths(runId, root);
         const known = new Map((await customerBills(db, customerId)).map((bill) => [bill.id, bill.accountId]));
         await mkdir(storedBills, { recursive: true });
@@ -257,6 +259,7 @@ export function createCollectorTools({ db, browser, root = RUNS_DIR }: { db: Db;
       inputSchema: customerInput,
       targets: () => [],
       async handler({ customerId }, { runId }) {
+        await assertRunCustomer(db, runId, customerId);
         const { downloadedUsage } = runPaths(runId, root);
         const known = new Set((await customerAccounts(db, customerId)).map((account) => account.id));
         const files = await readdir(downloadedUsage).catch((error: NodeJS.ErrnoException) => {

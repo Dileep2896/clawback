@@ -368,6 +368,24 @@ describe("collector", () => {
     }));
 });
 
+describe("customer scope", () => {
+  it("refuses another customer's id in every customer tool and changes nothing", () =>
+    withCustomer(async (db) => {
+      await db.insert(customers).values({ id: "c2", name: "Other", contactName: "O", contactEmail: "o@x.local", contactPhone: "+15550001112" });
+      await db.insert(locations).values({ id: "l2", customerId: "c2", name: "Other", address: "2 Main", city: "Oakland" });
+      await db.insert(accounts).values({ id: "a3", locationId: "l2", provider: "bayconnect", accountNumber: "BC-3", serviceType: "internet" });
+      await db.insert(bills).values({ id: "b2", accountId: "a3", periodStart: "2026-01-01", periodEnd: "2026-01-31", totalCents: 5100, parsedJson: PARSED, pdfPath: "data/bills/b2.pdf" });
+      const snapshot = async () => ({ bills: await db.select().from(bills), findings: await db.select().from(findings), usage: await db.select().from(usageIntervals), files: readdirSync(root, { recursive: true }) });
+      const before = await snapshot();
+
+      const tools = [...createAuditorTools({ db, root, parsedDir }), ...createCollectorTools({ db, browser: async () => fakeBrowser({}).browser, root }).tools];
+      for (const name of ["parse_bill", "price_usage", "run_audit", "store_bill", "store_usage"]) {
+        await expect(pick(tools, name).handler({ customerId: "c2" }, CTX), name).rejects.toThrow("is not the customer of run");
+      }
+      expect(await snapshot()).toEqual(before);
+    }));
+});
+
 describe("auditor", () => {
   const auditor = (db: Db, name: string) => pick(createAuditorTools({ db, root, parsedDir }), name);
   const INPUT = { customerId: CUSTOMER };
