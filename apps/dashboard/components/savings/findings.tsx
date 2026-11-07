@@ -7,6 +7,7 @@ import { findingState } from "../../lib/run-state.ts";
 import { useLive } from "../../lib/use-live.tsx";
 import { EvidenceDrawer } from "../evidence/drawer.tsx";
 import { ButtonLink, EmptyState, PageHeader, Table } from "../ui/kit.tsx";
+import { NoAudit } from "../no-audit.tsx";
 import { Page } from "./common.tsx";
 
 export function FindingsList() {
@@ -22,7 +23,8 @@ export function FindingsList() {
   return (
     <Page>
       <PageHeader title="Findings" description="What the agents found on your bills. Open one to see the evidence." />
-      {snapshot && findings.length === 0 && (
+      {snapshot && !snapshot.run && <NoAudit />}
+      {snapshot?.run && findings.length === 0 && (
         <EmptyState title="No findings yet" action={<ButtonLink href="/agents">Watch your agents work</ButtonLink>}>
           The agents check every bill for overcharges, better rates and lines you no longer use. What they find shows up here.
         </EmptyState>

@@ -6,6 +6,7 @@ import { actionState } from "../../lib/run-state.ts";
 import type { Snapshot } from "../../lib/snapshot.ts";
 import { useLive } from "../../lib/use-live.tsx";
 import { ButtonLink, Card, EmptyState, PageHeader, StatTile, Table } from "../ui/kit.tsx";
+import { NoAudit } from "../no-audit.tsx";
 import { NOT_RECORDED, Page } from "./common.tsx";
 
 
@@ -18,6 +19,15 @@ export function MoneyView({ snapshot }: { snapshot: Snapshot | null | undefined 
   const invoice = snapshot?.ledger.find((row) => row.kind === "invoice");
   const invoiceAction = snapshot?.actions.find((action) => action.kind === "invoice");
   const cardPayments = snapshot?.actions.filter((action) => action.kind === "card_pay") ?? [];
+
+  if (snapshot && !snapshot.run) {
+    return (
+      <Page>
+        <PageHeader title="Money" description="Every amount in your ledger, Clawback's invoice and card payments." />
+        <NoAudit />
+      </Page>
+    );
+  }
 
   return (
     <Page>

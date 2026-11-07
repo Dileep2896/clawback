@@ -5,7 +5,8 @@ import { ledgerView } from "../../lib/ledger.ts";
 import { STOPPED_TEXT, statusLabel } from "../../lib/run-state.ts";
 import { APPROVAL_CHANNELS, useApprove } from "../../lib/use-approve.ts";
 import { useLive } from "../../lib/use-live.tsx";
-import { Button, ButtonLink, Card, EmptyState, PageHeader } from "../ui/kit.tsx";
+import { Button, ButtonLink, Card, PageHeader } from "../ui/kit.tsx";
+import { NoAudit } from "../no-audit.tsx";
 import { NOT_RECORDED, Page, runDate } from "./common.tsx";
 
 function StatementLine({ label, note, testId, children }: { label: string; note?: string; testId: string; children: string }) {
@@ -71,9 +72,7 @@ export function Overview() {
     return (
       <Page>
         <PageHeader title="Overview" description="Money claimed, yearly savings and anything that needs your approval." />
-        <EmptyState title="Your savings show here once the agents finish" action={<ButtonLink href="/agents">Watch your agents work</ButtonLink>}>
-          No audit has run yet. Refunds, savings and Clawback&apos;s fee appear here as soon as they are recorded.
-        </EmptyState>
+        <NoAudit />
       </Page>
     );
   }
