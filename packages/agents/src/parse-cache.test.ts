@@ -114,6 +114,14 @@ describe("createParseCache", () => {
     expect(readParsedDir(dir).map((entry) => entry.source)).toEqual(["bill-1"]);
     expect(existsSync(dir)).toBe(true);
   });
+
+  it("makes readParsedDir throw when changed PDF bytes leave two entries for one source, naming the source and both files", async () => {
+    const cache = createParseCache({ dir, llm: llmReturning(GOOD) });
+    await cache.parse(PDF, "bill-1");
+    await cache.parse(pdfWith("Regenerated bill"), "bill-1");
+    const [first, second] = readdirSync(dir);
+    expect(() => readParsedDir(dir)).toThrow(new RegExp(`bill-1.*${first}.*${second}`));
+  });
 });
 
 describe("readParsedDir with more than one schema version", () => {

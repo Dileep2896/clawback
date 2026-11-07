@@ -46,10 +46,19 @@ function readEntry(path: string): CachedParse | null {
 }
 
 // Older schema versions stay on disk after a reparse. Reading them would duplicate bills, or abort on a shape that no longer parses.
-export const readParsedDir = (dir: string): CachedParse[] =>
-  readdirSync(dir)
+export function readParsedDir(dir: string): CachedParse[] {
+  const fileBySource = new Map<string, string>();
+  return readdirSync(dir)
     .filter((file) => file.endsWith(`.${SCHEMA_HASH}.json`))
-    .map((file) => readEntry(join(dir, file))!);
+    .map((file) => {
+      const entry = readEntry(join(dir, file))!;
+      const other = fileBySource.get(entry.source);
+      // Changed PDF bytes leave the old entry behind, and either one could be the stale bill, so never pick.
+      if (other) throw new Error(`Two current parse cache entries for source ${entry.source}: ${other} and ${file}`);
+      fileBySource.set(entry.source, file);
+      return entry;
+    });
+}
 
 /** Without an llm, for the stage run, a miss throws instead of spending. */
 export function createParseCache({ dir, llm }: { dir: string; llm?: Pick<Llm, "structured"> }) {
