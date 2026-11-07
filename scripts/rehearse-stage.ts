@@ -108,7 +108,13 @@ try {
   await page.getByText("No cards yet").waitFor({ state: "hidden" });
   await shot(page, "stage-3-agents");
   mark("on stage: approved, watching /agents");
-  while ((await runStatus(page)) === "running") await page.waitForTimeout(2000);
+  // A crashed webhook process leaves the run "running" forever; rehearsed runs finish in about 3 minutes.
+  const deadline = Date.now() + 8 * 60_000;
+  let status: string | undefined;
+  while ((status = await runStatus(page)) === "running") {
+    if (Date.now() > deadline) throw new Error(`Run still "${status}" 8 minutes after Approve; is pnpm dev:webhooks alive?`);
+    await page.waitForTimeout(2000);
+  }
   await shot(page, "stage-4-agents-done");
   mark(`on stage: run ended (${await runStatus(page)})`);
 
