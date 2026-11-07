@@ -184,11 +184,24 @@ Code is in `services/voice/src/live/caller/`. **One real call has run (2026-11-0
 | Check | Result |
 |---|---|
 | A real call reaches the line and completes with no human on it | **Met.** 160.9 s, ended `agent_hangup`. |
-| The disclosure is first, word for word, in recording and transcript | Met in Retell's transcript. **Not proven:** Vapi's independent check reported "the caller did not open with the full disclosure", and nobody has listened to the recording yet. |
+| The disclosure is first, word for word, in recording and transcript | **Met.** See "Disclosure check" below. Vapi's independent check reported "the caller did not open with the full disclosure"; the recording overrides it. |
 | `ALLOWED_CALL_NUMBERS` holds only the Vapi number, and any other number never dials | Met on stubs: zero requests for another number, an empty or wider list, or any other path that places a call. The real call went to the Vapi number. |
 | A ticket number is saved in `calls.outcome_json` with `calls.mode=live` | **Met.** `BT-48213`, with all seven lines and three promo accounts. |
 | The cost of each live call is logged, and calls are kept short | Logged, about $0.45. **Not short:** 161 s against the demo script's 50 s. |
 | A forced failure falls back to sim automatically, with the on-screen label | Met on stubs, including an empty `RETELL_API_KEY`, which sends no request. The label is proven on the row. `panels-action` has not shipped the panel that shows it. |
+
+### Disclosure check
+
+Evidence from the recording of the one real call, which is mono and 160.9 s:
+
+- **Human listen, relayed by the orchestrator, verbatim:** "okay it looks good".
+- **Whisper `small.en`, whole recording, 0.00 to 6.06 s:** "Hi, this is an AI assistant calling on behalf of Golden Gate Noodle Company." "This call is being recorded."
+- **Whisper `base.en` and `medium.en`, the first 8.2 s cut out on its own, identical text:** "Hi, this is an AI assistant calling on behalf of Golden Gate Noodle Company. This call is being recorded."
+- **Order:** the audio level shows the disclosure ending at about 5.9 s and the next speech starting at about 8.2 s. That speech is the menu: "Thanks for calling Baytel Business. For billing, press 2." (`small.en` and `medium.en`).
+
+The transcripts ran locally, so the audio went to no outside service.
+
+**The discrepancy:** the recording shows the full disclosure before the menu, so Vapi's report does not reflect what the recording holds. As the line's open risks say, this check allows no word differences and a problem needs comparing with the recording. Why Vapi's check failed is not confirmed, because `cli.ts` does not print Vapi's text and it was not re-read. This is Retell's recording, so it does not show what reached Vapi's end in the first moments of the call.
 
 ### Human's decisions (2026-11-06, relayed by the orchestrator)
 
@@ -207,8 +220,8 @@ Code is in `services/voice/src/live/caller/`. **One real call has run (2026-11-0
 
 ### Open risks
 
-- **The line check failed on the one real call, and the causes are not confirmed.** `checkLineCall` reported the disclosure problem above, "the rep did not open with its greeting" with the greeting logged as "paytel billing...", and seven "off script" entries for "yes that is canceled". The seven look like spelling only, since the check does not treat "canceled" and "cancelled" as equal the way `extractOutcome` does. The other two need the recording.
-- **The caller spoke over the rep's account question** on that call. The rep still accepted the account. The prompt is unchanged unless the human asks after hearing the recording.
+- **The line check failed on the one real call, and the causes are not confirmed.** `checkLineCall` reported the disclosure problem above, "the rep did not open with its greeting" with the greeting logged as "paytel billing...", and seven "off script" entries for "yes that is canceled". The seven look like spelling only, since the check does not treat "canceled" and "cancelled" as equal the way `extractOutcome` does. The recording settles the disclosure (see "Disclosure check") but not why the check failed. The greeting is not settled by transcript: `small.en` heard "Baytel billing", `base.en` heard "Beto Billing", and `medium.en` missed those words.
+- **The caller spoke over the rep's account question** on that call. The rep still accepted the account. The human has heard the recording, and the prompt is unchanged in this lane. The human wants the caller to answer the rep's questions instead of following a fixed script, which is a new lane after this one ships.
 - **One real call is one sample.** Speech-to-text also gave "Baytown Billing" and an added "Um", which changed no outcome.
 - **`extractOutcome` needs the rep's exact words.** If Retell's speech-to-text turns "that is" into "that's", the item stays out, and with no ticket the call falls back.
 - **Normalising only handles single digits.** "Double five" or "seven thousand one" leaves the item out.
