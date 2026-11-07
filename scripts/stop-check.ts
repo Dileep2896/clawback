@@ -1,3 +1,4 @@
+import type { ApprovalGate } from "@bill-fighter/platform/types";
 import { isGatedTool } from "@bill-fighter/shared/gated-tools";
 
 export const EXPECTED_REFUND_CENTS = 1_260_606;
@@ -15,9 +16,10 @@ export type StopSnapshot = {
   /** A result event means the agents ended their turn, so a later approval would resume nothing. */
   finished: boolean;
   approvals: { status: string; channel: string | null; approvedBy: string | null; approvedAt: Date | null; summary: string }[];
-  bundle: { id: string; kind: string; payloadJson: unknown }[];
+  bundle: { id: string; kind: string; findingId: string | null; payloadJson: unknown }[];
   totals: { refundCents: number; annualSavingsCents: number };
-  alarmNumbers: string[];
+  findings: { id: string; evidenceJson: unknown }[];
+  phoneLines: { id: string; number: string; purpose: string }[];
   audit: AuditRow[];
   cards: { id: string; agent: string; status: string }[];
   /** Tool calls the model made, from the run's events. */
@@ -33,6 +35,18 @@ export type StopSnapshot = {
 const count = <T>(items: T[], test: (item: T) => boolean) => items.filter(test).length;
 const digits = (text: string) => text.replace(/\D/g, "");
 const isDenied = (row: AuditRow) => (row.outputJson as { denied?: unknown } | null)?.denied !== undefined;
+
+/** The database Postgres will connect to: pg decodes the URL's path, so %62illfighter is billfighter. */
+export const databaseName = (url: string) => decodeURIComponent(new URL(url).pathname.slice(1));
+
+/** Leaves a timed-out or failed run denied and closed, so it cannot hold the customer's next run. */
+export async function abandonRun(runId: string, finished: boolean, gate: Pick<ApprovalGate, "get" | "decide">, markError: (runId: string) => Promise<unknown>) {
+  try {
+    if ((await gate.get(runId))?.status === "pending") await gate.decide({ runId, status: "denied", channel: "dashboard", approvedBy: "agents-e2e" });
+  } finally {
+    if (!finished) await markError(runId);
+  }
+}
 
 /** Every way the run is not stopped at one pending approval. Empty means it is. */
 export function stopProblems(s: StopSnapshot): string[] {
@@ -61,9 +75,16 @@ export function stopProblems(s: StopSnapshot): string[] {
   const call = s.bundle.find((action) => action.kind === "call")?.payloadJson as { cancelLines?: string[]; promoAccounts?: string[] } | undefined;
   add(call?.cancelLines?.length === 7, `the call lists ${call?.cancelLines?.length} lines to cancel, not 7`);
   add(call?.promoAccounts?.length === 3, `the call lists ${call?.promoAccounts?.length} promos, not 3`);
-  for (const alarm of s.alarmNumbers) {
-    const inBundle = (call?.cancelLines ?? []).some((line) => digits(line) === digits(alarm)) || digits(approval?.summary ?? "").includes(digits(alarm));
-    add(!inBundle, `alarm line ${alarm} is in the bundle`);
+  for (const action of s.bundle.filter(({ kind }) => kind === "cancel" || kind === "letter")) {
+    const finding = s.findings.find(({ id }) => id === action.findingId);
+    const lineIds = (finding?.evidenceJson as { phoneLineIds?: string[] } | undefined)?.phoneLineIds ?? [];
+    const lines = s.phoneLines.filter(({ id }) => lineIds.includes(id));
+    add(lines.length > 0 && lines.length === lineIds.length, `${action.kind} action ${action.id} does not resolve to its phone lines`);
+    for (const line of lines) add(line.purpose !== "alarm", `alarm line ${line.number} is in the bundle, on ${action.id}`);
+  }
+  for (const { number } of s.phoneLines.filter(({ purpose }) => purpose === "alarm")) {
+    const inBundle = (call?.cancelLines ?? []).some((line) => digits(line) === digits(number)) || digits(approval?.summary ?? "").includes(digits(number));
+    add(!inBundle, `alarm line ${number} is in the bundle`);
   }
   for (const parked of s.parked) add(s.bundle.some((action) => action.id === parked), `parked action ${parked} is not in the bundle`);
 
@@ -82,8 +103,10 @@ export function stopProblems(s: StopSnapshot): string[] {
   const texts = count(s.audit, (row) => row.tool === "send_sms" && (row.outputJson as { error?: unknown } | null)?.error === undefined);
   add(texts === 1, `${texts} texts to the owner, not 1`);
 
-  const parse = s.audit.findLast((row) => row.tool === "parse_bill")?.outputJson as { cached?: number; fresh?: number } | undefined;
-  add(parse?.cached === EXPECTED_BILLS && parse.fresh === 0, `parse_bill was not all cached: ${JSON.stringify(parse)}`);
+  const parses = s.audit.filter((row) => row.tool === "parse_bill").map((row) => row.outputJson as { cached?: number; fresh?: number } | null);
+  // Every result, because a cached retry would otherwise hide a first attempt that parsed fresh.
+  add(parses.length > 0 && parses.every((parse) => parse?.fresh === 0), `parse_bill was not all cached: ${JSON.stringify(parses)}`);
+  add(parses.at(-1)?.cached === EXPECTED_BILLS, `parse_bill last returned ${parses.at(-1)?.cached} cached bills, not ${EXPECTED_BILLS}`);
   const stored = s.audit.findLast((row) => row.tool === "store_bill")?.outputJson as { totalStored?: number } | undefined;
   add(stored?.totalStored === EXPECTED_BILLS, `${stored?.totalStored} bills stored, not ${EXPECTED_BILLS}`);
 

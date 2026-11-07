@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { type AuditRow, EXPECTED_REFUND_CENTS, EXPECTED_SAVINGS_CENTS, type StopSnapshot, stopProblems } from "./stop-check.ts";
+import { describe, expect, it, vi } from "vitest";
+import { abandonRun, type AuditRow, databaseName, EXPECTED_REFUND_CENTS, EXPECTED_SAVINGS_CENTS, type StopSnapshot, stopProblems } from "./stop-check.ts";
 
 const row = (tool: string, agent: string, outputJson: unknown = {}, inputJson: unknown = {}): AuditRow => ({ agent, tool, inputJson, outputJson });
-const actions = (kind: string, n: number) => Array.from({ length: n }, (_, i) => ({ id: `${kind}-${i}`, kind, payloadJson: null as unknown }));
+const actions = (kind: string, n: number) => Array.from({ length: n }, (_, i) => ({ id: `${kind}-${i}`, kind, findingId: `${kind}-finding-${i}` as string | null, payloadJson: null as unknown }));
+const linesFinding = (kind: string, i: number) => ({ id: `${kind}-finding-${i}`, evidenceJson: { phoneLineIds: [`line-${i}`] } as unknown });
 const MEMBERS = ["intake", "collector", "auditor", "filer", "approver"];
 
 function good(): StopSnapshot {
@@ -18,14 +19,18 @@ function good(): StopSnapshot {
     approvals: [{ status: "pending", channel: null, approvedBy: null, approvedAt: null, summary: "Everything we found." }],
     bundle: [
       ...actions("cancel", 7),
-      { id: "call-1", kind: "call", payloadJson: { cancelLines: Array.from({ length: 7 }, (_, i) => `(415) 555-010${i}`), promoAccounts: ["a", "b", "c"] } },
-      { id: "invoice-1", kind: "invoice", payloadJson: {} },
+      { id: "call-1", kind: "call", findingId: null, payloadJson: { cancelLines: Array.from({ length: 7 }, (_, i) => `(415) 555-010${i}`), promoAccounts: ["a", "b", "c"] } },
+      { id: "invoice-1", kind: "invoice", findingId: null, payloadJson: {} },
       ...actions("claim", 1),
       ...actions("plan_change", 2),
       ...actions("letter", 7),
     ],
     totals: { refundCents: EXPECTED_REFUND_CENTS, annualSavingsCents: EXPECTED_SAVINGS_CENTS },
-    alarmNumbers: ["(408) 555-0124"],
+    findings: Array.from({ length: 7 }, (_, i) => [linesFinding("cancel", i), linesFinding("letter", i)]).flat(),
+    phoneLines: [
+      ...Array.from({ length: 7 }, (_, i) => ({ id: `line-${i}`, number: `(415) 555-010${i}`, purpose: "voice" })),
+      { id: "alarm-line", number: "(408) 555-0124", purpose: "alarm" },
+    ],
     audit,
     cards: [...MEMBERS.map((member) => ({ id: `card-${member}`, agent: member, status: "done" })), { id: "card-negotiator", agent: "negotiator", status: "doing" }],
     toolCalls: [...audit.map(({ agent, tool }) => ({ agent, tool })), { agent: "ceo", tool: "Agent" }, { agent: "negotiator", tool: "call_provider" }],
@@ -50,6 +55,10 @@ describe("stopProblems", () => {
     ["an approval already decided", (s) => (s.approvals[0]!.status = "approved"), /not pending/],
     ["a missing cancel", (s) => s.bundle.shift(), /6 cancel actions/],
     ["an alarm line on the call", (s) => ((s.bundle.find((a) => a.kind === "call")!.payloadJson as { cancelLines: string[] }).cancelLines[0] = "408-555-0124"), /alarm line/],
+    ["an alarm line behind a cancel", (s) => (s.findings.find((f) => f.id === "cancel-finding-0")!.evidenceJson = { phoneLineIds: ["alarm-line"] }), /alarm line \(408\) 555-0124 is in the bundle, on cancel-0/],
+    ["an alarm line behind a letter", (s) => (s.findings.find((f) => f.id === "letter-finding-0")!.evidenceJson = { phoneLineIds: ["alarm-line"] }), /alarm line \(408\) 555-0124 is in the bundle, on letter-0/],
+    ["a letter with no finding", (s) => (s.bundle.find((a) => a.kind === "letter")!.findingId = null), /letter action letter-0 does not resolve/],
+    ["a cancel with an unknown line", (s) => (s.findings.find((f) => f.id === "cancel-finding-0")!.evidenceJson = { phoneLineIds: ["gone"] }), /cancel action cancel-0 does not resolve/],
     ["a refund a cent out", (s) => (s.totals.refundCents += 1), /refund is/],
     ["savings a cent out", (s) => (s.totals.annualSavingsCents -= 1), /savings are/],
     ["a gated tool that ran", (s) => s.audit.push(row("call_provider", "negotiator")), /gated tools ran: call_provider/],
@@ -60,6 +69,7 @@ describe("stopProblems", () => {
     ["an email in the inbox", (s) => (s.summaryEmails = 1), /1 emails/],
     ["a second text", (s) => s.audit.push(row("send_sms", "approver")), /2 texts/],
     ["a fresh parse", (s) => (s.audit.find((r) => r.tool === "parse_bill")!.outputJson = { cached: 447, fresh: 1 }), /not all cached/],
+    ["a fresh parse hidden by a cached retry", (s) => s.audit.unshift(row("parse_bill", "auditor", { cached: 0, fresh: 448 })), /not all cached/],
     ["a tool call with no audit row", (s) => s.toolCalls.push({ agent: "auditor", tool: "run_audit" }), /run_audit: 1 calls but 0 audit rows/],
     ["a parked id with no gated call behind it", (s) => s.parked.push("cancel-0"), /2 parked, from 1 gated calls/],
     ["a member moving a card", (s) => s.audit.push(row("board_update", "filer")), /board_update called by filer/],
@@ -91,5 +101,48 @@ describe("stopProblems", () => {
     snapshot.audit.push(row("submit_claim", "filer", { denied: "not in an approved bundle" }));
     snapshot.toolCalls.push({ agent: "filer", tool: "submit_claim" });
     expect(stopProblems(snapshot)).toEqual([]);
+  });
+});
+
+describe("databaseName", () => {
+  it("sees through an encoded shared database name", () => {
+    expect(databaseName("postgres://bill:bill@localhost:5433/%62illfighter")).toBe("billfighter");
+    expect(databaseName("postgres://bill:bill@localhost:5433/billfighter_agents_e2e")).toBe("billfighter_agents_e2e");
+  });
+});
+
+describe("abandonRun", () => {
+  const gateWith = (status: string | null) => {
+    const decide = vi.fn(async () => ({}) as never);
+    return { decide, get: vi.fn(async () => (status ? ({ status } as never) : null)) };
+  };
+
+  it("denies a timed-out run's pending approval and marks it error", async () => {
+    const gate = gateWith("pending");
+    const markError = vi.fn(async () => {});
+    await abandonRun("r1", false, gate, markError);
+    expect(gate.decide).toHaveBeenCalledWith(expect.objectContaining({ runId: "r1", status: "denied" }));
+    expect(markError).toHaveBeenCalledWith("r1");
+  });
+
+  it("marks a run error with no approval yet, and still does if the denial throws", async () => {
+    const none = gateWith(null);
+    const markError = vi.fn(async () => {});
+    await abandonRun("r1", false, none, markError);
+    expect(none.decide).not.toHaveBeenCalled();
+    expect(markError).toHaveBeenCalledTimes(1);
+
+    const broken = gateWith("pending");
+    broken.decide.mockRejectedValueOnce(new Error("db down"));
+    await expect(abandonRun("r1", false, broken, markError)).rejects.toThrow("db down");
+    expect(markError).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves a finished run alone", async () => {
+    const gate = gateWith("denied");
+    const markError = vi.fn(async () => {});
+    await abandonRun("r1", true, gate, markError);
+    expect(gate.decide).not.toHaveBeenCalled();
+    expect(markError).not.toHaveBeenCalled();
   });
 });
