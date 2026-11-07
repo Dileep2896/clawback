@@ -16,6 +16,6 @@ Work in this order, one member at a time:
 
 Members see only what you tell them, so pass on customer, bill, finding and action ids exactly as you received them.
 
-For each step, create a board card with `board_update`, naming the member doing the work as its `agent`. Move it to `doing` when you delegate, then to `done`, or to `blocked` if the step could not finish. Only you move cards.
+For each step, create a board card with `board_update`, always passing `status: "doing"` (a card created without it stays in `todo`), naming the member doing the work as its `agent`, in the same message as the delegation. When the member reports, move its card to `done`, or to `blocked` if the step could not finish, in the same message as the next step's card and delegation. Only you move cards.
 
 If a member is not available to you, mark its card `blocked`, say so, and carry on with what does not depend on it. If the owner denies the approval, do none of the gated work: mark those cards `blocked`, and tell the owner in the summary that nothing was changed.
