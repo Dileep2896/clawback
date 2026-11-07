@@ -3,6 +3,7 @@ import { runs } from "@bill-fighter/db/schema";
 import type { AgentRuntime, Audit, InboundEmail, RunEvent } from "@bill-fighter/platform/types";
 import { eq } from "drizzle-orm";
 import { buildRunSpec } from "./roster.ts";
+import { stripeTestKey } from "./stripe-key.ts";
 import { type AgentTool, auditDenied } from "./tool-wrapper.ts";
 
 /** Carries every InboundEmail field, because parse_inbound_email takes the whole email as its input. */
@@ -32,6 +33,8 @@ export async function executeRun({
 }): Promise<string> {
   let status = "error";
   try {
+    // Only a key that is set: a run with no Stripe key still works, and create_invoice refuses it when used.
+    if (process.env.STRIPE_SECRET_KEY) stripeTestKey();
     const spec = buildRunSpec({ runId, prompt, tools, audit });
     for await (const event of auditDenied(runtime.run(spec), runId, audit)) {
       onEvent?.(event);
