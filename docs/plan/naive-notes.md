@@ -15,13 +15,13 @@ Lane `naive-recon`, 2026-11-07. I read the docs as raw Markdown with `curl` (`ht
 
 ## Account state (checked live)
 
-- Org `org_jv75x1hmnp8p0d2e3cr9qffcxs`, named **"New company"**, mode `live`. This matches `NAIVE_COMPANY_ID`. No second company was created.
+- Org `org_jv75x1hmnp8p0d2e3cr9qffcxs`, named **"ClawBack"** (renamed by the human on 2026-11-07 from "New company"), mode `live`. This matches `NAIVE_COMPANY_ID`. No second company was created.
 - **API key scopes (new key `key_0mp9e160jnt6ns4afanysvjzjd`, made by the human on 2026-11-07, checked with `GET /v1/me`):** `agents:read agents:write sessions:read sessions:write audit:read webhooks:* admin billing:read`. It still has no `billing:write` (number or card purchase) or `computers:write` (naïve browser), which is what we want for the app key. The first key had only the four agents/sessions scopes. The new key is in the root and worktree `.env`.
 - Checked live with the new key (GET only): `/v1/audit_logs` 200, `/v1/webhooks` 200 (none), `/v1/vaults` 200 (none), `/v1/agents` 200 (none), `/v1/sessions?stop_reason=awaiting_approval` 200 (none).
 - Before this lane the org had no identities, agents, domains or vaults.
 - **Created (both free, no DNS, no credit):**
   - Identity `Clawback`, id `idn_8jjf45tqdqqq8r966n3sfgcch5`. I set `NAIVE_IDENTITY_ID` in the worktree `.env`. Copy it to the root `.env`.
-  - System domain `new-company-qffcxs.usenaive.ai`, id `dom_hkragd1xb361my9qtwz6yndvcp`. It is named after the org slug. `inbound_status: verified`; `dns_status` was still `pending_verification` a few minutes after creation (needed before we can **send**). Recheck with `GET /v1/domains/{id}`.
+  - System domain `new-company-qffcxs.usenaive.ai`, id `dom_hkragd1xb361my9qtwz6yndvcp`. It is named after the org slug. `inbound_status: verified`; `dns_status` was still `pending_verification` a few minutes after creation (needed before we can **send**). Recheck with `GET /v1/domains/{id}`. **After the org rename** (GET on 2026-11-07): the name is unchanged, still `new-company-qffcxs.usenaive.ai`, so a rename does not re-mint the system domain. It is still the only domain on the org. Status is `pending_dns`, with `dns_status: pending_verification`, `inbound_status: verified` and `app_connect_status: pending`.
 - **Not created:** inbox, agents, vault, card, phone number. The reasons are below.
 
 ## Section 5 interfaces on naïve
@@ -97,7 +97,7 @@ naïve has no bundle confirm. `ApprovalGate` stays **ours**, and naïve's `ask` 
 
 - **Q1 (key): answered.** The new key has the scopes (Blocker 2).
 - **Q2 (number):** Should we buy a number? The price is not published. It needs a `billing:write` key and naïve's shared-registration legal name (ask naïve support or the hackathon desk). Inbound works as soon as it is bought, with no carrier wait for receiving. Without it, approval is the emailed request plus the dashboard tap.
-- **Q3 (org name):** The org is named "New company", so the free system domain and the `bills@` address read `...@new-company-qffcxs.usenaive.ai` on screen. The human will rename it (2026-11-07) before we create inboxes. The system domain is already minted under the old slug; it is unclear whether a rename re-mints it. A custom domain needs DNS.
+- **Q3 (org name): partly answered.** The org is now "ClawBack", but the system domain kept the old slug, so `bills@` would still read `bills@new-company-qffcxs.usenaive.ai`. Getting a clean address needs one of three things: naïve support re-minting the system domain, deleting it and creating a new one (untested: it may come back with the same slug, and it is a destructive call, so ask first), or a custom domain (needs DNS).
 
 ## Reshaping the later lanes
 
