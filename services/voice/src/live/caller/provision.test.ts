@@ -1,0 +1,59 @@
+import { describe, expect, it } from "vitest";
+import { AGENT_NAME, callerAgent, callerLlm } from "./agent.ts";
+import { provisionCaller } from "./provision.ts";
+import type { Retell } from "./retell.ts";
+
+type Json = Record<string, unknown>;
+
+// Holds what was saved, and reads it back with whatever changes a test asks for.
+function stub(options: { existing?: boolean; agentReadBack?: Json; llmReadBack?: Json } = {}) {
+  const log: string[] = [];
+  let llm: Json = {};
+  let agent: Json = {};
+  const retell: Retell = async (method, path, body) => {
+    log.push(`${method} ${path}`);
+    if (path === "/v2/list-agents") return { items: options.existing ? [{ agent_name: "other", agent_id: "x" }, { agent_name: AGENT_NAME, agent_id: "a1", response_engine: { llm_id: "l1" } }] : [] };
+    if (path === "/create-retell-llm" || path.startsWith("/update-retell-llm/")) return (llm = { ...(body as Json), llm_id: "l1" });
+    if (path === "/create-agent" || path.startsWith("/update-agent/")) return (agent = { ...(body as Json), agent_id: "a1" });
+    if (path.startsWith("/get-retell-llm/")) return { ...llm, ...options.llmReadBack };
+    if (path.startsWith("/get-agent/")) return { ...agent, ...options.agentReadBack };
+    throw new Error(`Unexpected ${method} ${path}`);
+  };
+  return { retell, log };
+}
+
+describe("provisionCaller", () => {
+  it("creates the LLM and agent, and proves them from a read-back", async () => {
+    const { retell, log } = stub();
+    await expect(provisionCaller(retell)).resolves.toEqual({ agentId: "a1", llmId: "l1" });
+    expect(log).toEqual(["POST /v2/list-agents", "POST /create-retell-llm", "POST /create-agent", "GET /get-retell-llm/l1", "GET /get-agent/a1"]);
+  });
+
+  it("updates the existing one on a re-run, rather than making another", async () => {
+    const { retell, log } = stub({ existing: true });
+    await provisionCaller(retell);
+    expect(log).toEqual(["POST /v2/list-agents", "PATCH /update-retell-llm/l1", "PATCH /update-agent/a1", "GET /get-retell-llm/l1", "GET /get-agent/a1"]);
+  });
+
+  it("never places a call", async () => {
+    const { retell, log } = stub();
+    await provisionCaller(retell);
+    expect(log.filter((entry) => entry.includes("call"))).toEqual([]);
+  });
+
+  it.each([
+    ["a changed disclosure", { llmReadBack: { begin_message: "Hello" } }, "begin_message"],
+    ["an extra tool", { llmReadBack: { general_tools: [...callerLlm().general_tools, { type: "transfer_call", name: "t" }] } }, "general_tools"],
+    ["a longer call limit", { agentReadBack: { max_call_duration_ms: 3_600_000 } }, "max_call_duration_ms"],
+    ["an interruptible agent", { agentReadBack: { interruption_sensitivity: 1 } }, "interruption_sensitivity"],
+    ["voicemail handling", { agentReadBack: { voicemail_option: { action: { type: "hangup" } } } }, "voicemail"],
+    ["IVR handling", { agentReadBack: { ivr_option: { action: { type: "hangup" } } } }, "IVR"],
+  ])("fails loudly on %s in the read-back", async (_, options, expected) => {
+    await expect(provisionCaller(stub(options).retell)).rejects.toThrow(expected);
+  });
+
+  it("accepts a read-back that leaves out the nulls and adds its own fields, as the spike's did", async () => {
+    const agentReadBack = { voicemail_option: undefined, ivr_option: undefined, version: 0, ...callerAgent("l1") };
+    await expect(provisionCaller(stub({ agentReadBack }).retell)).resolves.toMatchObject({ agentId: "a1" });
+  });
+});
