@@ -1,32 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { post } from "../../lib/post.ts";
-import { replayOf } from "../../lib/replay.ts";
-import { isStopped, STOPPED_TEXT } from "../../lib/run-state.ts";
-import { useLive } from "../../lib/use-live.tsx";
+import { APPROVAL_CHANNELS, useApprove } from "../../lib/use-approve.ts";
+import { STOPPED_TEXT } from "../../lib/run-state.ts";
 import { Panel } from "../panel.tsx";
 
-const CHANNELS: Record<string, string> = { dashboard: "on the dashboard", sms: "by SMS", naive: "on naïve" };
-
 export function Approval() {
-  const { snapshot, refresh } = useLive();
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const approval = snapshot?.approval;
-  const replay = replayOf(snapshot?.run);
-  // A recording plays back its own decision, so its status never offers the stopped notice.
-  const stopped = !replay && isStopped(snapshot?.run?.status);
-
-  async function approve() {
-    if (!approval) return;
-    setBusy(true);
-    setFailed(false);
-    const ok = await post("/api/approve", { runId: approval.runId });
-    if (ok) await refresh();
-    else setFailed(true);
-    setBusy(false);
-  }
+  const { approval, replay, stopped, busy, failed, approve, canApprove } = useApprove();
 
   return (
     <Panel title="Approval">
@@ -40,7 +19,7 @@ export function Approval() {
               {STOPPED_TEXT}
             </p>
           )}
-          {approval.status === "pending" && !replay && !stopped && (
+          {canApprove && (
             <button
               type="button"
               data-testid="approve"
@@ -62,7 +41,7 @@ export function Approval() {
               className={`rounded-control px-3 py-1 font-semibold ${approval.status === "approved" ? "bg-action text-action-text" : "border border-alert text-alert"}`}
             >
               {approval.status === "approved" ? "Approved" : "Denied"} by {approval.approvedBy}
-              {approval.channel && `, ${CHANNELS[approval.channel]}`}
+              {approval.channel && `, ${APPROVAL_CHANNELS[approval.channel]}`}
             </p>
           )}
           <p className="font-semibold tabular-nums">
