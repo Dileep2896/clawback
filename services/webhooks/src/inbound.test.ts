@@ -92,7 +92,9 @@ describe("handleInbound", () => {
 
       const log = readFileSync(join(process.env.RUN_EVENT_LOG_DIR!, `${runId}.log`), "utf8");
       expect(log).toContain("[intake] calls get_customer");
-      expect(log).toContain("Run ended: success");
+      // The stub model does none of the plan, so the logged result is the checked one, not the SDK's success.
+      expect(log).toContain("Run ended: incomplete");
+      expect(log).not.toContain("Run ended: success");
       expect(log).not.toContain("tool-input");
     });
   });

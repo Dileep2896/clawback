@@ -43,19 +43,21 @@ export async function executeRun({
   tools: AgentTool[];
   onEvent?: (event: RunEvent) => void;
 }): Promise<string> {
-  let status = "error";
+  let status: Extract<RunEvent, { type: "result" }>["status"] = "error";
   let reason: string | undefined;
+  let costUsd = 0;
   active.add(runId);
   try {
     // Only a key that is set: a run with no Stripe key still works, and create_invoice refuses it when used.
     if (process.env.STRIPE_SECRET_KEY) stripeTestKey();
     const spec = buildRunSpec({ runId, prompt, tools, audit });
     for await (const event of auditDenied(runtime.run(spec), runId, audit)) {
-      onEvent?.(event);
+      // The result waits until the plan check below, so the log never says success for a run that turns out incomplete.
       if (event.type === "result") {
         status = event.status;
         reason = event.reason;
-      }
+        costUsd = event.costUsd;
+      } else onEvent?.(event);
     }
   } catch (error) {
     status = "error";
@@ -75,6 +77,7 @@ export async function executeRun({
       console.error(`Run ${runId}: could not check whether its plan finished:`, error);
     }
   }
+  onEvent?.({ type: "result", status, costUsd, ...(reason ? { reason } : {}) });
   active.delete(runId);
   const save = (async () => {
     // Fixed wording on the screen, so the raw reason goes to the log.

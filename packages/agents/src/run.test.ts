@@ -106,12 +106,18 @@ describe("a run that stops", () => {
     expect(await row(db)).toMatchObject({ status: "incomplete", finishedAt: expect.any(Date) });
     expect(await titles(db)).toEqual([expect.stringContaining("Stopped before the plan finished")]);
     expect(events).toContainEqual({ type: "text", agent: "run", text: "Plan not finished: The run ended before its audit finished." });
+    // The log gets one result, after the check, so it never reports the SDK's success.
+    expect(events.filter((event) => event.type === "result")).toEqual([{ type: "result", status: "incomplete", costUsd: 1, reason: "The run ended before its audit finished." }]);
+    expect(events.at(-1)?.type).toBe("result");
   });
 
   test("a plan check that fails records error, never a false success", async (db) => {
     vi.mocked(planGaps).mockRejectedValueOnce(new Error("database went away"));
-    expect(await execute(db, runtimeOf({ type: "result", status: "success", costUsd: 1 }))).toBe("error");
+    const events: RunEvent[] = [];
+    const status = await executeRun({ db, runId: RUN, prompt: "p", runtime: runtimeOf({ type: "result", status: "success", costUsd: 1 }), audit: noAudit, tools: [], onEvent: (event) => events.push(event) });
+    expect(status).toBe("error");
     expect(await row(db)).toMatchObject({ status: "error" });
+    expect(events.filter((event) => event.type === "result")).toEqual([{ type: "result", status: "error", costUsd: 1 }]);
   });
 
   test("a stopped run is not checked, and keeps its own status", async (db) => {
