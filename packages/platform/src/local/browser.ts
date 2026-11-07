@@ -58,19 +58,41 @@ export function createBrowser(vault: Vault, getAllowlist: () => Allowlist = allo
         // <-loopback>: Chromium skips proxies for localhost by default, and our portals are on localhost.
         const browser = await chromium.launch({ headless: true, proxy: { server: proxy.server, bypass: "<-loopback>" } });
         const context = await browser.newContext();
-        let page = await context.newPage();
+        let navFailed = false;
+        const newPage = async () => {
+          const next = await context.newPage();
+          next.on("requestfailed", (request) => {
+            // ERR_ABORTED is a navigation replaced by a newer one, which commits no error page.
+            const aborted = request.failure()?.errorText === "net::ERR_ABORTED";
+            if (next === page && request.isNavigationRequest() && request.frame() === next.mainFrame() && !aborted) {
+              navFailed = true;
+            }
+          });
+          return next;
+        };
+        let page = await newPage();
+        // Chromium commits a refused navigation's error page late, which would interrupt the next goto.
+        // A fresh page cannot be interrupted, and the context keeps the login cookies.
+        const swapPage = async () => {
+          await page.close();
+          page = await newPage();
+          navFailed = false;
+        };
         return {
           async goto(url) {
             if (!allowed(url)) throw new Error(`Browser refused ${url}: outside ALLOWED_PORTAL_ORIGINS`);
+            if (navFailed) await swapPage();
             try {
               await page.goto(url);
+              if (!navFailed) return;
             } catch (error) {
-              // Chromium commits a refused navigation's error page late, which would interrupt the next goto.
-              // A fresh page cannot be interrupted, and the context keeps the login cookies.
-              await page.close();
-              page = await context.newPage();
-              throw error;
+              if (!/interrupted by another navigation|ERR_ABORTED/.test(String(error))) throw error;
             }
+            // A refused click can start after click() returns, so it can race this goto. Go again once on a fresh page.
+            // shortcut: a refusal that commits just after goto returns can still fail the next read (4 in 2400 under load),
+            // and the next goto recovers. Upgrade if an agent tool ever reads straight after a goto without retrying.
+            await swapPage();
+            await page.goto(url);
           },
           fill: (selector, value) => page.locator(selector).fill(value),
           async fillSecret(selector, vaultName) {

@@ -48,6 +48,9 @@ export default async function check() {
     else if (path === "/to-https") response.writeHead(302, { location: `${forbiddenHttps}/redirect` }).end();
     else if (path === "/hop") response.writeHead(302, { location: "/to-forbidden" }).end();
     else if (path === "/link") send(`<a id="out" href="${forbidden.origin}/link">out</a>`);
+    else if (path === "/late-link") {
+      send(`<a id="out" href="${forbidden.origin}/late" onclick="event.preventDefault();setTimeout(()=>location.href=this.href,20)">out</a>`);
+    } else if (path === "/slow") setTimeout(() => send(`<h1 class="welcome">Welcome</h1>`), 150);
     else if (path === "/image") send(`<img src="${forbidden.origin}/image.png">`);
     else if (path === "/popup") send(`<a id="out" target="_blank" href="${forbidden.origin}/popup">out</a>`);
     else if (path === "/set-cookie") response.setHeader("set-cookie", "session=1").end();
@@ -82,16 +85,19 @@ export default async function check() {
     await assert.rejects(session.goto(`${portal.origin}/hop`));
     assert.equal(forbiddenHits, 0, "a redirect reached a forbidden origin");
 
-    // A refused click settles on its own time, so each one gets a moment before the next navigation.
-    const settle = () => new Promise((resolve) => setTimeout(resolve, 500));
-    await session.goto(`${portal.origin}/link`);
-    await session.click("#out");
-    await settle();
+    // No waiting after a refused click: the very next goto has to land. /late-link leaves after click returns, and
+    // /slow answers later still, so the refusal always lands while goto is in flight.
+    for (const start of ["/link", "/late-link", "/late-link", "/late-link", "/late-link", "/late-link"]) {
+      await session.goto(`${portal.origin}${start}`);
+      await session.click("#out");
+      await session.goto(`${portal.origin}/slow`);
+      assert.deepEqual(await session.texts(".welcome"), ["Welcome"]);
+    }
     await session.goto(`${portal.origin}/image`);
     await session.goto(`${portal.origin}/popup`);
     await session.click("#out");
-    await settle();
-    assert.equal(forbiddenHits, 0, "a link, image or popup reached a forbidden origin");
+    await session.goto(`${portal.origin}/accounts`);
+    assert.deepEqual(await session.texts(".welcome"), ["Welcome"]);
 
     await assert.rejects(session.goto(`${portal.origin}/to-https`));
     assert.equal(forbiddenHits, 0, "an https redirect opened a tunnel to a forbidden origin");
@@ -131,6 +137,9 @@ export default async function check() {
     const dest = join(dir, "bill.pdf");
     await session.download("#bill", dest);
     assert.equal(await readFile(dest, "utf8"), "%PDF-check");
+
+    // Last, so the link, image and popup requests have had the whole check to arrive if the proxy ever let them through.
+    assert.equal(forbiddenHits, 0, "a link, image or popup reached a forbidden origin");
   } finally {
     await session.close();
     portal.server.close();
