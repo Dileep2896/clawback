@@ -3,6 +3,7 @@
 // The dashboard must be running on that database. Pass a folder to keep screenshots. DASHBOARD_URL picks another port.
 // pnpm exec tsx --env-file-if-exists=.env scripts/savings-views-check.ts [folder]
 import assert from "node:assert/strict";
+import { signedInContext } from "./dashboard-session.ts";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { RUNS_DIR } from "@bill-fighter/agents/customer-data";
@@ -142,7 +143,7 @@ async function checkApprove(page: Page) {
 assertNotSharedDb();
 const browser = await chromium.launch();
 try {
-  const page = await (await browser.newContext({ viewport: VIEWPORT, locale: "en-US" })).newPage();
+  const page = await (await signedInContext(browser, BASE, { viewport: VIEWPORT, locale: "en-US" })).newPage();
   await checkLiveDuringRun(page);
   await checkOverview(page);
   await checkBills(page);

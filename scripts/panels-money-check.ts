@@ -2,6 +2,7 @@
 // The dashboard must be running on that database. Pass a folder to keep screenshots. DASHBOARD_URL picks another port.
 // pnpm exec tsx --env-file-if-exists=.env scripts/panels-money-check.ts
 import assert from "node:assert/strict";
+import { signedInContext } from "./dashboard-session.ts";
 import { randomInt } from "node:crypto";
 import { loadAuditInput } from "@bill-fighter/agents/audit-input";
 import { financeLedgerTools } from "@bill-fighter/agents/tools/finance-ledger";
@@ -237,7 +238,7 @@ assertNotSharedDb();
 await clearRuns();
 const browser = await chromium.launch();
 try {
-  const context = await browser.newContext({ viewport: VIEWPORT, locale: "en-US" });
+  const context = await signedInContext(browser, BASE, { viewport: VIEWPORT, locale: "en-US" });
   const page = await context.newPage();
   const { costUsd, customerId } = await recordRealSeed();
   await checkRealFigures(page, costUsd);

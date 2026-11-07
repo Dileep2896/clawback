@@ -18,8 +18,10 @@ export function bySite(bills: Bill[]) {
   return [...sites];
 }
 
-export function Bills() {
-  const { snapshot } = useLive();
+/** own: the signed-in customer's bills when the live run is someone else's (bills/page.tsx). */
+export function Bills({ own }: { own?: Bill[] }) {
+  const { snapshot: live } = useLive();
+  const snapshot = own ? { bills: own } : live;
   const bills = snapshot?.bills ?? [];
   const accounts = new Set(bills.map((bill) => bill.accountId)).size;
 

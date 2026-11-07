@@ -2,6 +2,7 @@
 // pnpm dev:dashboard must be running. Pass a folder to keep screenshots.
 // pnpm exec tsx --env-file-if-exists=.env scripts/panels-work-check.ts
 import assert from "node:assert/strict";
+import { signedInContext } from "./dashboard-session.ts";
 import { db } from "@bill-fighter/db/client";
 import { chromium, type Page } from "playwright";
 import { assertNotSharedDb, insertSampleRun, moveSampleCard } from "../apps/dashboard/lib/sample-data.ts";
@@ -227,7 +228,7 @@ assertNotSharedDb();
 await insertSampleRun(db);
 const browser = await chromium.launch();
 try {
-  const page = await (await browser.newContext({ viewport: VIEWPORT })).newPage();
+  const page = await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage();
   await checkBoardMovesLive(page);
   await checkFits(page, "closed");
   await checkDrawerNumbersTrace(page);
@@ -238,8 +239,8 @@ try {
   await checkDrawerStaysOpenOnLiveData(page);
   await checkDark(page);
 
-  await checkUnreadableEvidence(await (await browser.newContext({ viewport: VIEWPORT })).newPage());
-  await checkEmpty(await (await browser.newContext({ viewport: VIEWPORT })).newPage());
+  await checkUnreadableEvidence(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage());
+  await checkEmpty(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage());
   console.info("panels-work check passed");
 } finally {
   await browser.close();

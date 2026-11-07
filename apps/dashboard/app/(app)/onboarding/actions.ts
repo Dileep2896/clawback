@@ -34,7 +34,7 @@ export async function connectPortalAction(_state: ConnectState, form: FormData):
  * rather than starting another: a second run would double the ledger until demo:reset.
  * Any other customer has no portal the agents can read yet, so the audit is queued, honestly, and nothing runs.
  */
-export async function startAuditAction(_state: StartState): Promise<StartState> {
+export async function startAuditAction(): Promise<StartState> {
   const user = await requireUser();
   if (!isDemoCustomer(user.customerId)) {
     await db.update(users).set({ auditRequestedAt: new Date() }).where(eq(users.id, user.id));

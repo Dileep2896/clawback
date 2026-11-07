@@ -53,6 +53,7 @@ afterAll(async () => {
 const at = new Date("2026-01-15T12:00:00.000Z");
 const seedRows: [PgTable, Record<string, unknown>][] = [
   [schema.customers, { id: "cust", name: "Test Noodle Co", contactName: "Test Owner", contactEmail: "o@billfighter.local", contactPhone: "+15550001111" }],
+  [schema.users, { id: "user", name: "Test Owner", company: "Test Noodle Co", email: "o@billfighter.local", passwordHash: "salt:hash", customerId: "cust", createdCustomer: true, auditRequestedAt: at, createdAt: at }],
   [schema.locations, { id: "loc", customerId: "cust", name: "Store 1", address: "1 Test St", city: "Oakland" }],
   [schema.accounts, { id: "acct", locationId: "loc", provider: "bayhearth", accountNumber: "A-1", serviceType: "gas", rateSchedule: "G-1", meterNumber: "M-1" }],
   [schema.authorizations, { id: "auth", customerId: "cust", provider: "bayhearth", formType: "79-1095", scope: "billing", signedBy: "Test Owner", signedAt: at, expiresAt: at, pdfPath: "a.pdf" }],
@@ -84,7 +85,7 @@ describe("db schema", () => {
   it("inserts and reads one row per table, covering every table", async () => {
     const allTables = Object.values(schema).filter((v) => is(v, PgTable)).map((t) => getTableName(t));
     expect(seedRows.map(([t]) => getTableName(t)).sort()).toEqual(allTables.sort());
-    expect(allTables).toHaveLength(18);
+    expect(allTables).toHaveLength(19);
 
     for (const [table, row] of seedRows) {
       await db.insert(table).values(row);

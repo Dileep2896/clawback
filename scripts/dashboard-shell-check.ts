@@ -2,6 +2,7 @@
 // pnpm dev:dashboard must be running. Pass a folder to keep screenshots.
 // pnpm exec tsx --env-file-if-exists=.env scripts/dashboard-shell-check.ts
 import assert from "node:assert/strict";
+import { signedInContext } from "./dashboard-session.ts";
 import { stopMessage } from "@bill-fighter/agents/retry";
 import { decideApproval } from "@bill-fighter/db/approvals";
 import { db } from "@bill-fighter/db/client";
@@ -183,19 +184,19 @@ assertNotSharedDb();
 await insertSampleRun(db);
 const browser = await chromium.launch();
 try {
-  const page = await (await browser.newContext({ viewport: VIEWPORT })).newPage();
+  const page = await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage();
   await checkLiveUpdates(page);
   await checkDarkTheme(page);
   await checkConnectionLoss(page);
 
-  const fresh = await (await browser.newContext({ viewport: VIEWPORT })).newPage();
+  const fresh = await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage();
   await checkNoRun(fresh, JSON.stringify(NO_RUN));
-  await checkStoppedRun(await (await browser.newContext({ viewport: VIEWPORT })).newPage());
+  await checkStoppedRun(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage());
 
-  await checkNarrow(await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage());
-  await checkLanding(await (await browser.newContext({ viewport: VIEWPORT })).newPage(), "1920");
-  await checkLanding(await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage(), "390");
-  await checkNav(await (await browser.newContext({ viewport: VIEWPORT })).newPage());
+  await checkNarrow(await (await signedInContext(browser, BASE, { viewport: { width: 390, height: 844 } })).newPage());
+  await checkLanding(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage(), "1920");
+  await checkLanding(await (await signedInContext(browser, BASE, { viewport: { width: 390, height: 844 } })).newPage(), "390");
+  await checkNav(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage());
   console.info("dashboard-shell check passed");
 } finally {
   await browser.close();

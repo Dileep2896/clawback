@@ -2,6 +2,7 @@
 // The dashboard must be running on that database. Pass a folder to keep screenshots. DASHBOARD_URL picks another port.
 // pnpm exec tsx --env-file-if-exists=.env scripts/replay-check.ts [folder]
 import assert from "node:assert/strict";
+import { signedInContext } from "./dashboard-session.ts";
 import { readFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -78,7 +79,7 @@ const recordedCall = clock(new Date(call.ended_at as string).getTime() - new Dat
 
 const browser = await chromium.launch();
 try {
-  const page = await browser.newPage({ viewport: VIEWPORT });
+  const page = await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage();
   const external: string[] = [];
   page.on("request", (request) => {
     if (!request.url().startsWith("data:") && !["localhost", "127.0.0.1"].includes(new URL(request.url()).hostname)) external.push(request.url());
