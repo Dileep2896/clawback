@@ -250,3 +250,25 @@ Finish the two review fixes first, then do this pass in the same lane. Keep the 
 - Motion is smooth (ease-out, 200 to 600 ms), sequenced, and plays only when on screen. prefers-reduced-motion shows the finished state.
 
 **Bar to clear:** compare your screenshots against Linear, Ramp, Mercury and Vercel landing pages for polish (do not copy them). Run the hallmark audit. Ship frames at 1920x1080 (hero at 3 moments, plus each section) and 390x844.
+
+## Design study (2026-11-07)
+
+Human, verbatim: "see all the AI platform landing page and learn from it to make a really professional landing page and also improving our product page." The study is `docs/plan/design-study.md` (13 reference sites; screenshots in the orchestrator's scratchpad `refs/`, not committed). **Where it conflicts with "Design pass 2" above, the study wins:** one neutral ground plus one accent (money green) used only on the main button and money, `alert` red only for wrong bill numbers; no glows on cards, no glass; the hero is the headline first, then a large framed app screen with the agent log streaming inside it; graphics and animation live inside the frame and the bento cards (the kWh chart draws itself, the call waveform, the counter rolls up), restrained, and every frame looks finished at t=0.
+
+### `product-polish`
+
+**Goal:** Apply the study's "In-app pages" section 1 to 8 to the signed-in app: Linear/Harvey-style sidebar shell, Mercury-style Overview money tiles with the approval card as the one loud element, Ramp/Stripe-style Bills table with filter chips, Linear-style Findings list and evidence drawer with an activity timeline, Mercury-style Money page with one area chart and claimed versus granted shown differently, a calm Agents screen with run-stat chips. Use the `hallmark` skill; follow `docs/plan/design.md` and update it.
+
+**Hard rules:** `/agents` stays the stage screen: readable at 1920x1080 with the 22 px floor and no page scroll; every `data-testid` and panel behaviour stays; `scripts/rehearse-stage.ts` (sim), `replay-check.ts`, `dashboard-shell-check.ts`, `panels-*-check.ts`, `savings-views-check.ts` and the sign-up checks pass. Numbers come from ledger rows only. No landing page files (owned by `landing-live`).
+
+**Estimate:** 2.5 hours
+
+**Acceptance checks:**
+- Screenshots of every app page at 1920x1080 after one sim run, plus the evidence drawer open and the approval-pending Overview, in `.fleet-lane/`.
+- All the checks above, `pnpm test`, lint and typecheck pass; one `rehearse-stage.ts` sim run passes with the same three numbers.
+
+**Likely files:** `apps/dashboard/app/(app)/`, `apps/dashboard/components/`, `docs/plan/design.md`
+
+**depends on:** savings-views, signup-connect
+
+**parallel with:** landing-live, naive-rehearsal
