@@ -4,6 +4,7 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { RUNS_DIR } from "@bill-fighter/agents/customer-data";
+import { UPLOADS_DIR } from "@bill-fighter/webhooks/dashboard";
 import { databaseHost, databaseUrl, db, type Db } from "@bill-fighter/db/client";
 
 export const RUN_TABLES = ["runs", "findings", "actions", "approvals", "calls", "ledger", "board_cards", "audit_log", "sms_messages", "scheduled_checks"];
@@ -17,6 +18,8 @@ export type ResetOptions = {
   /** Null leaves mail alone: replay must work with only Postgres up. */
   mailpitApi: string | null;
   runsDir: string;
+  /** Where the dashboard keeps uploaded PDFs, one folder per customer. Absent leaves them alone. */
+  uploadsDir?: string;
   allowNonlocal: boolean;
 };
 
@@ -76,13 +79,50 @@ async function clearTables(pool: Db["$client"], before: Record<string, number>) 
   }
 }
 
+/**
+ * Demo sign-ups go, so sign-up can be repeated on stage: every user, and the customers sign-up created with the locations,
+ * accounts and bills their uploads added. The seeded customer is never one of them. Returns the deleted customer ids.
+ * Its own transaction, before the seed is counted, so the seed check below still proves the seed itself was untouched.
+ */
+export async function clearSignups(pool: Db["$client"]): Promise<string[]> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    const created = (await client.query<{ id: string }>("select distinct customer_id as id from users where created_customer")).rows.map(({ id }) => id);
+    await client.query("TRUNCATE users");
+    if (created.length > 0) {
+      const accountsOf = "select a.id from accounts a join locations l on l.id = a.location_id where l.customer_id = any($1)";
+      await client.query(`delete from bill_lines where bill_id in (select id from bills where account_id in (${accountsOf}))`, [created]);
+      await client.query(`delete from bills where account_id in (${accountsOf})`, [created]);
+      await client.query(`delete from accounts where id in (${accountsOf})`, [created]);
+      await client.query("delete from locations where customer_id = any($1)", [created]);
+      // No other table may still point at these customers: a run or finding for one fails here rather than vanishing.
+      await client.query("delete from customers where id = any($1)", [created]);
+    }
+    await client.query("COMMIT");
+    return created;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 /** The database goes last, because its run ids are how a failed reset finds the folders when it runs again. */
 export async function demoReset(options: ResetOptions) {
   const { pool, mailpitApi, runsDir } = options;
   checkTarget(options);
   await checkConnected(options);
 
-  const seed = (await pool.query<Record<string, number>>(SEED_COUNTS)).rows[0]!;
+  const signups = await clearSignups(pool);
+  // Customer ids are generated uuids, checked anyway before they name a folder.
+  if (options.uploadsDir) {
+    await Promise.all(signups.filter((id) => /^\w[\w.-]*$/.test(id)).map((id) => rm(join(options.uploadsDir!, id), { recursive: true, force: true })));
+  }
+
+  const seed =(await pool.query<Record<string, number>>(SEED_COUNTS)).rows[0]!;
   const runRows = (await pool.query<{ id: string; status: string; replayed: boolean }>("select id, status, replay is not null as replayed from runs")).rows;
   // Ids become folder names under a directory other lanes share.
   const unsafe = runRows.filter(({ id }) => !/^\w[\w.-]*$/.test(id)).map(({ id }) => JSON.stringify(id));
@@ -98,19 +138,21 @@ export async function demoReset(options: ResetOptions) {
   // A replayed run keeps its recorded id, so its folder belongs to the database that captured it, maybe another lane's.
   await Promise.all(runRows.filter(({ replayed }) => !replayed).map(({ id }) => rm(join(runsDir, id), { recursive: true, force: true })));
   await clearTables(pool, seed);
-  return { runs: runRows.length, running, seed };
+  return { runs: runRows.length, running, seed, signups: signups.length };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const { runs, seed } = await demoReset({
+    const { runs, seed, signups } = await demoReset({
       pool: db.$client,
       url: databaseUrl(),
       mailpitApi: process.env.MAILPIT_API || "http://localhost:8025",
       runsDir: RUNS_DIR,
+      uploadsDir: UPLOADS_DIR,
       allowNonlocal: process.env.DEMO_RESET_ALLOW_NONLOCAL === "1",
     });
     console.info(`Cleared ${RUN_TABLES.join(", ")}, the Mailpit inbox, and the folders of ${runs} runs.`);
+    console.info(`Cleared every demo sign-up, and the ${signups} customers they created with their uploaded bills.`);
     console.info(`Kept the seed: ${Object.entries(seed).map(([name, count]) => `${count} ${name}`).join(", ")}.`);
   } catch (error) {
     console.error(`Reset stopped: ${error instanceof Error ? error.message : String(error)}`);

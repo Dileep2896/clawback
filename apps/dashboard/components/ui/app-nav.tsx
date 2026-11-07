@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { logOutAction } from "../../app/(auth)/actions.ts";
 import { Wordmark } from "./kit.tsx";
 
 export const NAV = [
@@ -69,6 +70,11 @@ export function AppNav() {
           Demo data
         </span>
         <ThemeToggle />
+        <form action={logOutAction}>
+          <button type="submit" data-testid="log-out" className="min-h-11 cursor-pointer rounded-control px-3 font-semibold whitespace-nowrap hover:bg-paper">
+            Log out
+          </button>
+        </form>
       </div>
     </header>
   );
