@@ -16,7 +16,7 @@ class Refused extends Error {
 
 async function runOf(db: Db, runId: string) {
   const [found] = await db
-    .select({ customerId: runs.customerId, startedAt: runs.startedAt, platform: runs.platform, approver: customers.contactName })
+    .select({ startedAt: runs.startedAt, platform: runs.platform, approver: customers.contactName })
     .from(runs)
     .innerJoin(customers, eq(runs.customerId, customers.id))
     .where(eq(runs.id, runId));
@@ -39,11 +39,11 @@ export const isYes = (body: string) => /^yes[.!]*$/i.test(body.trim());
 
 /** A reply from the simulated phone: stored whatever it says, and it approves only as a plain YES. */
 export async function receiveSms(db: Db, { runId, body }: { runId: string; body: string }) {
-  const { customerId, platform, startedAt, approver } = await runOf(db, runId);
+  const { platform, startedAt, approver } = await runOf(db, runId);
   if (platform !== "local") throw new Refused("The simulated phone only works on local runs", 409);
 
-  // Texts have no run id, so a reply to an older run would be matched to a newer run's text.
-  const [newest] = await db.select({ id: runs.id }).from(runs).where(eq(runs.customerId, customerId)).orderBy(desc(runs.startedAt), desc(runs.id)).limit(1);
+  // Texts have no run or customer id, so a reply to any older run would be matched to a newer run's text.
+  const [newest] = await db.select({ id: runs.id }).from(runs).orderBy(desc(runs.startedAt), desc(runs.id)).limit(1);
   if (newest?.id !== runId) throw new Refused("A newer run has replaced this one", 409);
 
   const [latest] = await db
