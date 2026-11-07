@@ -19,6 +19,7 @@ Started by the human on 2026-11-07 ("Yes, start the recon"). `naive-recon` shipp
 - **Spend:** naïve sessions spend the human's $250 naïve credit. Unit tests and mocks are free. Before the **first live session in each lane**, ask the orchestrator in `questions.md` with the expected cost; set an agent `budget` cap on every agent (at most $2 a run). Read-only API calls are fine without asking. Voice stays `VOICE_MODE=sim`.
 - **Stage:** `PLATFORM=local` stays the stage default until `naive-rehearsal` passes three runs and the human chooses.
 - Reviewers: verify claims against the live docs at `usenaive.ai/docs/<path>.md`.
+- **`naive-public-endpoints`, reshaped:** a script (`pnpm naive:tunnel`) that starts a `cloudflared` quick tunnel to the MCP tool server on `NAIVE_MCP_PORT` (default 8790) and the session-event webhook, prints the public URL, writes it as `NAIVE_MCP_PUBLIC_URL` for the run, and closes the tunnel on exit or Ctrl-C. Those env names are fixed by `naive-runtime-adapter`. The portal does not go public. No naïve spend in this lane; a tunnel test against a local echo server is enough. Document it in `docs/plan/naive-endpoints.md`.
 
 ## Notes from earlier research
 
