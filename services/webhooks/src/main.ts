@@ -15,6 +15,10 @@ const deps = {
   runtime: await platform.agentRuntime(),
   audit: await platform.audit(),
   tools: await loadTools(),
+  // For the dashboard's connect, upload and "Start my audit" (dashboard.ts).
+  identity: await platform.identity(),
+  vault: await platform.vault(),
+  llm: await platform.llm(),
 };
 const scheduler = await platform.scheduler();
 scheduler.onFire((check) => startScheduledRun(check, deps));
