@@ -5,7 +5,7 @@ import { z } from "zod";
 import { createLlm, type Query } from "./llm.ts";
 
 const SCHEMA = { type: "object", properties: { total: { type: "integer" } }, required: ["total"] };
-const INIT = { type: "system", subtype: "init", apiKeySource: "none", tools: [], agents: [] };
+const INIT = { type: "system", subtype: "init", apiKeySource: "none", tools: [], agents: [], mcp_servers: [] };
 
 const llmWith = (messages: unknown[], thenThrow = "") => {
   const query: Query = async function* () {
@@ -48,22 +48,21 @@ describe("Llm.structured", () => {
   it.each([
     ["output that breaks the schema", [INIT, success({ total: "five" })], /does not match/],
     ["a success with no structured output", [INIT, success(undefined)], /no structured output/],
-    ["is_error on a success subtype", [INIT, { ...success({ total: 5 }), is_error: true, result: "Invalid API key" }], /Invalid API key/],
-    ["the SDK giving up", [INIT, { type: "result", subtype: "error_max_structured_output_retries", is_error: true, errors: [] }], /retries/],
-    ["no result", [INIT], /no structured output/],
-    ["a key instead of the login", [{ ...INIT, apiKeySource: "ANTHROPIC_API_KEY" }, success({ total: 5 })], /Refusing to run/],
-    ["an account connector", [{ ...INIT, tools: ["mcp__claude_ai_Gmail__send_message"] }, success({ total: 5 })], /Refusing to run/],
-    ["a plan rate limit", [INIT, { type: "rate_limit_event", rate_limit_info: { status: "rejected" } }, success({ total: 5 })], /rate limit/],
-    ["is_error with an empty message after a success", [INIT, success({ total: 5 }), { ...success(undefined), is_error: true }], /no message/],
-    ["is_error with no message at all", [INIT, success({ total: 5 }), { ...success({ total: 5 }), is_error: true, result: undefined }], /no message/],
-    ["an error subtype with is_error false", [INIT, success({ total: 5 }), { type: "result", subtype: "error_during_execution", is_error: false, errors: [] }], /error_during_execution/],
-    ["an error result followed by a success", [INIT, { ...success(undefined), is_error: true }, success({ total: 5 })], /no message/],
     ["a later result with no output", [INIT, success({ total: 5 }), success(undefined)], /no structured output/],
-    ["an assistant message carrying an error", [INIT, { type: "assistant", error: "billing_error" }, success({ total: 5 })], /billing_error/],
-    ["an auth failure", [INIT, { type: "auth_status", error: "token expired" }, success({ total: 5 })], /token expired/],
-    ["a run with no init, so the login was never checked", [success({ total: 5 })], /Refusing to run/],
+    // Which streams count as finished is tested once, on runOutcome. This only proves structured() asks it.
+    ["a run runOutcome says did not finish", [INIT, success({ total: 5 }), { type: "auth_status", error: "" }], /no message/],
   ])("throws on %s", async (_name, messages, error) => {
     await expect(llmWith(messages).structured({ prompt: "x" }, SCHEMA)).rejects.toThrow(error);
+  });
+
+  it("stops reading the stream at a refused init", async () => {
+    let readOn = false;
+    const query: Query = async function* () {
+      yield { ...INIT, apiKeySource: "ANTHROPIC_API_KEY" } as unknown as SDKMessage;
+      readOn = true;
+    };
+    await expect(createLlm(query, async () => {}).structured({ prompt: "x" }, SCHEMA)).rejects.toThrow(/Refusing to run/);
+    expect(readOn).toBe(false);
   });
 
   it("throws when the SDK throws an empty error after a success", async () => {

@@ -1,5 +1,6 @@
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { describe, expect, it, vi } from "vitest";
-import { assertIsolated, assertLogin, assertLoginAccount, checkLogin, loginEnv } from "./claude-login.ts";
+import { assertIsolated, assertLogin, assertLoginAccount, checkLogin, loginEnv, runOutcome } from "./claude-login.ts";
 
 describe("loginEnv", () => {
   it("removes every variable that can outrank or redirect the login, and keeps the rest", () => {
@@ -119,5 +120,69 @@ describe("assertIsolated", () => {
     ["a built-in agent", { tools: [], agents: ["general-purpose"] }],
   ])("refuses %s", (_name, init) => {
     expect(() => assertIsolated({ apiKeySource: "none", ...init }, allowed)).toThrow(/Refusing to run/);
+  });
+});
+
+describe("runOutcome", () => {
+  const ALLOWED = { tools: ["mcp__platform__a"], agents: [] };
+  const INIT = { type: "system", subtype: "init", apiKeySource: "none", tools: ["mcp__platform__a"], agents: [], mcp_servers: [] };
+  const OK = { type: "result", subtype: "success", is_error: false, result: "done" };
+  const result = (extra: object) => ({ ...OK, ...extra });
+  const assistant = (error?: string) => ({ type: "assistant", error });
+  const auth = (error?: string) => ({ type: "auth_status", error });
+  const task = (status: string) => ({ type: "system", subtype: "task_notification", status, summary: "" });
+  const outcome = (messages: unknown[], thrown?: unknown[]) => runOutcome(messages as SDKMessage[], ALLOWED, thrown);
+
+  it.each<[string, unknown[]]>([
+    ["a validated init and a clean result", [INIT, OK]],
+    ["a result that says it completed", [INIT, result({ terminal_reason: "completed" })]],
+    ["a second turn that also finished", [INIT, OK, INIT, OK]],
+    ["messages that carry no error", [INIT, assistant(), auth(), task("completed"), OK]],
+    ["a rate limit warning that still allows the run", [INIT, { type: "rate_limit_event", rate_limit_info: { status: "allowed_warning" } }, OK]],
+    ["a refusal the SDK retries on a fallback", [INIT, { type: "system", subtype: "model_refusal_fallback" }, OK]],
+  ])("finished: %s", (_name, messages) => {
+    expect(outcome(messages)).toEqual({ finished: true, reason: "" });
+  });
+
+  it.each<[string, unknown[], RegExp]>([
+    ["an empty auth error after a valid result", [INIT, OK, auth("")], /no message/],
+    ["an empty auth error before a valid result", [INIT, auth(""), OK], /no message/],
+    ["an auth error", [INIT, auth("token expired"), OK], /token expired/],
+    ["an empty assistant error", [INIT, assistant(""), OK], /no message/],
+    ["a billing error", [INIT, assistant("billing_error"), OK], /billing_error/],
+    ["an authentication error after a result", [INIT, OK, assistant("authentication_failed"), OK], /authentication_failed/],
+    ["terminal_reason aborted_tools", [INIT, result({ terminal_reason: "aborted_tools" })], /aborted_tools/],
+    ["terminal_reason max_turns", [INIT, result({ terminal_reason: "max_turns" })], /max_turns/],
+    ["a terminal model refusal", [INIT, { type: "system", subtype: "model_refusal_no_fallback" }, OK], /refused/],
+    ["a later init without a result", [INIT, OK, INIT], /no result/],
+    ["a later assistant turn without a result", [INIT, OK, assistant()], /no result/],
+    ["no result", [INIT], /no result/],
+    ["no init", [OK], /no init/],
+    ["nothing at all", [], /no init/],
+    ["a key instead of the login", [{ ...INIT, apiKeySource: "ANTHROPIC_API_KEY" }, OK], /Refusing to run/],
+    ["a refused init followed by a valid one", [{ ...INIT, apiKeySource: "apiKeyHelper" }, INIT, OK], /Refusing to run/],
+    ["a connector in a later init", [INIT, OK, { ...INIT, tools: ["mcp__claude_ai_Gmail__send_message"] }, OK], /Gmail/],
+    ["a tool server that failed to connect", [{ ...INIT, mcp_servers: [{ name: "platform", status: "failed" }] }, OK], /tool server/],
+    ["a plan rate limit", [INIT, { type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt: 1_800_000_000 } }, OK], /rate limit.*resets/],
+    ["a failed subagent task", [INIT, task("failed"), OK], /subagent task failed/],
+    ["a stopped subagent task", [INIT, task("stopped"), OK], /subagent task stopped/],
+    ["is_error on a success subtype", [INIT, result({ is_error: true, result: "Invalid API key" })], /Invalid API key/],
+    ["is_error with an empty message, then a success", [INIT, result({ is_error: true, result: "" }), OK], /no message/],
+    ["is_error with no message at all", [INIT, OK, result({ is_error: true, result: undefined })], /no message/],
+    ["an error subtype with is_error false", [INIT, OK, { type: "result", subtype: "error_during_execution", is_error: false, errors: [] }], /error_during_execution/],
+  ])("not finished: %s", (_name, messages, reason) => {
+    const { finished, reason: text } = outcome(messages);
+    expect(finished).toBe(false);
+    expect(text).toMatch(reason);
+  });
+
+  it.each<[string, unknown, RegExp]>([
+    ["an error", new Error("boom"), /boom/],
+    ["an error with an empty message", new Error(""), /no message/],
+    ["undefined", undefined, /undefined/],
+  ])("is not finished when %s was thrown after a clean run", (_name, error, reason) => {
+    const { finished, reason: text } = outcome([INIT, OK], [error]);
+    expect(finished).toBe(false);
+    expect(text).toMatch(reason);
   });
 });

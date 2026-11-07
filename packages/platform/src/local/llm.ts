@@ -2,12 +2,12 @@ import { type Options, query as sdkQuery, type SDKMessage, type SDKUserMessage }
 import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import type { JsonSchema, Llm, LlmInput } from "../types.ts";
-import { assertIsolated, assertLogin, checkLogin, loginOptions } from "./claude-login.ts";
+import { assertInit, checkLogin, loginOptions, runOutcome } from "./claude-login.ts";
 
 export type Query = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options: Options }) => AsyncIterable<SDKMessage>;
 
 // The SDK delivers the answer through this tool, which it adds itself.
-const STRUCTURED_TOOL = "StructuredOutput";
+const ALLOWED_INIT = { tools: ["StructuredOutput"], agents: [] };
 
 async function* withImages({ prompt, images = [] }: LlmInput): AsyncGenerator<SDKUserMessage> {
   yield {
@@ -43,14 +43,12 @@ export function createLlm(query: Query = sdkQuery as Query, login: () => Promise
     async structured<T>(input: LlmInput, jsonSchema: JsonSchema): Promise<T> {
       const validate = compile(jsonSchema);
       const abortController = new AbortController();
+      const messages: SDKMessage[] = [];
+      const thrown: unknown[] = [];
       let output: unknown;
-      // A boolean, because an error can arrive with an empty message.
-      let failed = false;
-      let reason = "";
-      let sawInit = false;
       try {
         await login();
-        const messages = query({
+        const stream = query({
           prompt: input.images?.length ? withImages(input) : input.prompt,
           options: {
             ...loginOptions(),
@@ -60,36 +58,18 @@ export function createLlm(query: Query = sdkQuery as Query, login: () => Promise
             ...(input.system ? { systemPrompt: input.system } : {}),
           },
         });
-        for await (const message of messages) {
-          if (message.type === "system" && message.subtype === "init") {
-            assertLogin(message);
-            assertIsolated(message, { tools: [STRUCTURED_TOOL], agents: [] });
-            sawInit = true;
-          } else if (message.type === "rate_limit_event" && message.rate_limit_info.status === "rejected") {
-            failed = true;
-            reason = "Claude plan rate limit reached";
-          } else if ((message.type === "assistant" || message.type === "auth_status") && message.error) {
-            failed = true;
-            reason ||= message.error;
-          } else if (message.type === "result") {
-            if (message.subtype !== "success") {
-              failed = true;
-              reason ||= message.errors.join("; ") || message.subtype;
-            } else if (message.is_error) {
-              failed = true;
-              reason ||= message.result;
-            } else output = message.structured_output;
-          }
+        for await (const message of stream) {
+          messages.push(message);
+          if (message.type === "system" && message.subtype === "init") assertInit(message, ALLOWED_INIT);
+          if (message.type === "result" && message.subtype === "success") output = message.structured_output;
         }
-        // Without init, the login and isolation checks above never ran.
-        if (!sawInit) throw new Error("Refusing to run: the run reported no init, so the login was not checked");
       } catch (error) {
-        failed = true;
-        reason ||= error instanceof Error ? error.message : String(error);
+        thrown.push(error);
       } finally {
         abortController.abort();
       }
-      if (failed) throw new Error(`Llm.structured failed: ${reason || "the run reported an error with no message"}`);
+      const { finished, reason } = runOutcome(messages, ALLOWED_INIT, thrown);
+      if (!finished) throw new Error(`Llm.structured failed: ${reason}`);
       if (output === undefined) throw new Error("Llm.structured failed: the result had no structured output");
       if (!validate(output)) throw new Error(`Llm.structured failed: output does not match the schema: ${JSON.stringify(validate.errors)}`);
       return output as T;

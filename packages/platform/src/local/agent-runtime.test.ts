@@ -338,20 +338,6 @@ describe("run", () => {
     expect(text).toContain("mcp__claude_ai_Gmail__send_message");
   });
 
-  it("surfaces a plan rate limit as status error", async () => {
-    const limit = { type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt: 1_800_000_000 } };
-    const { runtime } = setup([INIT, limit, result(0.1)]);
-    const { last, text } = await collect(runtime.run(SPEC));
-    expect(last.status).toBe("error");
-    expect(text).toContain("rate limit");
-  });
-
-  it("ignores a rate limit warning that still allows the run", async () => {
-    const warning = { type: "rate_limit_event", rate_limit_info: { status: "allowed_warning" } };
-    const { runtime } = setup([INIT, warning, result(0.1)]);
-    expect((await collect(runtime.run(SPEC))).last.status).toBe("success");
-  });
-
   it("reports over_budget when the SDK stops at the cap", async () => {
     const stopped = result(5, { subtype: "error_max_budget_usd", is_error: true, errors: [] });
     const { runtime } = setup([INIT, stopped]);
@@ -386,70 +372,29 @@ describe("run", () => {
 describe("the final status", () => {
   const status = async (messages: unknown[], options?: SetupOptions) =>
     (await collect(setup(messages, options).runtime.run(SPEC))).last.status;
-  const assistant = (error?: string) => ({ type: "assistant", parent_tool_use_id: null, error, message: { content: [] } });
   const auth = (error?: string) => ({ type: "auth_status", isAuthenticating: false, output: [], error });
-  const task = (taskStatus: string) => ({ type: "system", subtype: "task_notification", status: taskStatus, summary: "" });
 
-  it("is success for a validated init followed by a clean result", async () => {
-    expect(await status([INIT, assistant(), auth(), task("completed"), result(0)])).toBe("success");
+  // Which streams count as finished is tested once, on runOutcome. These only prove the run asks it.
+  it("is success when runOutcome says the run finished", async () => {
+    expect(await status([INIT, auth(), result(0)])).toBe("success");
+  });
+
+  it("is error when runOutcome says the run did not finish, and says why", async () => {
+    const { last, text } = await collect(setup([INIT, result(0), auth("")]).runtime.run(SPEC));
+    expect(last.status).toBe("error");
+    expect(text).toContain("Run failed: the run reported an error with no message");
+  });
+
+  it("stops reading the stream at a refused init", async () => {
+    const { added, runtime } = setup([{ ...INIT, apiKeySource: "ANTHROPIC_API_KEY" }, result(1)]);
+    expect((await collect(runtime.run(SPEC))).last.status).toBe("error");
+    expect(added).toEqual([]);
   });
 
   it("is error when an exception with an empty message follows a success, and still says so", async () => {
     const { last, text } = await collect(setup([INIT, result(0)], { thenThrow: "" }).runtime.run(SPEC));
     expect(last.status).toBe("error");
     expect(text).toContain("Run failed: the run reported an error with no message");
-  });
-
-  it("is error when no init was seen, so the login and isolation checks never ran", async () => {
-    const { last, text } = await collect(setup([result(0)]).runtime.run(SPEC));
-    expect(last.status).toBe("error");
-    expect(text).toContain("no init");
-  });
-
-  it("does not count an init that failed its checks, whatever follows", async () => {
-    expect(await status([{ ...INIT, apiKeySource: "apiKeyHelper" }, INIT, result(0)])).toBe("error");
-  });
-
-  it.each(["authentication_failed", "billing_error", "account_on_hold", "server_error", "unknown", ""])(
-    "is error for an assistant error %j, before or after the result",
-    async (error) => {
-      expect(await status([INIT, assistant(error), result(0)])).toBe("error");
-      expect(await status([INIT, result(0), assistant(error), result(0)])).toBe("error");
-    },
-  );
-
-  it.each(["token expired", ""])("is error for an auth_status error %j, before or after the result", async (error) => {
-    expect(await status([INIT, auth(error), result(0)])).toBe("error");
-    expect(await status([INIT, result(0), auth(error)])).toBe("error");
-  });
-
-  it("keeps an earlier failure when a later result succeeds", async () => {
-    expect(await status([INIT, result(0, { is_error: true, result: "" }), result(0)])).toBe("error");
-    expect(await status([INIT, result(0, { subtype: "error_during_execution", errors: [] }), result(0)])).toBe("error");
-  });
-
-  it("is error when a turn starts after a success and never finishes", async () => {
-    expect(await status([INIT, result(0), INIT])).toBe("error");
-    expect(await status([INIT, result(0), assistant()])).toBe("error");
-  });
-
-  it.each(["failed", "stopped"])("is error when a subagent task ends %s and the main agent still succeeds", async (taskStatus) => {
-    expect(await status([INIT, task(taskStatus), result(0)])).toBe("error");
-  });
-
-  it("is error when the model refuses with no fallback, and not when it retries on one", async () => {
-    const refusal = { type: "system", subtype: "model_refusal_no_fallback", content: "" };
-    expect(await status([INIT, refusal, result(0)])).toBe("error");
-    expect(await status([INIT, { type: "system", subtype: "model_refusal_fallback" }, result(0)])).toBe("success");
-  });
-
-  it("is error when a success result says the turn stopped early", async () => {
-    expect(await status([INIT, result(0, { terminal_reason: "aborted_tools" })])).toBe("error");
-    expect(await status([INIT, result(0, { terminal_reason: "completed" })])).toBe("success");
-  });
-
-  it("is error when the run's own tool server failed to connect", async () => {
-    expect(await status([{ ...INIT, mcp_servers: [{ name: "platform", status: "failed" }] }, result(0)])).toBe("error");
   });
 
   it("stays over_budget when a failure also happened", async () => {
