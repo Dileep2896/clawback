@@ -79,7 +79,7 @@ function MoneyCapture() {
         <span className="rounded-full bg-money-soft px-3 text-base font-semibold text-money">Approved by Linda Park</span>
       </p>
       <dl className="grid gap-1 border-t border-line pt-3">
-        <dt className="text-base text-faded">Ledger, refund claimed</dt>
+        <dt className="text-base text-faded">Ledger, refund claimed, due only when granted</dt>
         <dd className="font-figure text-[2rem] leading-none text-money">$12,606.06</dd>
       </dl>
     </div>
@@ -103,8 +103,8 @@ const STAGES: { title: string; body: string; capture: ReactNode }[] = [
     capture: <CallCapture />,
   },
   {
-    title: "The money lands",
-    body: "Every refund and saving is written to your ledger as it is won. You see what came back and what Clawback charged for it.",
+    title: "The claim is tracked",
+    body: "The refund stays marked claimed in your ledger until the provider grants it, and only then counts as money back. Savings are projected for the year ahead.",
     capture: <MoneyCapture />,
   },
 ];

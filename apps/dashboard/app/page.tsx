@@ -97,10 +97,10 @@ export default function Landing() {
         <section aria-labelledby="result" className="mx-auto grid max-w-[1320px] gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,36rem)] lg:gap-16 lg:py-28">
           <div className="min-w-0">
             <h2 id="result" className="max-w-[16ch] text-[clamp(2rem,3.2vw,2.75rem)] leading-[1.1] font-bold tracking-[-0.015em]">
-              What the owner kept
+              What the owner stands to keep
             </h2>
             <p className="mt-4 max-w-[44ch] text-[1.25rem] text-faded">
-              Clawback is paid only from what it recovers: 30% of the refund and the first year’s savings. The owner keeps the rest.
+              The refund is claimed, not yet granted, and the savings are projected for the first year. Clawback is paid only from what is actually recovered: 30% of the refund and the first year’s savings.
             </p>
             <ButtonLink href="/signup" className="mt-8 min-h-13 px-6 text-[1.125rem]">
               Start with your bills
@@ -113,7 +113,7 @@ export default function Landing() {
               <dd className="font-figure text-[2rem] text-money">{REFUND}</dd>
             </div>
             <div className="flex flex-wrap items-baseline justify-between gap-x-6 border-b border-line py-4">
-              <dt>Saved in the first year</dt>
+              <dt>Projected savings, first year</dt>
               <dd className="font-figure text-[2rem] text-money">{YEARLY}</dd>
             </div>
             <div className="flex flex-wrap items-baseline justify-between gap-x-6 py-4">
@@ -124,7 +124,7 @@ export default function Landing() {
               </dd>
             </div>
             <div className="flex flex-wrap items-baseline justify-between gap-x-6 border-t-4 border-ink py-5">
-              <dt className="text-[1.375rem] font-semibold">You keep</dt>
+              <dt className="text-[1.375rem] font-semibold">You keep, once granted</dt>
               <dd className="font-figure text-[clamp(2.75rem,5vw,3.75rem)] leading-none text-money">{KEEP}</dd>
             </div>
           </dl>
