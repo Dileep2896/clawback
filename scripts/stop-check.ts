@@ -36,8 +36,12 @@ const count = <T>(items: T[], test: (item: T) => boolean) => items.filter(test).
 const digits = (text: string) => text.replace(/\D/g, "");
 const isDenied = (row: AuditRow) => (row.outputJson as { denied?: unknown } | null)?.denied !== undefined;
 
-/** The database Postgres will connect to: pg decodes the URL's path, so %62illfighter is billfighter. */
-export const databaseName = (url: string) => decodeURIComponent(new URL(url).pathname.slice(1));
+/** Asks the server, because PGDATABASE or an encoded path can connect pg to a database the URL does not name. */
+export async function assertNotSharedDatabase(query: (sql: string) => Promise<{ rows: { current_database: string }[] }>) {
+  const { rows } = await query("select current_database()");
+  const name = rows[0]?.current_database;
+  if (!name || name === "billfighter") throw new Error(`Refusing to clear findings and the ledger on ${name ?? "an unknown database"}. Give this check its own DATABASE_URL.`);
+}
 
 /** Leaves a timed-out or failed run denied and closed, so it cannot hold the customer's next run. */
 export async function abandonRun(runId: string, finished: boolean, gate: Pick<ApprovalGate, "get" | "decide">, markError: (runId: string) => Promise<unknown>) {

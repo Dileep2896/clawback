@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { abandonRun, type AuditRow, databaseName, EXPECTED_REFUND_CENTS, EXPECTED_SAVINGS_CENTS, type StopSnapshot, stopProblems } from "./stop-check.ts";
+import { abandonRun, assertNotSharedDatabase, type AuditRow, EXPECTED_REFUND_CENTS, EXPECTED_SAVINGS_CENTS, type StopSnapshot, stopProblems } from "./stop-check.ts";
 
 const row = (tool: string, agent: string, outputJson: unknown = {}, inputJson: unknown = {}): AuditRow => ({ agent, tool, inputJson, outputJson });
 const actions = (kind: string, n: number) => Array.from({ length: n }, (_, i) => ({ id: `${kind}-${i}`, kind, findingId: `${kind}-finding-${i}` as string | null, payloadJson: null as unknown }));
@@ -104,10 +104,19 @@ describe("stopProblems", () => {
   });
 });
 
-describe("databaseName", () => {
-  it("sees through an encoded shared database name", () => {
-    expect(databaseName("postgres://bill:bill@localhost:5433/%62illfighter")).toBe("billfighter");
-    expect(databaseName("postgres://bill:bill@localhost:5433/billfighter_agents_e2e")).toBe("billfighter_agents_e2e");
+describe("assertNotSharedDatabase", () => {
+  const connectedTo = (...names: string[]) => async () => ({ rows: names.map((current_database) => ({ current_database })) });
+
+  it("refuses when the connection is on the shared database", async () => {
+    await expect(assertNotSharedDatabase(connectedTo("billfighter"))).rejects.toThrow(/Refusing/);
+  });
+
+  it("refuses when the server does not name a database", async () => {
+    await expect(assertNotSharedDatabase(connectedTo())).rejects.toThrow(/Refusing/);
+  });
+
+  it("allows any other database", async () => {
+    await expect(assertNotSharedDatabase(connectedTo("billfighter_agents_e2e"))).resolves.toBeUndefined();
   });
 });
 

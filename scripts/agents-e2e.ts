@@ -11,7 +11,7 @@ import { promisify } from "node:util";
 import { loadTools } from "@bill-fighter/agents/registry";
 import { RUNS_DIR } from "@bill-fighter/agents/customer-data";
 import { findingTotals } from "@bill-fighter/core/rules/totals";
-import { databaseUrl, db } from "@bill-fighter/db/client";
+import { db } from "@bill-fighter/db/client";
 import { actions, approvals, boardCards, calls, customers, findings, ledger, phoneLines, runs } from "@bill-fighter/db/schema";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
 import { getPlatform, platformName } from "@bill-fighter/platform/factory";
@@ -21,14 +21,14 @@ import { Provider } from "@bill-fighter/shared/fixtures";
 import { isGatedTool } from "@bill-fighter/shared/gated-tools";
 import { portalVaultName } from "@bill-fighter/shared/portal";
 import { createInboundServer, WEBHOOK_PORT } from "@bill-fighter/webhooks/server";
-import { abandonRun, databaseName, stopProblems } from "./stop-check.ts";
+import { abandonRun, assertNotSharedDatabase, stopProblems } from "./stop-check.ts";
 
 const HOLD_MS = Number(process.env.E2E_HOLD_SECONDS || 60) * 1000;
 const PARK_TIMEOUT_MS = 15 * 60_000;
 const WRAP_UP_TIMEOUT_MS = 5 * 60_000;
 const DEMO_MARK_SECONDS = 120;
 
-assert.notEqual(databaseName(databaseUrl()), "billfighter","this clears findings and the ledger, so give it its own DATABASE_URL");
+await assertNotSharedDatabase((sql) => db.$client.query(sql));
 assert.equal(platformName(), "local");
 assert.equal(process.env.VOICE_MODE, "sim", "VOICE_MODE must be sim");
 
