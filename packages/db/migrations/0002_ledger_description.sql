@@ -1,0 +1,1 @@
+ALTER TABLE "ledger" ADD COLUMN "description" text;

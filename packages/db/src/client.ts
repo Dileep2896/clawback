@@ -7,5 +7,7 @@ export const databaseUrl = () => process.env.DATABASE_URL ?? "postgres://bill:bi
 
 export const createDb = (url: string = databaseUrl()) => drizzle(new Pool({ connectionString: url }), { schema });
 
+export type Db = ReturnType<typeof createDb>;
+
 // The Pool connects on first query, so importing this is safe with Postgres down.
 export const db = createDb();
