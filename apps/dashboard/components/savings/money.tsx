@@ -2,13 +2,11 @@
 
 import { money } from "../../lib/evidence.ts";
 import { ledgerView } from "../../lib/ledger.ts";
+import { actionState } from "../../lib/run-state.ts";
 import { useLive } from "../../lib/use-live.tsx";
 import { ButtonLink, Card, EmptyState, PageHeader, StatTile, Table } from "../ui/kit.tsx";
 import { NOT_RECORDED, Page } from "./common.tsx";
 
-// actions.status is free text; these are the values finance-invoice writes.
-const ACTION_STATES: Record<string, string> = { proposed: "Waiting for your approval", running: "In progress", done: "Done" };
-const actionState = (status: string) => ACTION_STATES[status] ?? status;
 
 export function Money() {
   const { snapshot } = useLive();
@@ -82,7 +80,7 @@ export function Money() {
               </dl>
             ) : (
               <p data-testid="money-invoice-state" className="text-faded">
-                {invoiceAction ? `Not created yet: ${actionState(invoiceAction.status).toLowerCase()}.` : "Created after you approve the fixes."}
+                {invoiceAction ? `Not created yet: ${actionState(invoiceAction, snapshot?.approval).toLowerCase()}.` : "Created after you approve the fixes."}
               </p>
             )}
           </Card>
@@ -96,7 +94,7 @@ export function Money() {
                     <li key={action.id} data-card-payment={action.id} className="flex flex-wrap items-baseline justify-between gap-3">
                       <span>
                         <span className="font-semibold">{payload?.description ?? "Card payment"}</span>
-                        <span className="block text-base text-faded">{actionState(action.status)}</span>
+                        <span className="block text-base text-faded">{actionState(action, snapshot?.approval)}</span>
                       </span>
                       {payload?.amountCents !== undefined && <span className="font-figure tabular-nums">{money(payload.amountCents)}</span>}
                     </li>

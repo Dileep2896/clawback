@@ -33,7 +33,7 @@ export function FindingsList() {
         >
           {findings.map((finding) => {
             const site = finding.accountId ? sites[finding.accountId] : undefined;
-            const state = findingState(finding, actions);
+            const state = findingState(finding, actions, snapshot?.approval);
             return (
               <tr key={finding.id} data-finding-row={finding.id}>
                 <td>
