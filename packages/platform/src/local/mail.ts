@@ -18,7 +18,8 @@ const inboundEmail = z.strictObject({
 export function createMail(env: Record<string, string | undefined> = process.env): Mail {
   return {
     async send({ to, from, subject, text, html, attachments }) {
-      if (!isAllowedEmail(allowlistFromEnv(env), to)) {
+      // Nodemailer splits an address on these, so the part the allowlist checked may not be the only recipient.
+      if (/[,;<>\s]/.test(to) || !isAllowedEmail(allowlistFromEnv(env), to)) {
         throw new Error(`Mail refused: ${to} is outside ALLOWED_EMAIL_DOMAINS`);
       }
       const host = env.SMTP_HOST || "localhost";
