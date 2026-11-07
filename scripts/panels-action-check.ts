@@ -2,17 +2,18 @@
 // pnpm dev:dashboard must be running. Pass a folder to keep screenshots.
 // pnpm exec tsx --env-file-if-exists=.env scripts/panels-action-check.ts
 import assert from "node:assert/strict";
+import { randomInt } from "node:crypto";
 import { db } from "@bill-fighter/db/client";
 import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
 import { type Browser, chromium, type Page } from "playwright";
-import { assertNotSharedDb, insertSampleRun, SAMPLE_RUN_ID } from "../apps/dashboard/lib/sample-data.ts";
+import { assertNotSharedDb, insertSampleRun, SAMPLE_RUN_ID, updateSampleRun } from "../apps/dashboard/lib/sample-data.ts";
 
 const BASE = "http://localhost:3000";
 const VIEWPORT = { width: 1920, height: 1080 };
 const MIN_FONT_PX = 22;
 const screenshotDir = process.argv[2];
 
-type Snapshot = { run: { id: string } | null; calls: unknown[]; humanActions: number; approval: { status: string; channel: string | null; approvedBy: string | null; actionIds: string[] } };
+type Snapshot = { run: { id: string; costUsd: number } | null; calls: unknown[]; humanActions: number; approval: { status: string; channel: string | null; approvedBy: string | null; actionIds: string[] } };
 
 const AT = "2026-11-06T17:00:00.000Z";
 const END = "2026-11-06T17:02:03.000Z";
@@ -47,10 +48,13 @@ const shot = async (page: Page, name: string) => {
 const see = (page: Page, testId: string, text: string) => page.getByTestId(testId).filter({ hasText: text }).waitFor({ state: "attached", timeout: 5000 });
 const live = async (page: Page) => (await (await page.request.get(`${BASE}/api/live`)).json()) as Snapshot;
 
-// The server on port 3000 can use another database than this script, and a click acts on whichever run it shows.
+// The server on port 3000 can use another database than this script, and every lane's sample run has the same id, so only a random cost proves it is this one. A click acts on whichever run it shows.
 async function insertAndRequireSampleRun(page: Page) {
   await insertSampleRun(db);
-  assert.equal((await live(page)).run?.id, SAMPLE_RUN_ID, "the dashboard is not showing the sample run this script inserted, so nothing was clicked");
+  // Six decimals at most: cost_usd is numeric(12,6), and a rounded value would never match.
+  const costUsd = randomInt(1, 1_000_000) / 1_000_000;
+  await updateSampleRun(db, { costUsd, status: "running" });
+  assert.equal((await live(page)).run?.costUsd, costUsd, "the dashboard is not showing the sample run this script wrote, so nothing was clicked");
 }
 
 // Browser code goes in as strings, because the root tsconfig has no DOM types.
