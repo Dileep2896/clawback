@@ -220,6 +220,26 @@ describe("respond: what the routes answer", () => {
     });
   });
 
+  it("gives 409 for a reply to a customer's older run, stores nothing, and the newest run still works", async () => {
+    await withTestDb("panels_action_two_runs", async (db) => {
+      const { customerId } = await seedBundle(db, "older");
+      await db.update(runs).set({ startedAt: new Date(Date.now() - 60_000) }).where(eq(runs.id, "older"));
+      await db.insert(runs).values({ id: "newer", customerId, platform: "local", trigger: "manual", status: "running" });
+      await db.insert(approvals).values({ runId: "newer", actionIds: ACTION_IDS, summary: "Approve the fixes" });
+      // The only text belongs to the newer run, and it was sent after the older run started.
+      await askOwner(db);
+
+      const late = await respond(post(JSON.stringify({ runId: "older" })), Body, ({ runId }) => receiveSms(db, { runId, body: "YES" }));
+      expect(late.status).toBe(409);
+      expect((await bundle(db, "older")).status).toBe("pending");
+      expect(await db.$count(smsMessages, eq(smsMessages.direction, "inbound"))).toBe(0);
+
+      expect(await receiveSms(db, { runId: "newer", body: "YES" })).toEqual({ approved: true });
+      expect((await bundle(db, "newer")).status).toBe("approved");
+      expect((await bundle(db, "older")).status).toBe("pending");
+    });
+  });
+
   it("lets a real failure surface instead of calling it a refusal", async () => {
     const failing = async () => {
       throw new Error("Postgres is down");
