@@ -65,7 +65,7 @@ export function AppNav() {
           })}
         </ul>
       </nav>
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-x-2">
         <span data-testid="demo-data" className="rounded-full border border-line px-3 py-0.5 font-semibold whitespace-nowrap text-faded">
           Demo data
         </span>

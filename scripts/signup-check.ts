@@ -127,7 +127,7 @@ try {
   await checkNewCustomer(await fresh());
   const narrow = await fresh({ width: 390, height: 844 });
   await narrow.goto(`${BASE}/signup`);
-  assert.ok((await narrow.evaluate(() => document.documentElement.scrollWidth)) <= 390, "sign-up scrolls sideways at 390 px");
+  assert.ok((await narrow.evaluate<number>("document.documentElement.scrollWidth")) <= 390, "sign-up scrolls sideways at 390 px");
   await shot(narrow, "signup-390");
   console.info("ok narrow: sign-up fits 390 px");
 } finally {
