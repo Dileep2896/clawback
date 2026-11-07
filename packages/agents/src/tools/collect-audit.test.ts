@@ -271,6 +271,42 @@ describe("collector", () => {
         expect(await runCards(db)).toMatchObject([{ status: "blocked", title: expect.stringContaining("bayconnect portal did not answer after 2 tries") }]);
       }), 15_000);
 
+    describe("on a login field", () => {
+      // What the browser adapter throws: Playwright's text is gone, and only the name is left.
+      const sanitized = () => Object.assign(new Error('fillSecret failed for #username using vault entry "portal/bayconnect/username"'), { name: "TimeoutError" });
+      const flakyField = (db: Db, failures: number) => {
+        const { browser } = fakeBrowser({});
+        const open = vi.fn(async () => {
+          const session = await browser.open();
+          return {
+            ...session,
+            fillSecret: async (selector: string, vaultName: string) => {
+              if (failures-- > 0) throw sanitized();
+              return session.fillSecret(selector, vaultName);
+            },
+          };
+        });
+        const { tools } = createCollectorTools({ db, browser: async () => ({ open }), root });
+        return { open, tool: (name: string) => pick(tools, name) };
+      };
+
+      it("retries the timeout, and says nothing if that works", () =>
+        withCustomer(async (db) => {
+          const { open, tool } = flakyField(db, 1);
+          expect(await login(tool)).toMatchObject({ loggedIn: [{ provider: "bayconnect" }], failed: [] });
+          expect(open).toHaveBeenCalledTimes(2);
+          expect(await runCards(db)).toEqual([]);
+        }));
+
+      it("shows a card after a second timeout", () =>
+        withCustomer(async (db) => {
+          const { open, tool } = flakyField(db, Infinity);
+          expect(await login(tool)).toMatchObject({ loggedIn: [], failed: [{ provider: "bayconnect" }] });
+          expect(open).toHaveBeenCalledTimes(2);
+          expect(await runCards(db)).toMatchObject([{ status: "blocked", title: expect.stringContaining("bayconnect portal did not answer") }]);
+        }));
+    });
+
     it("does not retry a refused login, which is not a timeout", () =>
       withCustomer(async (db) => {
         const open = vi.fn(fakeBrowser({ loginError: "Wrong password" }).browser.open);

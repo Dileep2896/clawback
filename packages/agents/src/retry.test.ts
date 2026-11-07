@@ -34,7 +34,7 @@ describe("isPortalTimeout", () => {
     expect(isPortalTimeout(new Error(text))).toBe(true);
   });
 
-  it.each(["The portal refused the login: wrong password", "Browser refused http://x: outside ALLOWED_PORTAL_ORIGINS", "Not logged in to baytel in this run. Call portal_login first."])("does not retry %s", (text) => {
+  it.each(["The portal refused the login: wrong password", "Browser refused http://x: outside ALLOWED_PORTAL_ORIGINS", "Not logged in to baytel in this run. Call portal_login first.", 'fillSecret failed for #username using vault entry "portal/baytel/username"'])("does not retry %s", (text) => {
     expect(isPortalTimeout(new Error(text))).toBe(false);
   });
 });

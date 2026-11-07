@@ -119,9 +119,12 @@ export function createBrowser(vault: Vault, getAllowlist: () => Allowlist = allo
           async fillSecret(selector, vaultName) {
             try {
               await page.locator(selector).fill(await vault.get(vaultName));
-            } catch {
+            } catch (error) {
               // A new error with no cause: Playwright's text must not carry the value into agent context or audit_log.
-              throw new Error(`fillSecret failed for ${selector} using vault entry "${vaultName}"`);
+              const failure = new Error(`fillSecret failed for ${selector} using vault entry "${vaultName}"`);
+              // Only the name crosses, so the Collector can still retry a timeout.
+              if (error instanceof Error && error.name === "TimeoutError") failure.name = error.name;
+              throw failure;
             }
           },
           click: (selector) => page.locator(selector).click(),
