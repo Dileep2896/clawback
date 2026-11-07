@@ -17,7 +17,7 @@ class Refused extends Error {
 
 async function runOf(db: Db, runId: string) {
   const [found] = await db
-    .select({ startedAt: runs.startedAt, platform: runs.platform, approver: customers.contactName, status: runs.status, replay: runs.replay })
+    .select({ startedAt: runs.startedAt, platform: runs.platform, approver: customers.contactName, status: runs.status, replay: runs.replay, customerId: runs.customerId })
     .from(runs)
     .innerJoin(customers, eq(runs.customerId, customers.id))
     .where(eq(runs.id, runId));
@@ -31,10 +31,12 @@ async function runOf(db: Db, runId: string) {
 const bundleOf = async (db: Db, runId: string) => (await db.select({ id: approvals.id }).from(approvals).where(eq(approvals.runId, runId)))[0];
 
 /** The backup path in both platform modes, so it touches only the run, its customer and its bundle. Never SMS. */
-export async function approveRun(db: Db, runId: string) {
-  const { approver } = await runOf(db, runId);
+export async function approveRun(db: Db, runId: string, customerId?: string) {
+  const { approver, customerId: owner } = await runOf(db, runId);
+  // The signed-in customer's own runs only: one customer never releases another's bundle. Same answer as a missing run.
+  if (customerId !== undefined && owner !== customerId) throw new Refused(`Run ${runId} does not exist`, 404);
   if (!(await bundleOf(db, runId))) throw new Refused(`Run ${runId} has no approval request`, 404);
-  // The dashboard has no login, so the approver is the customer's contact, and the channel shows it was the button.
+  // The approver is the customer's contact, and the channel shows it was the button.
   return decideApproval(db, { runId, status: "approved", channel: "dashboard", approvedBy: approver });
 }
 

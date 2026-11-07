@@ -92,10 +92,19 @@ export function customerBills(db: Db, customerId: string): Promise<BillRow[]> {
     .orderBy(asc(locations.name), asc(locations.id), asc(accounts.id), desc(bills.periodStart), asc(bills.id));
 }
 
-/** Everything on the screen, for the most recently started run. Every list has a fixed order, so unchanged data serializes the same. */
-export async function liveSnapshot(db: Db): Promise<LiveData> {
-  const [run] = await db.select().from(runs).orderBy(desc(runs.startedAt), desc(runs.id)).limit(1);
-  if (!run) return NO_RUN;
+/**
+ * Everything on the screen, for the customer's most recently started run. Every list has a fixed order, so unchanged data serializes the same.
+ * /api/live passes the signed-in customer, so a new sign-up sees no audit rather than the demo run. Without one (tests), the latest run of all.
+ * A customer with no run still gets their bills, which a sign-up can upload before any audit.
+ */
+export async function liveSnapshot(db: Db, customerId?: string): Promise<LiveData> {
+  const [run] = await db
+    .select()
+    .from(runs)
+    .where(customerId === undefined ? undefined : eq(runs.customerId, customerId))
+    .orderBy(desc(runs.startedAt), desc(runs.id))
+    .limit(1);
+  if (!run) return customerId === undefined ? NO_RUN : { ...NO_RUN, bills: await customerBills(db, customerId) };
 
   const [customerRows, approvalRows, customerFindings] = await Promise.all([
     db.select().from(customers).where(eq(customers.id, run.customerId)),
