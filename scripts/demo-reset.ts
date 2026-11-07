@@ -22,6 +22,8 @@ export type ResetOptions = {
 /** Before any connection, so a refused target is never touched. */
 function checkTarget({ url, mailpitApi, allowNonlocal }: ResetOptions) {
   const parsed = new URL(url);
+  // pg keeps the last ?host=, and an empty one falls back to the URL's host, so with several the first says nothing about the target.
+  if (parsed.searchParams.getAll("host").length > 1) throw new Error("Refusing to reset: DATABASE_URL has more than one host parameter.");
   // pg lets ?host= win over the host in the URL.
   const host = parsed.searchParams.get("host") ?? parsed.hostname;
   if (!LOCAL_HOSTS.includes(host) && !allowNonlocal) {

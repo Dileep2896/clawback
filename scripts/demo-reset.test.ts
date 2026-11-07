@@ -247,6 +247,19 @@ describe("demoReset", () => {
         ),
       ));
 
+    it.each([
+      ["a remote last host", "postgres://bill:bill@localhost:5433/billfighter?host=localhost&host=db.example.com", false],
+      ["an empty last host over a remote URL", "postgres://bill:bill@db.example.com:5433/billfighter?host=localhost&host=", false],
+      ["the override", "postgres://bill:bill@localhost:5433/billfighter?host=localhost&host=db.example.com", true],
+    ])("repeated ?host= before connecting: %s", (_name, url, allowNonlocal) =>
+      withFullDb(async (db, runsDir) => {
+        const pool = { query: vi.fn(), connect: vi.fn() };
+        await refuses(db, runsDir, () => ({ url, allowNonlocal, pool: pool as never }), /more than one host/);
+        expect(pool.query).not.toHaveBeenCalled();
+        expect(pool.connect).not.toHaveBeenCalled();
+      }),
+    );
+
     it("a Mailpit that is not local, even with the database override", () =>
       withFullDb((db, runsDir) => refuses(db, runsDir, () => ({ mailpitApi: "http://mail.example.com:8025", allowNonlocal: true }), /not local Mailpit/)));
 
