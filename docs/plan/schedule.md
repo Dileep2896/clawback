@@ -100,7 +100,7 @@ Gaps in `project.md` and what this plan does about them. `project.md` itself is 
 13. **Bills are parsed ahead of time.** The stage run reuses cached results, the audit log shows them as cached, and the run stays inside `RUN_BUDGET_USD`.
 14. **The refund shows as "claimed" and we invoice now.** The invoice has a line saying the refund part is due only when it is granted.
 15. **B-6 uses whatever the engine computes.** The two Oakland stores get a lunch-heavy load. If savings still do not exceed 2%, the finding is dropped from the pitch.
-16. **The name is Bill Fighter in the product and on stage.** Clawback stays as the repo name.
+16. **The name is Clawback in the product and on stage** (the human, 2026-11-07). Package names stay `@bill-fighter/*`.
 17. **The CEO's tools are built in `tools-file-approve`.** That lane already depends on the `Board` and `Mail` adapters, so `board_update` and `send_email` need no new lane. The summary email's numbers are filled in from findings and the ledger, like the letters.
 
 ## Top risks
