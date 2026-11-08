@@ -1,0 +1,86 @@
+[
+  {
+    "accountId": "fremont-1-electric",
+    "meterNumber": "BEM-2214077",
+    "intervals": 46848,
+    "from": "2025-07-01T07:00:00.000Z",
+    "to": "2026-11-01T06:45:00.000Z"
+  },
+  {
+    "accountId": "fremont-2-electric",
+    "meterNumber": "BEM-1009012",
+    "intervals": 35040,
+    "from": "2025-11-01T07:00:00.000Z",
+    "to": "2026-11-01T06:45:00.000Z"
+  },
+  {
+    "accountId": "oakland-1-electric",
+    "meterNumber": "BEM-1009005",
+    "intervals": 35040,
+    "from": "2025-11-01T07:00:00.000Z",
+    "to": "2026-11-01T06:45:00.000Z"
+  },
+  {
+    "accountId": "oakland-2-electric",
+    "meterNumber": "BEM-1009006",
+    "intervals": 35040,
+    "from": "2025-11-01T07:00:00.000Z",
+    "to": "2026-11-01T06:45:00.000Z"
+  },
+  {
+    "accountId": "oakland-3-electric",
+    "meterNumber": "BEM-1009007",
+    "intervals": 35040,
+    "from": "2025-11-01T07:00:00.000Z",
+    "to": "2026-11-01T06:45:00.000Z"
+  },
+  {
+    "accountId": "san-jose-1-electric",
+    "meterNumber": "BEM-1009008",
+    "intervals": 35040,
+    "from": "2025-11-01T07:00:00.000Z",
+    "to": "2026-11-01T06:45:00.000Z"
+  },
+  {
+    "accountId": "san-jose-2-electric",
+    "meterNumber": "BEM-1009009",
+    "intervals": 35040,
+    "from": "2025-11-01T07:00:00.000Z",
+    "to": "2026-11-01T06:45:00.000Z"
+  },
+  {
+    "accountId": "san-jose-3-electric",
+    "meterNumber": "BEM-1009010",
+    "intervals": 35040,
+    "from": "2025-11-01T07:00:00.000Z",
+    "to": "2026-11-01T06:45:00.000Z"
+  },
+  {
+    "accountId": "sf-1-electric",
+    "meterNumber": "BEM-1009001",
+    "intervals": 35040,
+    "from": "2025-11-01T07:00:00.000Z",
+    "to": "2026-11-01T06:45:00.000Z"
+  },
+  {
+    "accountId": "sf-2-electric",
+    "meterNumber": "BEM-1009002",
+    "intervals": 35040,
+    "from": "2025-11-01T07:00:00.000Z",
+    "to": "2026-11-01T06:45:00.000Z"
+  },
+  {
+    "accountId": "sf-3-electric",
+    "meterNumber": "BEM-1009003",
+    "intervals": 35040,
+    "from": "2025-11-01T07:00:00.000Z",
+    "to": "2026-11-01T06:45:00.000Z"
+  },
+  {
+    "accountId": "sf-4-electric",
+    "meterNumber": "BEM-1009004",
+    "intervals": 35040,
+    "from": "2025-11-01T07:00:00.000Z",
+    "to": "2026-11-01T06:45:00.000Z"
+  }
+]

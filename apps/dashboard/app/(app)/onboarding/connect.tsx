@@ -25,7 +25,7 @@ const UPLOAD_LABEL: Record<Upload["status"], string> = {
 };
 
 const primary =
-  "inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-control bg-action px-6 text-[1.125rem] font-semibold text-action-text hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-control bg-action px-6 text-body font-semibold text-action-text hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60";
 const secondary =
   "inline-flex min-h-12 cursor-pointer items-center justify-center rounded-control border border-faded bg-sheet px-5 font-semibold text-ink hover:bg-paper disabled:cursor-wait disabled:opacity-70";
 
@@ -50,7 +50,7 @@ function PortalLogin({ demo, onConnected }: { demo: boolean; onConnected: (provi
               <input type="radio" name="provider" value={p.id} checked={provider === p.id} onChange={() => setProvider(p.id)} className="size-4 accent-[var(--agent)]" />
               <span>
                 <span className="block font-semibold">{p.name}</span>
-                <span className="block text-base text-faded">{p.service}</span>
+                <span className="block text-body text-faded">{p.service}</span>
               </span>
             </label>
           ))}
@@ -59,8 +59,8 @@ function PortalLogin({ demo, onConnected }: { demo: boolean; onConnected: (provi
 
       {demo && (
         <div className="grid gap-3 rounded-control border border-line bg-paper p-4">
-          <p className="text-base text-faded">
-            <span className="mr-2 rounded-full border border-line bg-sheet px-2 py-0.5 font-semibold">Demo data</span>
+          <p className="text-body text-faded">
+            <span className="mr-2 rounded-full border border-line bg-sheet px-2 py-0.5">Demo data</span>
             {nameOf(provider)}&apos;s demo login is already on file for this account.
           </p>
           <button type="submit" name="demo" value="1" disabled={pending} className={primary} data-testid="demo-login">
@@ -79,7 +79,7 @@ function PortalLogin({ demo, onConnected }: { demo: boolean; onConnected: (provi
           {pending ? "Checking with the provider…" : `Connect ${nameOf(provider)}`}
         </button>
       </div>
-      <p className="text-base text-faded">We check the login with the provider, then keep it in an encrypted vault. Only the agents that fetch your bills use it.</p>
+      <p className="text-body text-faded">We check the login with the provider, then keep it in an encrypted vault. Only the agents that fetch your bills use it.</p>
     </form>
   );
 }
@@ -117,7 +117,7 @@ function UploadBills({ onSaved }: { onSaved: () => void }) {
   return (
     <div className="grid gap-4">
       <label className="grid cursor-pointer justify-items-center gap-2 rounded-card border-2 border-dashed border-faded/50 bg-paper px-6 py-10 text-center hover:border-agent">
-        <span className="text-[1.375rem] font-semibold">Choose bill PDFs</span>
+        <span className="text-title font-semibold">Choose bill PDFs</span>
         <span className="text-faded">Electricity, gas, phone or internet. Up to 5 MB each.</span>
         <input type="file" accept="application/pdf,.pdf" multiple className="sr-only" data-testid="upload-input" onChange={(event) => pick(event.target.files)} />
       </label>
@@ -127,9 +127,9 @@ function UploadBills({ onSaved }: { onSaved: () => void }) {
           {uploads.map((u) => (
             <li key={u.key} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3">
               <span className="min-w-0 truncate">{u.name}</span>
-              <span className={`font-semibold ${u.status === "saved" || u.status === "on_file" ? "text-money" : u.status === "reading" ? "text-faded" : "text-alert"}`} data-status={u.status}>
+              <span className={`${u.status === "saved" || u.status === "on_file" ? "text-money" : u.status === "reading" ? "text-faded" : "text-alert"}`} data-status={u.status}>
                 {UPLOAD_LABEL[u.status]}
-                {u.note && <span className="block text-base font-normal text-faded">{u.note}</span>}
+                {u.note && <span className="block text-body font-normal text-faded">{u.note}</span>}
               </span>
             </li>
           ))}
@@ -171,7 +171,7 @@ export function ConnectBills({ demo, queued: initiallyQueued, business }: { demo
         {connected.length > 0 && (
           <ul className="mt-6 flex flex-wrap gap-2" data-testid="connected-list">
             {connected.map((p) => (
-              <li key={p} className="rounded-full border border-line px-3 py-1 font-semibold">
+              <li key={p} className="rounded-full border border-line px-3 py-1">
                 ✓ {nameOf(p)} connected
               </li>
             ))}
@@ -185,7 +185,7 @@ export function ConnectBills({ demo, queued: initiallyQueued, business }: { demo
         <Card title="3. Start your audit">
           {start.queued ? (
             <div className="grid gap-2" data-testid="audit-queued" role="status">
-              <p className="text-[1.375rem] font-semibold">Audit queued</p>
+              <p className="text-title font-semibold">Audit queued</p>
               <p className="text-faded">
                 Your bills are in and your audit is waiting its turn. Your bills page shows what we have read so far. Nothing changes on your accounts without your approval.
               </p>
@@ -197,9 +197,39 @@ export function ConnectBills({ demo, queued: initiallyQueued, business }: { demo
               <button type="submit" disabled={!ready || starting} className={primary} data-testid="start-audit">
                 {starting ? "Starting the agents…" : "Start my audit"}
               </button>
-              {!ready && <p className="text-base text-faded">Connect a provider or add a bill first.</p>}
+              {!ready && <p className="text-body text-faded">Connect a provider or add a bill first.</p>}
             </form>
           )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/** The judge sandbox: the demo business's sample bills are already on this account, so the one step is to start the replay. */
+export function SandboxStart({ bills, business }: { bills: number; business: ReactNode }) {
+  const [start, startAction, starting] = useActionState<StartState>(startAuditAction, {});
+  return (
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
+      <Card title="2. Your bills" className="lg:order-1">
+        <div className="grid gap-2" data-testid="sandbox-bills">
+          <p className="text-title font-semibold">✓ Sample bills on file: {bills}</p>
+          <p className="text-faded">
+            This sandbox uses the demo business&apos;s electricity, gas, phone and internet bills. It takes no real bills, and it never contacts a provider: the audit you
+            watch is a recorded one, replayed for you.
+          </p>
+        </div>
+      </Card>
+      <div className="contents lg:order-2 lg:grid lg:gap-6">
+        <div className="order-first lg:order-none">{business}</div>
+        <Card title="3. Start your audit">
+          <form action={startAction} className="grid justify-items-start gap-3">
+            <p className="text-faded">Watch the agents work, approve their plan with one tap, and see the money come back.</p>
+            <FormError>{start.error}</FormError>
+            <button type="submit" disabled={starting} className={primary} data-testid="start-audit">
+              {starting ? "Starting the replay…" : "Start my audit"}
+            </button>
+          </form>
         </Card>
       </div>
     </div>

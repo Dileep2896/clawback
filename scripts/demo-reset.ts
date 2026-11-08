@@ -70,6 +70,8 @@ export async function clearSignups(client: Pick<Db["$client"], "query">): Promis
     const accountsOf = "select a.id from accounts a join locations l on l.id = a.location_id where l.customer_id = any($1)";
     await client.query(`delete from bill_lines where bill_id in (select id from bills where account_id in (${accountsOf}))`, [created]);
     await client.query(`delete from bills where account_id in (${accountsOf})`, [created]);
+    // A sandbox sign-up clones the demo customer's phone lines too (apps/dashboard/lib/sandbox.ts).
+    await client.query(`delete from phone_lines where account_id in (${accountsOf})`, [created]);
     await client.query(`delete from accounts where id in (${accountsOf})`, [created]);
     await client.query("delete from locations where customer_id = any($1)", [created]);
     // No other table may still point at these customers: a run or finding for one fails here rather than vanishing.
@@ -85,15 +87,16 @@ async function clearDatabase(pool: Db["$client"]) {
     await client.query("BEGIN");
     // A dashboard or a stuck session can hold a lock, and a clear error beats a hang.
     await client.query("SET LOCAL lock_timeout = '5s'");
-    const signups = await clearSignups(client);
-    // Counted after the sign-ups go, so the check below proves the seed itself was untouched.
-    const seed = (await client.query<Record<string, number>>(SEED_COUNTS)).rows[0]!;
+    const before = (await client.query<Record<string, number>>(SEED_COUNTS)).rows[0]!;
     // No CASCADE: a future table that references these must fail here, not be emptied.
     await client.query(`TRUNCATE ${RUN_TABLES.join(", ")}`);
     const after = (await client.query<Record<string, number>>(SEED_COUNTS)).rows[0]!;
-    if (JSON.stringify(after) !== JSON.stringify(seed)) {
-      throw new Error(`The seed changed during the reset, so nothing was cleared from the database. Before ${JSON.stringify(seed)}, after ${JSON.stringify(after)}`);
+    if (JSON.stringify(after) !== JSON.stringify(before)) {
+      throw new Error(`The seed changed during the reset, so nothing was cleared from the database. Before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`);
     }
+    // After the run tables, because a sandbox sign-up's runs, findings and ledger point at its customer and accounts.
+    const signups = await clearSignups(client);
+    const seed = (await client.query<Record<string, number>>(SEED_COUNTS)).rows[0]!;
     await client.query("COMMIT");
     return { signups, seed };
   } catch (error) {
@@ -111,8 +114,8 @@ export async function demoReset(options: ResetOptions) {
   await checkConnected(options);
 
   const runRows = (await pool.query<{ id: string; status: string; replayed: boolean }>("select id, status, replay is not null as replayed from runs")).rows;
-  // Ids become folder names under a directory other lanes share.
-  const unsafe = runRows.filter(({ id }) => !/^\w[\w.-]*$/.test(id)).map(({ id }) => JSON.stringify(id));
+  // Ids become folder names under a directory other lanes share. A replayed run names no folder (see below), and a sandbox run's id has a colon.
+  const unsafe = runRows.filter(({ id, replayed }) => !replayed && !/^\w[\w.-]*$/.test(id)).map(({ id }) => JSON.stringify(id));
   if (unsafe.length > 0) throw new Error(`Refusing to reset: run ids that cannot name a folder: ${unsafe.join(", ")}`);
 
   const running = runRows.filter(({ status }) => status === "running").map(({ id }) => id);

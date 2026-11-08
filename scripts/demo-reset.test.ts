@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -26,13 +26,17 @@ import {
   usageIntervals,
   users,
 } from "@bill-fighter/db/schema";
+import { generateSeed } from "@bill-fighter/db/seed/generate";
+import { loadSeed } from "@bill-fighter/db/seed/load";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { createAudit } from "@bill-fighter/platform/local/audit";
 import { createMail } from "@bill-fighter/platform/local/mail";
 import { BILL_ACCOUNT_NUMBER, billEmail } from "@bill-fighter/webhooks/bill-email";
 import { handleInbound } from "@bill-fighter/webhooks/inbound";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { advanceSandbox, approveSandbox, createSandboxUser, ipHash, resetSandboxCache, SANDBOX_SPEED, sandboxPlan, startSandboxRun } from "../apps/dashboard/lib/sandbox.ts";
 import { demoReset, type ResetOptions } from "./demo-reset.ts";
+import { parseRecording, replay } from "./replay.ts";
 
 // Each test migrates a fresh database on the Postgres every worktree shares, which is slow under load.
 vi.setConfig({ testTimeout: 60_000 });
@@ -373,6 +377,38 @@ describe("demoReset", () => {
       await withMailpit(200, async (api) => expect(await demoReset({ ...(await options(db, api, runsDir)), uploadsDir })).toMatchObject({ signups: 1 }));
       expect(await signupRows()).toEqual([0, kept[1]! - 1, kept[2]! - 1]);
       expect(existsSync(join(uploadsDir, signup))).toBe(false);
+    }));
+
+  it("clears a judge's finished sandbox run, then the stage replay plays", { timeout: 180_000 }, () =>
+    withTestDb("demo_reset_sandbox", async (db) => {
+      resetSandboxCache();
+      await loadSeed(db, generateSeed());
+      const before = await keptRows(db);
+      const signUp = { name: "Judge", company: "Judges Inc", email: "judge@example.com", passwordHash: "salt:hash", ipHash: ipHash("10.0.0.1", "test-key") };
+      const user = await createSandboxUser(db, signUp);
+      if (typeof user === "string") throw new Error(user);
+      const plan = sandboxPlan();
+      const start = Date.now();
+      const runId = await startSandboxRun(db, user.customerId, start);
+      const tap = start + plan.approvalT / SANDBOX_SPEED;
+      await advanceSandbox(db, user.customerId, tap);
+      await approveSandbox(db, user.customerId, runId, "Judge", tap);
+      await advanceSandbox(db, user.customerId, tap + plan.events.at(-1)!.t / SANDBOX_SPEED);
+      expect((await db.select().from(ledger)).length).toBeGreaterThan(0);
+      expect(runId).toContain(":");
+
+      const runsDir = runDirs();
+      expect(await demoReset({ ...(await options(db, "http://unused", runsDir)), mailpitApi: null })).toMatchObject({ runs: 1, signups: 1 });
+      expect(await runRowCounts(db)).toEqual(NONE);
+      expect(await db.select().from(users)).toEqual([]);
+      expect(await keptRows(db)).toEqual(before);
+
+      // The stage replay resets the same way first, then plays (its opening seconds, fast).
+      const recorded = parseRecording(readFileSync(new URL("../data/replay/run.jsonl", import.meta.url), "utf8"));
+      const events = recorded.events.filter(({ t }) => t <= 3000);
+      const recording = { ...recorded, events, durationMs: events.at(-1)!.t };
+      await replay({ pool: db.$client, url: (await ownUrl(db)).toString(), runsDir, allowNonlocal: false, recording, speed: 8, force: false });
+      expect((await db.select().from(runs)).map(({ id }) => id)).toEqual([events[0]!.id]);
     }));
 
   it("rolls the tables back if the seed changes during the reset", () =>

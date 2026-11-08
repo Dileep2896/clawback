@@ -26,6 +26,7 @@
     "demo:start": "tsx --env-file-if-exists=.env scripts/demo-start.ts",
     "demo:reset": "tsx --env-file-if-exists=.env scripts/demo-reset.ts",
     "demo:replay": "tsx --env-file-if-exists=.env scripts/replay.ts",
+    "sandbox:redeploy": "tsx --env-file-if-exists=.env scripts/sandbox-redeploy.ts",
     "run:local": "tsx --env-file-if-exists=.env scripts/run-local.ts",
     "parse:sample": "tsx --env-file-if-exists=.env scripts/parse-sample.ts",
     "dev:dashboard": "pnpm --filter @bill-fighter/dashboard dev",

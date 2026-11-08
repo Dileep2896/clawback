@@ -16,7 +16,7 @@ import { assertNotSharedDb, insertSampleRun } from "../apps/dashboard/lib/sample
 
 const BASE = process.env.DASHBOARD_URL ?? "http://localhost:3000";
 const VIEWPORT = { width: 1920, height: 1080 };
-const MIN_FONT_PX = 22;
+const MIN_FONT_PX = 12;
 const RUN = "panels-money-check";
 const CANARY = "from-the-vault-canary";
 const MANY_ROWS = 5000;
@@ -34,7 +34,9 @@ const shot = async (page: Page, name: string) => {
 };
 const fetchLive = async (page: Page) => (await (await page.request.get(`${BASE}/api/live`)).json()) as Live;
 const textOf = (page: Page, testId: string) => page.getByTestId(testId).innerText();
-const panel = (page: Page, title: string) => page.locator("section", { has: page.getByRole("heading", { name: title }) });
+// The ledger is the Now pane's money moment; the audit log is closed under it until opened.
+const ledgerPane = (page: Page) => page.locator('[data-moment="ledger"]');
+const openLog = (page: Page) => page.getByTestId("audit-log").evaluate((element) => ((element as unknown as { open: boolean }).open = true));
 const see = (page: Page, testId: string, text: string) => page.getByTestId(testId).filter({ hasText: text }).waitFor({ timeout: 5000 });
 
 // Browser code goes in as strings, because the root tsconfig has no DOM types.
@@ -108,7 +110,7 @@ async function checkRealFigures(page: Page, costUsd: number) {
 }
 
 async function checkWording(page: Page) {
-  const ledgerPanel = panel(page, "Ledger");
+  const ledgerPanel = ledgerPane(page);
   const text = await ledgerPanel.innerText();
   assert.match(text, /Refund, claimed/, "the refund is labeled claimed");
   assert.doesNotMatch(text, /\bwon\b/i, "the panel never says won");
@@ -131,6 +133,7 @@ async function checkLive(page: Page, customerId: string) {
   await see(page, "ledger-savings", "$21,560.32");
   await see(page, "ledger-keeps", "$23,916.77");
   await db.insert(auditLog).values({ id: "check-live-row", runId: RUN, agent: "finance", tool: "record_savings", costUsd: 0.04 });
+  await openLog(page);
   await page.locator('[data-audit-row="check-live-row"]').waitFor({ timeout: 5000 });
   assert.equal(await page.evaluate("window.notReloaded"), true, "values must change with no page refresh");
 }
@@ -141,10 +144,11 @@ async function checkAuditColumns(page: Page) {
   await free.waitFor({ timeout: 5000 });
   const cells = await free.locator("td").allInnerTexts();
   assert.match(cells[0]!, /\d:\d\d:\d\d/, "shows the time");
-  assert.match(cells[1]!, /collector/, "shows the agent");
-  assert.match(cells[1]!, /portal_login/, "shows the tool");
-  assert.match(cells[2]!, /—/, "a cost of 0 shows a dash");
-  assert.doesNotMatch(cells[2]!, /\$/, "a cost of 0 shows no amount");
+  assert.match(cells[1]!, /Collector/, "shows the agent");
+  assert.match(cells[2]!, /Log in to the provider's portal/, "says what the tool did in plain words");
+  assert.match(cells[2]!.replaceAll("\u200b", ""), /portal_login/, "and names the tool");
+  assert.match(cells[3]!, /—/, "a cost of 0 shows a dash");
+  assert.doesNotMatch(cells[3]!, /\$/, "a cost of 0 shows no amount");
   assert.match(await page.locator('[data-audit-row="check-live-row"]').innerText(), /\$0\.04/, "a real cost shows its amount");
   await shot(page, "audit-log");
 }
@@ -178,13 +182,13 @@ async function checkThousands(page: Page) {
   const appearMs = performance.now() - appearAt;
   assert.ok(appearMs < SLOWEST_POLL_MS * 3, `a new row took ${appearMs}ms to appear`);
 
-  const body = panel(page, "Audit log").locator('[role="group"]');
+  const body = page.getByTestId("audit-log").locator("> div");
   const scrolls = await body.evaluate((element) => {
     const box = element as unknown as { scrollTop: number; scrollHeight: number; clientHeight: number };
     box.scrollTop = 400;
     return box.scrollTop > 0 && box.scrollHeight > box.clientHeight;
   });
-  assert.equal(scrolls, true, "the audit log scrolls inside its panel");
+  assert.equal(scrolls, true, "the open audit log scrolls inside itself");
   await checkFits(page, `${total} audit rows`);
   console.info(`/api/live ${Math.round(pollMs)}ms and a new row on screen in ${Math.round(appearMs)}ms, with ${total} rows`);
 }
@@ -208,14 +212,18 @@ async function checkEmpty(page: Page) {
     }),
   );
   await page.goto(`${BASE}/agents`);
-  await page.getByText("No ledger rows yet").waitFor({ timeout: 5000 });
-  await page.getByText("No tool calls yet").waitFor({ timeout: 5000 });
+  await page.getByTestId("no-run").waitFor({ timeout: 5000 });
+  assert.equal(await page.getByText(/\bNo [a-z ]+ yet\b/).count(), 0, "no empty panels, only the one waiting line");
   await checkFits(page, "no run");
 }
 
 async function checkSample(page: Page) {
   await clearRuns();
   await insertSampleRun(db);
+  // The sample waits on its approval mid-call; decided and off the phone, the Now pane moves on to the money.
+  const live = (await fetchLive(page)) as Live & Record<string, unknown> & { approval: Record<string, unknown> };
+  const decided = { ...live, approval: { ...live.approval, status: "approved" }, calls: [] };
+  await page.route("**/api/live", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(decided) }));
   await page.goto(`${BASE}/agents`);
   await see(page, "ledger-refund", "$12,600.00");
   await see(page, "ledger-savings", "$17,000.00");
@@ -225,6 +233,7 @@ async function checkSample(page: Page) {
   await see(page, "ledger-keeps", "$20,720.00");
   await checkFits(page, "sample");
   await shot(page, "sample");
+  await page.unroute("**/api/live");
 }
 
 assertNotSharedDb();

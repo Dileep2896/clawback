@@ -78,4 +78,17 @@ describe("POST /api/bills/upload", () => {
     }
     expect(mocks.saveParsedBill).not.toHaveBeenCalled();
   });
+
+  it("refuses in the sandbox before reading the body, so no file is kept or parsed", async () => {
+    process.env.SANDBOX = "1";
+    try {
+      const formData = vi.fn(() => Promise.reject(new Error("the body must not be read")));
+      expect((await POST({ formData } as unknown as Request)).status).toBe(403);
+      expect(formData).not.toHaveBeenCalled();
+      expect(mocks.callWebhook).not.toHaveBeenCalled();
+      expect(mocks.saveParsedBill).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.SANDBOX;
+    }
+  });
 });
