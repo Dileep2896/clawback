@@ -198,20 +198,20 @@ const CLAWBACK: Player = {
   source: "/how-it-works",
   cells: [
     { text: "Small businesses, such as a noodle shop with three sites" },
-    { text: "AI agents; you approve once, by text" },
+    { text: "AI agents; you approve once (tap or text)" },
     { text: "30% of what is recovered, only once it comes back", href: "/pricing" },
     { text: "Yes: the agents call the provider and file the claim", href: "/how-it-works" },
     { text: "4 min 28 s to filed claims in the demo run; the refund itself waits on the provider", href: "/how-it-works" },
   ],
 };
 
-// The positioning grid: each name sits where its own row in the table puts it. Trim is left out: its terms aren't public.
+// The positioning grid: each name sits where its own row in the table puts it. Trim and Troy & Banks are left out: their rows don't say who does the work.
 const SERVES = ["Households", "Says it serves small businesses", "Organizations and enterprises"];
 const WORK: { label: string; cells: [string[], string[], string[]] }[] = [
   { label: "Agents", cells: [[], ["Clawback"], []] },
-  { label: "The vendor’s people", cells: [["Rocket Money", "Billshark"], [], ["P3", "Auditel", "Troy & Banks"]] },
-  { label: "Software plus the vendor’s staff", cells: [[], [], ["Tangoe", "Calero", "Cass"]] },
-  { label: "Software your staff run", cells: [[], [], ["EnergyCAP", "Arcadia"]] },
+  { label: "The vendor’s people", cells: [["Rocket Money", "Billshark"], ["Billshark"], ["P3", "Auditel"]] },
+  { label: "Software plus the vendor’s staff", cells: [[], [], ["Tangoe", "Calero", "Cass", "Arcadia"]] },
+  { label: "Software your staff run", cells: [[], [], ["EnergyCAP"]] },
 ];
 
 function Source({ cell, fallback }: { cell: Cell; fallback: string }) {
@@ -281,6 +281,7 @@ function PositionGrid() {
         Each name sits where its own public pages put it: whom it names as customers, and who does the work. An empty square is a combination none of
         them describes.
       </p>
+      <p className="text-[15px] text-faded">Among the companies we compared; terms read from their public pages on November 7, 2026.</p>
     </Reveal>
   );
 }
