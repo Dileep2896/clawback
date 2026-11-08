@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, gte, inArray, max, min, or, sql } from "drizzle-orm";
+import { isSandboxReplay, sandboxId } from "./replay.ts";
 import type { Db } from "@bill-fighter/db/client";
 import {
   accounts,
@@ -151,7 +152,12 @@ export async function liveSnapshot(db: Db, customerId?: string): Promise<LiveDat
     db.select().from(ledger).where(eq(ledger.customerId, run.customerId)).orderBy(asc(ledger.createdAt), asc(ledger.id)),
     customerBills(db, run.customerId),
     // shortcut: sms_messages has no run or customer id, so a run's thread is found by time. Add a run_id if runs ever overlap.
-    db.select().from(smsMessages).where(gte(smsMessages.createdAt, run.startedAt)).orderBy(asc(smsMessages.createdAt), asc(smsMessages.id)),
+    db
+      .select()
+      .from(smsMessages)
+      // A sandbox replay's texts carry the judge's id prefix, because many judges' runs overlap and keep their recorded times.
+      .where(isSandboxReplay(run.replay) ? sql`starts_with(${smsMessages.id}, ${sandboxId(run.customerId, "")})` : gte(smsMessages.createdAt, run.startedAt))
+      .orderBy(asc(smsMessages.createdAt), asc(smsMessages.id)),
     db
       .select({ id: auditLog.id, agent: auditLog.agent, tool: auditLog.tool, costUsd: auditLog.costUsd, createdAt: auditLog.createdAt })
       .from(auditLog)

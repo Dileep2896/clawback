@@ -2,6 +2,7 @@ import type { Db } from "@bill-fighter/db/client";
 import { runs } from "@bill-fighter/db/schema";
 import type { AgentRuntime, Audit, InboundEmail, RunEvent } from "@bill-fighter/platform/types";
 import { eq, inArray } from "drizzle-orm";
+import { assertNotSandbox } from "@bill-fighter/shared/sandbox";
 import { planGaps } from "./plan-check.ts";
 import { INTERRUPTED, reportStop, stopMessage } from "./retry.ts";
 import { buildRunSpec } from "./roster.ts";
@@ -43,6 +44,8 @@ export async function executeRun({
   tools: AgentTool[];
   onEvent?: (event: RunEvent) => void;
 }): Promise<string> {
+  // Before anything is recorded: a sandbox run must not even look started.
+  assertNotSandbox("run the agents");
   let status: Extract<RunEvent, { type: "result" }>["status"] = "error";
   let reason: string | undefined;
   let costUsd = 0;

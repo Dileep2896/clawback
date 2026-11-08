@@ -230,6 +230,17 @@ describe("sameOrigin", () => {
     expect(sameOrigin(request({ host: "localhost@evil.example" }))).toBe(false);
     expect(sameOrigin(request({}))).toBe(false);
   });
+
+  it("allows the one PUBLIC_HOST a hosted deployment answers on, from its own page only", () => {
+    process.env.PUBLIC_HOST = "clawback.example";
+    try {
+      expect(sameOrigin(request({ origin: "https://clawback.example", host: "clawback.example" }))).toBe(true);
+      expect(sameOrigin(request({ origin: "https://evil.example", host: "clawback.example" }))).toBe(false);
+      expect(sameOrigin(request({ origin: "https://evil.example", host: "evil.example" }))).toBe(false);
+    } finally {
+      delete process.env.PUBLIC_HOST;
+    }
+  });
 });
 
 describe("respond: what the routes answer", () => {

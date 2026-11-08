@@ -205,3 +205,33 @@ export function ConnectBills({ demo, queued: initiallyQueued, business }: { demo
     </div>
   );
 }
+
+/** The judge sandbox: the demo business's sample bills are already on this account, so the one step is to start the replay. */
+export function SandboxStart({ bills, business }: { bills: number; business: ReactNode }) {
+  const [start, startAction, starting] = useActionState<StartState>(startAuditAction, {});
+  return (
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
+      <Card title="2. Your bills" className="lg:order-1">
+        <div className="grid gap-2" data-testid="sandbox-bills">
+          <p className="text-title font-semibold">✓ Sample bills on file: {bills}</p>
+          <p className="text-faded">
+            This sandbox uses the demo business&apos;s electricity, gas, phone and internet bills. It takes no real bills, and it never contacts a provider: the audit you
+            watch is a recorded one, replayed for you.
+          </p>
+        </div>
+      </Card>
+      <div className="contents lg:order-2 lg:grid lg:gap-6">
+        <div className="order-first lg:order-none">{business}</div>
+        <Card title="3. Start your audit">
+          <form action={startAction} className="grid justify-items-start gap-3">
+            <p className="text-faded">Watch the agents work, approve their plan with one tap, and see the money come back.</p>
+            <FormError>{start.error}</FormError>
+            <button type="submit" disabled={starting} className={primary} data-testid="start-audit">
+              {starting ? "Starting the replay…" : "Start my audit"}
+            </button>
+          </form>
+        </Card>
+      </div>
+    </div>
+  );
+}

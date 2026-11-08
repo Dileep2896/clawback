@@ -2,12 +2,12 @@
 
 import { type FormEvent, useState } from "react";
 import { post } from "../../lib/post.ts";
-import { replayOf } from "../../lib/replay.ts";
+import { isSandboxReplay, replayOf } from "../../lib/replay.ts";
 import { isStopped, STOPPED_TEXT } from "../../lib/run-state.ts";
 import { APPROVAL_CHANNELS, useApprove } from "../../lib/use-approve.ts";
 import { useLive } from "../../lib/use-live.tsx";
 
-/** The text thread with the owner, and on a local live run a box to reply as them (YES approves). On naïve the request goes by email. */
+/** The text thread with the owner, and on a local live run a box to reply as them (YES approves). On naïve the request goes by email; in a judge's sandbox the phone only shows. */
 function Phone() {
   const { snapshot, refresh } = useLive();
   const [draft, setDraft] = useState("");
@@ -41,17 +41,23 @@ function Phone() {
     setBusy(false);
   }
 
-  if (run && !local) {
+  const sandbox = isSandboxReplay(run?.replay);
+  if (run && !local && !sandbox) {
     return (
       <p data-testid="phone-naive" className="text-faded">
         The request went by email.
       </p>
     );
   }
-  if (sms.length === 0) return null;
+  if (sms.length === 0 && !sandbox) return null;
   return (
     <section aria-label={`Text messages with ${contact}`} className="grid gap-2 border-t border-line pt-4">
       <h4 className="text-label text-faded">Texts with {contact}</h4>
+      {sandbox && (
+        <p data-testid="phone-sandbox" className="text-faded">
+          In the sandbox the phone only shows the text. Approve with the Approve button.
+        </p>
+      )}
       <ul className="grid gap-2">
         {sms.map((message) => {
           const inbound = message.direction === "inbound";
