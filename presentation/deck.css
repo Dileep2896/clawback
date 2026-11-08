@@ -112,6 +112,10 @@ h2 { font-size: 48px; line-height: 1.15; font-weight: 600; letter-spacing: -0.01
 .ceiling .figure { font-size: 128px; }
 .ceiling p { font-size: 36px; color: var(--faded); margin-top: 20px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
 
+.traction { display: flex; align-items: center; gap: 40px; }
+.traction .figure { font-size: 128px; }
+.traction p { font-size: 40px; max-width: 1500px; }
+
 /* 12 naïve */
 .s-naive h1 { font-size: 132px; }
 .facts { list-style: none; display: flex; flex-direction: column; gap: 20px; }
