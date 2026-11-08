@@ -5,7 +5,7 @@ type Stored = MailpitMessage & { Read: boolean };
 
 const field = (query: string, name: string) => new RegExp(`${name}:"([^"]*)"`).exec(query)?.[1];
 
-/** An in-memory Mailpit and Mail adapter for tests. Text comes back with CRLF line ends, as it does through SMTP. The query matcher covers only the searches the email path makes. */
+/** An in-memory Mailpit and Mail adapter for tests. Text comes back with CRLF line ends, as it does through SMTP, and reading a message marks it read, as Mailpit does. The query matcher covers only the searches the email path makes. */
 export function fakeInbox() {
   const box: Stored[] = [];
   const sent: OutboundEmail[] = [];
@@ -50,6 +50,7 @@ export function fakeInbox() {
     async read(id) {
       const found = box.find((m) => m.ID === id);
       if (!found) throw new Error(`No message ${id}`);
+      found.Read = true; // as Mailpit does: fetching a message marks it read
       return found;
     },
     async markRead(ids) {
