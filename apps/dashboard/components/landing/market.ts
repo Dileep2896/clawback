@@ -38,9 +38,9 @@ export const SPEND: { label: string; billions: number; how: string; sources: Sou
 export const SPEND_TOTAL = SPEND.reduce((sum, line) => sum + line.billions, 0);
 
 // Every figure below is worked out from SPEND_TOTAL, so the funnel always adds up: 1% to 3% of it, then 30% of that.
-export const WRONG_BILLIONS = [0.01, 0.03].map((share) => SPEND_TOTAL * share);
-export const REVENUE_BILLIONS = WRONG_BILLIONS.map((wrong) => wrong * 0.3);
-const range = ([low, high]: number[]) => `$${low.toFixed(1)} to ${high.toFixed(1)}B`;
+export const WRONG_BILLIONS = [SPEND_TOTAL * 0.01, SPEND_TOTAL * 0.03] as const;
+export const REVENUE_BILLIONS = [WRONG_BILLIONS[0] * 0.3, WRONG_BILLIONS[1] * 0.3] as const;
+const range = ([low, high]: readonly [number, number]) => `$${low.toFixed(1)} to ${high.toFixed(1)}B`;
 export const SPEND_FIGURE = `$${SPEND_TOTAL}B`;
 export const WRONG_FIGURE = range(WRONG_BILLIONS);
 export const REVENUE_FIGURE = range(REVENUE_BILLIONS);
