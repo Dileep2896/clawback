@@ -48,11 +48,12 @@ export async function runEmail(input: {
       while (Date.now() < deadline) {
         // Our own address, from the sent message, so only a reply to us counts.
         ours ??= (await mailpit.search(`message-id:"${sentId}"`, left()))[0]?.From.Address;
-        // Only a reply to our request: from BayTel, to us, In-Reply-To our Message-ID. The subject search just narrows it.
+        // Only a reply to our request: from BayTel, to us, In-Reply-To our Message-ID. The searches just narrow it: Mailpit's
+        // from: matches contained text, so the sender is checked exactly here.
         for (const candidate of ours ? await mailpit.search(`from:"${to}" subject:"${subject}"`, left()) : []) {
           const reply = await mailpit.read(candidate.ID, left());
           if (Date.now() >= deadline) return undefined; // read after the deadline: too late to count
-          if (reply.InReplyTo === sentId && reply.To?.some(({ Address }) => Address === ours)) return reply;
+          if (reply.From.Address.toLowerCase() === to.toLowerCase() && reply.InReplyTo === sentId && reply.To?.some(({ Address }) => Address === ours)) return reply;
         }
         await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())));
       }

@@ -40,7 +40,7 @@ export function fakeInbox() {
         .filter(
           (m) =>
             (!to || m.To?.some(({ Address }) => Address === to)) &&
-            (!from || m.From.Address === from) &&
+            (!from || m.From.Address.toLowerCase().includes(from.toLowerCase())) && // contained text, as Mailpit matches it
             (!subject || m.Subject.includes(subject)) &&
             (!id || m.MessageID === id) &&
             (!query.includes("is:unread") || !m.Read),

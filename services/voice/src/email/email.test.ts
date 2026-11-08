@@ -122,6 +122,25 @@ describe("runEmail", () => {
     expect(row!.outcomeJson).toBeNull();
   });
 
+  withData("ignores a correct-looking reply from a lookalike sender address", async (db) => {
+    const inbox = fakeInbox();
+    const forger = setInterval(() => {
+      for (const request of inbox.box.filter((m) => m.To?.[0]?.Address === "support@baytel.example" && !m.Read)) {
+        request.Read = true;
+        const text = acceptedReply("BT-7001", PLAN.cancelLines);
+        inbox.deliver({ from: "evil-support@baytel.example", to: "bills@billfighter.local", subject: `Re: ${request.Subject}`, text, inReplyTo: request.MessageID });
+      }
+    }, 2);
+    try {
+      await expect(runEmail({ db, mail: inbox.mail, mailpit: inbox.mailpit, actionId: ACTION, plan: PLAN, timeoutMs: 60, pollMs: 5 })).rejects.toThrow(/No reply from BayTel/);
+    } finally {
+      clearInterval(forger);
+    }
+    expect(inbox.box.filter((m) => m.From.Address === "evil-support@baytel.example")).toHaveLength(1);
+    const [row] = await db.select().from(calls);
+    expect((row!.transcriptJson as TranscriptRow[]).map(({ role }) => role)).toEqual(["agent", "system"]);
+  });
+
   withData("the desk retries a request whose reply failed to send, and answers it once", async (db) => {
     const inbox = fakeInbox();
     const send = inbox.mail.send;
