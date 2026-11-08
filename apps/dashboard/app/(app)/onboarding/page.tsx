@@ -5,7 +5,9 @@ import type { Metadata } from "next";
 import { Card, PageHeader } from "../../../components/ui/kit.tsx";
 import { isDemoCustomer } from "../../../lib/accounts.ts";
 import { requireUser } from "../../../lib/session.ts";
-import { ConnectBills } from "./connect.tsx";
+import { isSandbox } from "@bill-fighter/shared/sandbox";
+import { customerBills } from "../../../lib/snapshot.ts";
+import { ConnectBills, SandboxStart } from "./connect.tsx";
 
 export const metadata: Metadata = { title: "Get started" };
 
@@ -40,7 +42,11 @@ export default async function OnboardingPage() {
   return (
     <main className="mx-auto w-full max-w-[1200px] px-4 py-10 sm:px-6">
       <PageHeader title={`Welcome, ${firstName}`} description="Two steps and the agents start reading your bills." />
-      <ConnectBills demo={isDemoCustomer(user.customerId)} queued={user.auditRequestedAt !== null} business={business} />
+      {isSandbox() ? (
+        <SandboxStart bills={(await customerBills(db, user.customerId)).length} business={business} />
+      ) : (
+        <ConnectBills demo={isDemoCustomer(user.customerId)} queued={user.auditRequestedAt !== null} business={business} />
+      )}
     </main>
   );
 }

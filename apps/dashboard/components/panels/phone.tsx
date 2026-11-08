@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import { post } from "../../lib/post.ts";
-import { replayOf } from "../../lib/replay.ts";
+import { isSandboxReplay, replayOf } from "../../lib/replay.ts";
 import { isStopped, STOPPED_TEXT } from "../../lib/run-state.ts";
 import { useFollow } from "../../lib/use-follow.ts";
 import { useLive } from "../../lib/use-live.tsx";
@@ -47,6 +47,7 @@ export function Phone() {
       <div ref={anchor} className="grid gap-2">
         {run && !local && <p data-testid="phone-naive">On naïve the request goes by email</p>}
         {local && <p className="text-faded">Simulated phone: {contact}</p>}
+        {isSandboxReplay(run?.replay) && <p data-testid="phone-sandbox">In the sandbox the phone only shows the text. Approve with the Approve button.</p>}
         {sms.length === 0 && (local || !run) && <p className="text-faded">No messages yet</p>}
         <ul className="grid gap-2">
           {sms.map((message) => {

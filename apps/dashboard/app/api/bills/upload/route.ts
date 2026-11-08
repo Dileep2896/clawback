@@ -2,6 +2,7 @@ import { db } from "@bill-fighter/db/client";
 import { ParsedBill } from "@bill-fighter/shared/parsed-bill";
 import { saveParsedBill } from "../../../../lib/accounts.ts";
 import { currentSession } from "../../../../lib/session.ts";
+import { isSandbox } from "@bill-fighter/shared/sandbox";
 import { callWebhook } from "../../../../lib/webhook.ts";
 
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -14,6 +15,8 @@ const error = (message: unknown, status: number) => Response.json({ error: Strin
 export async function POST(request: Request) {
   const session = await currentSession();
   if (!session) return error("Log in first", 401);
+  // Before the body is read: the sandbox keeps no file and parses nothing.
+  if (isSandbox()) return error("The sandbox takes no real bills. The sample bills are already on your account.", 403);
   const file = (await request.formData().catch(() => null))?.get("file");
   if (!(file instanceof File)) return error("Attach a PDF", 400);
   const name = file.name;
