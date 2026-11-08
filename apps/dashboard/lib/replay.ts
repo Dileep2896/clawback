@@ -12,6 +12,18 @@ export const isSandboxReplay = (replay: unknown): replay is SandboxState => (rep
 /** Every row of a judge's replay has their customer id as its id prefix. */
 export const sandboxId = (customerId: string, id: string) => `${customerId}:${id}`;
 
+/**
+ * Whether the action is the letter Filer drafted in this run (agents filer.ts letterActionId). Findings outlive runs, so a repeat
+ * audit's customer has letters from earlier runs too. A judge's copy carries their prefix on every id, so it is moved to the front.
+ */
+export function isRunLetter(run: { id: string; customerId: string }, action: { id: string; findingId: string | null }) {
+  if (!action.findingId) return false;
+  const prefix = sandboxId(run.customerId, "");
+  const bare = (id: string) => (id.startsWith(prefix) ? id.slice(prefix.length) : id);
+  const letter = `letter-${bare(run.id)}-${bare(action.findingId)}`;
+  return action.id === letter || action.id === prefix + letter;
+}
+
 const when = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
 
 // Above this the words cannot be followed, and a backlog would keep talking after the call ended on screen.

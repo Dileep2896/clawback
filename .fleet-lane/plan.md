@@ -85,3 +85,7 @@
 - Blocking 2, sandbox approval audit (`apps/dashboard/lib/sandbox.ts`): `planOf` leaves out recorded `owner`/`approve` audit rows, so no recording replays one. `approveSandbox` writes exactly one `owner`/`approve` row in its locked transaction, only when the bundle was pending: `input_json {contact}`, `output_json {approvedBy, note}` (same wording as `approveRun`), dated at the tap, with the judge's id prefix so Watch it again removes it. Tests: concurrent Call clicks, one Call judge and one Email judge (two concurrent clicks), each gets one row with their choice and name. Both fail on the previous code.
 - Also committed: this lane's own plan.md and questions.md. The agents-redesign merge (81d5117) had replaced them with that lane's copies.
 - Checks: `pnpm test` (122 files, 1888 passed, 1 skipped), `pnpm lint`, `pnpm typecheck` at the root and in the dashboard, all clean.
+
+## Merge main (2026-11-08, orchestrator note en-merge.md)
+- Merged main (de43103, with agents-redesign and judge-link). Conflicts: `apps/dashboard/next.config.ts` (tracing now includes run.jsonl, run-email.jsonl and usage.json), and this plan.md (kept ours). Migration stays `0006_approval_contact`.
+- `pnpm test` (122 files, 1890 passed, 1 skipped), `pnpm lint`, `pnpm typecheck` at the root and in the dashboard: clean.

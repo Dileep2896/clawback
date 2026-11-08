@@ -447,3 +447,7 @@ Orchestrator decisions:
 **depends on:** agents-redesign (branch, merged in)
 
 **parallel with:** agents-redesign
+
+## Demo video re-record notes (human, 2026-11-08)
+- "I am happy with the UI too. Once everything is done, re-record our demo video and finalize it too." One live take on the final UI, reusing the nine voice clips; keep the old render as `~/Desktop/clawback-video/demo-final-v1.mp4`.
+- "in the demo we can just add the motion design text of we also use emails." The take stays a phone call. Add one short motion-graphic text overlay, no voiceover change: when the call scene ends (around scene 7 to 8), a small card animates in over the footage: an envelope icon and "Prefer email? Clawback can email the provider instead." in the theme fonts, lime or blue accent, ease-out 300–500 ms in, held about 3 s, out. Do not imply the email path ran in this take.
