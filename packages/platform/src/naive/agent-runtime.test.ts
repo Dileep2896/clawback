@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { Approval, ApprovalGate, Audit, Budget, RunEvent, RunSpec, ToolDef } from "../types.ts";
-import { createAgentRuntime, MAX_RUN_USD, pickModel, toolsetFor } from "./agent-runtime.ts";
-import type { NaiveApi, NaiveRequest } from "./runtime-http.ts";
+import { cancelAll, createAgentRuntime, MAX_RUN_USD, pickModel, toolsetFor } from "./agent-runtime.ts";
+import { type NaiveApi, NaiveError, type NaiveRequest } from "./runtime-http.ts";
 
 const tool = (name: string): ToolDef => ({
   name,
@@ -167,8 +167,8 @@ describe("naïve runtime", () => {
     const filer = calls.find((c) => c.method === "PATCH")!.body as { tools: unknown; budget: { max_task_micro_usd: number } };
     expect(filer.tools).toEqual({ default_config: { permission: "deny" }, configs: { "clawback.submit_claim": { enabled: true, permission: "ask" } } });
     expect(filer.budget.max_task_micro_usd).toBe(MAX_RUN_USD * 1_000_000);
-    // The run's vault credentials are removed at the end.
-    expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(2);
+    // The run's vault credential is removed at the end; the CEO, whose only tool here is the board, has none.
+    expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
   });
 
   it("denies a gated call with no actionId or outside the bundle and any foreign tool, allows an ungated one, and never touches a session it does not own", async () => {
@@ -365,6 +365,105 @@ describe("naïve runtime", () => {
       port: 0,
     }));
     expect((await collect(run.run(SPEC))).at(-1)).toMatchObject({ status: "error", reason: expect.stringContaining("NAIVE_MCP_PUBLIC_URL") });
+  });
+});
+
+describe("naïve runtime cost", () => {
+  it("keeps the board itself, one card per delegated task, and never offers board_update to the coordinator", async () => {
+    const cards: { input: Record<string, unknown>; agent: string }[] = [];
+    let next = 0;
+    const board: ToolDef = {
+      ...tool("board_update"),
+      handler: async (input, ctx) => {
+        cards.push({ input: input as Record<string, unknown>, agent: ctx.agent });
+        return (input as { cardId?: string }).cardId ? input : { cardId: `card${++next}` };
+      },
+    };
+    const { gate } = fakeGate({ status: "pending", actionIds: [] });
+    const { api, calls } = fakeNaive((sessions, tick) => {
+      const root = sessions.get("ses_root")!;
+      const member = (id: string) => ({ id, status: "running", stop_reason: null, pending_actions: [], consumed_micro_usd: 0, events: [] });
+      if (tick === 0)
+        Object.assign(root, {
+          status: "idle",
+          stop_reason: "awaiting_approval",
+          pending_actions: [
+            { kind: "tool", tool_call_id: "d1", name: "send_to_agent", args: { agent: "clawback-filer", message: "\nDraft the letters for F-1.\nIds: F-1", wait: true } },
+            { kind: "tool", tool_call_id: "d2", name: "send_to_agent", args: { agent: "agt_filer", message: "File them", wait: true } },
+          ],
+        });
+      if (tick === 1) {
+        root.events.push({ seq: 1, type: "thread.created", data: { thread_id: "ses_a", member: "clawback-filer" } });
+        root.events.push({ seq: 2, type: "thread.created", data: { thread_id: "ses_b", member: "clawback-filer" } });
+        Object.assign(root, { stop_reason: "awaiting_delegation", pending_actions: [] });
+        sessions.set("ses_a", member("ses_a"));
+        sessions.set("ses_b", member("ses_b"));
+      }
+      if (tick === 3) {
+        Object.assign(sessions.get("ses_a")!, { status: "idle", stop_reason: "end_turn" });
+        root.events.push({ seq: 3, type: "thread.idle", data: { thread_id: "ses_a" } });
+        root.events.push({ seq: 4, type: "thread.terminated", data: { thread_id: "ses_b" } });
+      }
+      if (tick === 5) root.stop_reason = "end_turn";
+    });
+    await collect(runtime(api, gate, fakeBudget(), fakeAudit().audit).run({ ...SPEC, tools: [board, tool("submit_claim")] }));
+    expect(cards).toEqual([
+      { input: { agent: "filer", title: "Draft the letters for F-1.", status: "doing" }, agent: "ceo" },
+      { input: { agent: "filer", title: "File them", status: "doing" }, agent: "ceo" },
+      { input: { cardId: "card1", status: "done" }, agent: "ceo" },
+      { input: { cardId: "card2", status: "blocked" }, agent: "ceo" },
+    ]);
+    const ceo = calls.find((c) => c.method === "POST" && c.path === "/agents")!.body as { tools: { configs: Record<string, unknown> }; system: string; mcp_servers: unknown[] };
+    expect(Object.keys(ceo.tools.configs)).not.toContain("clawback.board_update");
+    expect(ceo.system).toContain("Do not call board_update");
+    expect(ceo.mcp_servers).toEqual([]);
+    // Nothing is written to naïve's board, so no digest session can start.
+    expect(calls.some((c) => c.path.startsWith("/boards"))).toBe(false);
+  });
+
+  it("confirms a parked ungated call itself, counts parks, and cancels every session of the run on stop", async () => {
+    const { rows, audit } = fakeAudit();
+    const { gate } = fakeGate({ status: "pending", actionIds: [] });
+    const { api, calls } = fakeNaive((sessions, tick) => {
+      const root = sessions.get("ses_root")!;
+      if (tick === 0) {
+        root.events.push({ seq: 1, type: "thread.created", data: { thread_id: "ses_m", member: "clawback-filer" } });
+        Object.assign(root, { status: "idle", stop_reason: "awaiting_delegation" });
+        sessions.set("ses_m", {
+          id: "ses_m",
+          status: "idle",
+          stop_reason: "awaiting_approval",
+          pending_actions: [{ kind: "tool", tool_call_id: "u1", name: "clawback.draft_letter", args: {} }],
+          consumed_micro_usd: 0,
+          events: [],
+        });
+      }
+      // The root stops on an error while its member is still open.
+      if (tick === 2) root.stop_reason = "error";
+    });
+    const spec: RunSpec = { ...SPEC, members: [{ ...SPEC.members[0]!, tools: ["draft_letter"] }], tools: [...SPEC.tools, tool("draft_letter")] };
+    const events = await collect(runtime(api, gate, fakeBudget(), audit).run(spec));
+    // The allow is ours alone: no owner decision and no model turn stand between the park and the call.
+    expect(calls.filter((c) => c.path.endsWith("/tool_confirmations")).map((c) => c.body)).toEqual([{ tool_call_id: "u1", decision: "allow" }]);
+    expect(calls.filter((c) => c.path.endsWith("/cancel")).map((c) => c.path)).toEqual(["/sessions/ses_root/cancel", "/sessions/ses_m/cancel"]);
+    expect(events).toContainEqual(expect.objectContaining({ type: "text", text: expect.stringContaining("1 parks (1 ungated), 2 sessions") }));
+    expect(rows).toContainEqual(expect.objectContaining({ tool: "naive_run_stats", output: expect.objectContaining({ parks: 1, ungatedParks: 1, sessions: 2 }) }));
+  });
+
+  it("retries a cancel while naïve is unreachable, counts an ended session as cancelled, and reports what is left", async () => {
+    const tries = new Map<string, number>();
+    const api = (async (path: string) => {
+      const id = path.split("/")[2]!;
+      const n = (tries.get(id) ?? 0) + 1;
+      tries.set(id, n);
+      if (id === "ses_net" && n < 3) throw new Error("getaddrinfo ENOTFOUND api.vetta.sh");
+      if (id === "ses_done") throw new NaiveError(409, "session_terminal", "ended");
+      if (id === "ses_down") throw new Error("still offline");
+      return {};
+    }) as NaiveApi;
+    expect(await cancelAll(api, ["ses_ok", "ses_net", "ses_done"], 1, 1000)).toEqual([]);
+    expect(Object.fromEntries(tries)).toEqual({ ses_ok: 1, ses_net: 3, ses_done: 1 });
+    expect(await cancelAll(api, ["ses_down"], 1, 20)).toEqual(["ses_down"]);
   });
 });
 
