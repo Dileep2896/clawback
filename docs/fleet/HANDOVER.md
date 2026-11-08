@@ -13,6 +13,7 @@ Picked up 2026-11-06, still running 2026-11-07 about 02:30.
 - A fresh worktree lacks .env, .vault/, data/bills/ and portal logins (all gitignored); see rehearsal-notes.md "Setting up a fresh worktree".
 
 ## Waiting on the human
+- Human, 2026-11-08: "we can ship once UI is perfect on the judge and the video". Hold judge-link and demo-video; agents-redesign merges fleet/judge-link into its branch and the human reviews the combined UI in the preview first. Then ship judge-link, agents-redesign, demo-video; one sandbox redeploy; decide the video re-record.
 - Confirm the agents-redesign UI (screenshots), then decide whether to re-record the demo video (one more live run, about $1.18). Human: "no let me first confirm the UI then we can re-record". The current ~/Desktop/clawback-video/demo-final.mp4 shows the old /agents page.
 - "ship" for demo-video (review-clean after the merge).
 - Listen to the offline replay speech (Mac local voices).
