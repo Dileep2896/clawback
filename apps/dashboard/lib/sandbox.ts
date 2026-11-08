@@ -266,7 +266,9 @@ export async function approveSandbox(db: Db, customerId: string, runId: string, 
       const replay: SandboxState = contact === "email" ? { ...found, recordedAt: sandboxEmailPlan().recordedAt, cursor: 0, contact } : found;
       // pausedMs is how long the judge waited at the approval, so rows recorded after it land after the tap (wallTime).
       // A tap before playback reached the approval waited 0: the clock never moves back, and play() jumps to the approval.
-      const pausedMs = Math.max(0, now - planFor(replay).approvalT / replay.speed - Date.parse(replay.startedAt));
+      // Email is anchored at the tap either way: its recorded approval comes later than the call's, so a clamp would add that gap.
+      const waited = now - planFor(replay).approvalT / replay.speed - Date.parse(replay.startedAt);
+      const pausedMs = contact === "email" ? waited : Math.max(0, waited);
       const next: SandboxState = { ...replay, approvedAt: tap, startedAt: new Date(Date.parse(replay.startedAt) + pausedMs).toISOString(), pausedMs };
       // The email run starts again from its first event, so play() writes it up to the approval, with the cursor.
       if (contact === "email") await play(client, customerId, next, now);

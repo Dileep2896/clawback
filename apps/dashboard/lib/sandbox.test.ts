@@ -213,6 +213,28 @@ describe("the judge sandbox", { timeout: 180_000 }, () => {
       expect(run!.finishedAt!.getTime()).toBeLessThanOrEqual(at(END, tap - plan.approvalT / SANDBOX_SPEED) + 1);
     }));
 
+  it("plays the email continuation from the tap when Email is chosen at the call's approval moment", () =>
+    withTestDb("sandbox_email_early", async (db) => {
+      await loadSeed(db, generateSeed());
+      const email = sandboxEmailPlan();
+      expect(email.approvalT).toBeGreaterThan(plan.approvalT);
+      const customerId = "sandbox-email-early";
+      const runId = await judge(db, customerId);
+      const tap = at(plan.approvalT);
+      await advanceSandbox(db, customerId, tap);
+      await approveSandbox(db, customerId, runId, "Judge", "email", tap);
+      const first = email.events.find((event) => event.t > email.approvalT)!;
+      // Not yet due just before its recorded delay after the tap, due right at it.
+      await advanceSandbox(db, customerId, at(first.t - email.approvalT, tap) - 1);
+      const before = ((await db.select().from(runs).where(eq(runs.id, runId)))[0]!.replay as { cursor: number }).cursor;
+      expect(email.events[before]!.t).toBeGreaterThan(email.approvalT);
+      await advanceSandbox(db, customerId, at(first.t - email.approvalT, tap));
+      const after = ((await db.select().from(runs).where(eq(runs.id, runId)))[0]!.replay as { cursor: number }).cursor;
+      expect(after).toBeGreaterThan(before);
+      const own = await db.select({ startedAt: calls.startedAt }).from(calls).where(sql`starts_with(${calls.id}, ${`${customerId}:`})`);
+      for (const call of own) expect(call.startedAt.getTime()).toBeGreaterThan(tap);
+    }));
+
   it("plays each judge the contact they chose: one Call, one Email, the same numbers", () =>
     withTestDb("sandbox_contact", async (db) => {
       await loadSeed(db, generateSeed());
