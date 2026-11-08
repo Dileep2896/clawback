@@ -58,7 +58,7 @@ export function readSession(token: string | undefined, secret: Buffer | null, no
 export const newSession = (uid: string, cid: string, now = Date.now()): Session => ({ uid, cid, exp: now + SESSION_SECONDS * 1000 });
 
 // Pages anyone may open. /api/sms stays open because the simulated phone posts to it.
-const PUBLIC = ["/", "/signup", "/login", "/api/sms"];
+const PUBLIC = ["/", "/how-it-works", "/pricing", "/compare", "/market", "/signup", "/login", "/api/sms"];
 
 export const isPublicPath = (path: string) => PUBLIC.includes(path) || path.startsWith("/_next/") || path === "/favicon.ico";
 
