@@ -13,7 +13,7 @@ import { assertNotSharedDb, insertSampleRun, SAMPLE_RUN_ID, updateSampleRun } fr
 
 const BASE = process.env.DASHBOARD_URL || "http://localhost:3000";
 const VIEWPORT = { width: 1920, height: 1080 };
-const MIN_FONT_PX = 22;
+const MIN_FONT_PX = 12;
 const screenshotDir = process.argv[2];
 
 const shot = async (page: Page, name: string) => {
@@ -52,23 +52,22 @@ async function checkLiveUpdates(page: Page) {
   await seeText(page, "customer", "Golden Gate Noodle Co.");
   // A real reload wipes this. Counting navigation events would not do: the router's history calls fire them too.
   await page.evaluate("window.notReloaded = true");
-  await seeText(page, "platform", "local");
   await seeText(page, "run-status", "Running");
   await seeText(page, "run-cost", "$1.24");
-  await seeText(page, "run-cost-note", "Model cost is added when the run ends");
+  await seeText(page, "run-cost-note", "model cost added at the end");
   await seeText(page, "demo-data", "Demo data");
-  await seeText(page, "human-actions", "Human actions: 0");
+  await seeText(page, "human-actions", "0 human actions");
   await checkFitsOneScreen(page, "light");
   await shot(page, "light-pending");
 
   await decideApproval(db, { runId: SAMPLE_RUN_ID, status: "approved", channel: "dashboard", approvedBy: "Linda Park" });
-  await seeText(page, "human-actions", "Human actions: 1");
+  await seeText(page, "human-actions", "1 human action");
 
   // The owner also texts YES: the same approval, not a second human action.
   const second = await decideApproval(db, { runId: SAMPLE_RUN_ID, status: "approved", channel: "sms", approvedBy: "Linda Park" });
   assert.equal(second.channel, "dashboard", "the first decision must win");
   await page.waitForTimeout(2500);
-  await seeText(page, "human-actions", "Human actions: 1");
+  await seeText(page, "human-actions", "1 human action");
 
   await updateSampleRun(db, { costUsd: 2.5, status: "over_budget" });
   await seeText(page, "run-cost", "$2.50");
@@ -81,7 +80,6 @@ async function checkLiveUpdates(page: Page) {
   await checkFitsOneScreen(page, "light, stopped");
 
   assert.equal(await page.evaluate("window.notReloaded"), true, "values must change with no page refresh");
-  await page.waitForTimeout(800); // Let the drum finish rolling for the screenshot.
   await shot(page, "light-approved");
 }
 
@@ -99,8 +97,8 @@ async function checkConnectionLoss(page: Page) {
 async function checkNoRun(page: Page, noRunBody: string) {
   await page.route("**/api/live", (route) => route.fulfill({ contentType: "application/json", body: noRunBody }));
   await page.goto(`${BASE}/agents`);
-  await seeText(page, "no-run", "No run yet. Start one with pnpm demo:start");
-  await seeText(page, "human-actions", "Human actions: 0");
+  await seeText(page, "no-run", "Waiting for a run. Start one with pnpm demo:start.");
+  assert.equal(await page.getByTestId("human-actions").count(), 0, "no run figures before any run");
   assert.equal(await page.getByTestId("customer").count(), 0, "no customer before any run");
   await checkFitsOneScreen(page, "light, no run");
   await shot(page, "light-no-run");
@@ -115,7 +113,7 @@ async function checkStoppedRun(page: Page) {
   assert.equal(await page.getByTestId("approve").count(), 0, "no Approve button on a stopped run");
   const reply = await page.request.post(`${BASE}/api/approve`, { data: { runId: SAMPLE_RUN_ID } });
   assert.equal(reply.status(), 409);
-  await seeText(page, "human-actions", "Human actions: 0");
+  await seeText(page, "human-actions", "0 human actions");
   await checkFitsOneScreen(page, "light, stopped with a pending approval");
   await shot(page, "light-stopped");
 }

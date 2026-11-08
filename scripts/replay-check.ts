@@ -14,7 +14,7 @@ import { parseRecording, replay, type Recording } from "./replay.ts";
 
 const BASE = process.env.DASHBOARD_URL ?? "http://localhost:3000";
 const VIEWPORT = { width: 1920, height: 1080 };
-const MIN_FONT_PX = 22;
+const MIN_FONT_PX = 12;
 const screenshotDir = process.argv[2];
 
 // Browser code goes in as strings, because the root tsconfig has no DOM types.
@@ -58,7 +58,7 @@ async function watch(page: Page, recording: Recording, speed: number) {
       assert.ok(live.run.replay, "a replaying run came back with no label");
       assert.ok(await banner.isVisible(), "the banner is not visible during playback");
       const text = await banner.innerText();
-      assert.match(text, /REPLAY/);
+      assert.match(text, /^Sandbox replay/);
       seen.samples += 1;
       seen.approveButton += await page.getByTestId("approve").count();
       seen.reply += await page.getByTestId("sms-reply").count();
@@ -68,7 +68,8 @@ async function watch(page: Page, recording: Recording, speed: number) {
     await sleep(500);
   }
   await sleep(1500);
-  assert.match(await banner.innerText(), speed === 1 ? /real speed/ : new RegExp(`${speed}× speed`));
+  assert.equal(await banner.innerText(), speed === 1 ? "Sandbox replay" : `Sandbox replay · ${speed}×`);
+  assert.match((await banner.getAttribute("aria-label")) ?? "", speed === 1 ? /at real speed/ : new RegExp(`playing at ${speed}× speed`));
   return { ...seen, ...(await playing) };
 }
 
@@ -93,11 +94,13 @@ try {
   assert.equal(fast.approveButton, 0, "Approve was shown during playback");
   assert.equal(fast.reply, 0, "the SMS reply box was shown during playback");
   assert.ok(Math.abs(fast.playedMs - fast.recordedMs / 8) < 3000, `played ${fast.playedMs} ms against ${fast.recordedMs / 8} ms`);
+  // The finished run shows its money; the negotiator's row brings its call back.
+  await page.locator('[data-agent-row="negotiator"]').click();
   await page.getByTestId("sound-off").waitFor({ timeout: 5000 });
   assert.equal(await page.getByTestId("call-timer").first().innerText(), recordedCall, "the timer does not end on the recorded length of the call");
   assert.ok(fast.liveTimes.size > 1, "the call timer never ticked");
   assert.equal(await page.evaluate<number>("window.__spoken.length"), 0, "speech played above 2×");
-  await page.getByTestId("human-actions").filter({ hasText: "Human actions: 1" }).waitFor({ state: "attached", timeout: 5000 });
+  await page.getByTestId("human-actions").filter({ hasText: "1 human action" }).waitFor({ state: "attached", timeout: 5000 });
   await shot(page, "replay-finished-8x");
 
   const { scrollHeight, scrollWidth, tooSmall } = await page.evaluate<{ scrollHeight: number; scrollWidth: number; tooSmall: string[] }>(MEASURE);

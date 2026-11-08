@@ -105,7 +105,8 @@ try {
   await page.getByTestId("overview-decision").waitFor({ timeout: 15_000 });
   await think(page);
   await page.goto(`${BASE}/agents`);
-  await page.getByText("No cards yet").waitFor({ state: "hidden" });
+  // The timeline shows the run's agents at work.
+  await page.locator('[data-agent-row]:not([data-state="next"])').first().waitFor();
   await shot(page, "stage-3-agents");
   mark("on stage: approved, watching /agents");
   // A crashed webhook process leaves the run "running" forever; rehearsed runs finish in about 3 minutes.
