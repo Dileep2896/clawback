@@ -399,3 +399,51 @@ Orchestrator decisions:
 **depends on:** product-polish
 
 **parallel with:** judge-link (merge main after it ships)
+## Added by the human, 2026-11-07: "The text size is really bad and why are we showing the sandbox such a big way. We need to make the UI elegant and mordern AI application."
+
+Orchestrator decisions (apply app-wide, not only /agents):
+- **Type scale for the whole signed-in app** (set once as tokens in globals.css and used everywhere): body 14px/20px weight 400; secondary and labels 13px (muted colour, not bold); small captions and table heads 12px; panel and section titles 14–15px weight 600; page title 20px weight 600; one hero money figure per page at 32–40px in the serif, everything else at body size. Weight 600 only for titles and the active item; no bold body text. Tabular numbers for money and times. Remove any text above 20px except that one money figure.
+- **Look and feel:** a modern AI application in the spirit of Linear, Vercel's dashboard, Attio and Claude.ai (learn from them, don't copy): quiet dark surfaces, 1px hairline borders, generous whitespace (24px card padding, 16–24px gaps), 8–10px radius, no heavy boxes, colour only where it means something, small calm motion (a streaming line, a pulsing dot), crisp 16px line icons.
+- **Sandbox notice:** not a banner. A small pill in the page header next to the run status, 12px, muted text with a small amber dot: "Sandbox replay · 2×", with a tooltip or popover for the full sentence and the "Watch it again" action. No full-width bar. The banner code is on fleet/judge-link: merge main after judge-link ships and replace it there.
+- Recheck the Overview, Bills, Findings, Money and sign-up/onboarding pages against this scale and fix them in this lane.
+- After this lane ships, the sandbox on naïve gets one redeploy with all of it (the orchestrator arranges it).
+Screenshots for the human: /agents at 1920x1080 and 1440x900 (approval and call moments), Overview, and 390x844, each next to the before.
+## Each agent gets its own view (human, 2026-11-08, after trying the preview)
+Human, verbatim: "Why is intake and collector data the same, auditor and filer data the same in agents when I switching, I don't see any differences?"
+Cause: `BY_AGENT` in `lib/now.ts` maps intake and collector to "bills", auditor and filer to "findings", finance and monitor to "ledger". Picking an agent must show *that agent's* work. Orchestrator decisions:
+- **Intake:** the inbound email it read (from, subject, received time, the bill attachment name) and what it concluded (the customer it matched, the accounts and stores found).
+- **Collector:** what it gathered: the portal it logged into, each bill downloaded (provider, account, period, amount, pages) and the usage data (meter, interval count, date range), as a compact table.
+- **Auditor:** the checks it ran (each rule by name with pass or the finding it produced) and the findings with their evidence (kWh chart, rate table).
+- **Filer:** the documents it drafted, each as a card with its title and an excerpt of the real text: the Rule 17.1 refund claim, the rate change requests, the cancellation letters. Status "Drafted" or "Filed" from the real data, never claiming more.
+- **Approver:** the approval (as now). **Negotiator:** the call (as now).
+- **Finance:** the ledger and the invoice (Stripe test mode, status as recorded, never "sent" unless it was).
+- **Monitor:** what it scheduled: the next check date and what it will watch for.
+- Every agent view starts with a short line "What <Agent> did" and its steps in plain words (the tool words), then its own content. Use only data the snapshot has; if a field is missing, leave it out rather than invent it. If the snapshot lacks something (for example the email or the drafted letters), add it to the snapshot from existing tables; no schema changes without asking.
+- Automatic following while the run is live stays as it is; this is about picking an agent.
+- Tests: each agent's pick shows a different view on the recorded run. Screenshots of all nine picks at 1440 for the human.
+Do this together with merging main after judge-link ships (or now, if judge-link has not shipped by the time you start; merge after).
+## Bug from the human (2026-11-08), screenshot in .fleet-lane/empty-scroll.png
+Human: "when I scrolling down I see this empty section below the agent page." On /agents (preview at 127.0.0.1:3020, finished run, desktop width) the page scrolls past its content into a full screen of empty background. Find the element that makes the document taller than the content (for example an h-screen inside a min-h-screen shell, a hidden dialog or drawer still in flow, the speech or audio element, or a 100vh panel plus the header) and fix it at the root. Add a check: at 1920x1080, 1440x900 and 390x844, for every Now moment and every picked agent, `document.scrollingElement.scrollHeight` is no more than the bottom of the last visible element plus the page padding. Check the other app pages (Overview, Bills, Findings, Money) the same way.
+
+### `email-negotiator`
+
+**Goal:** Let the owner choose email instead of a phone call for the provider step. Human, 2026-11-08: "we should also given an option on email instead of phone calling?"; chose "Build now, call stays default".
+
+Orchestrator decisions:
+- **Choice on the approval card:** "How should we contact BayTel? ● Call  ○ Email". Call is the default; one approval still releases the whole bundle with the chosen channel recorded on the approval (and in the audit log). The stage, the video and the judge sandbox keep the call.
+- **Email path:** the Negotiator sends one cancellation request email (built in code from the approved bundle: the account, the 7 unused lines, the authorisation by the owner with the approval date, the AI disclosure "sent by an AI assistant on behalf of …") to BayTel's support address on our replica (`support@baytel.example` or the replica's existing address), through the `Mail` adapter (Mailpit locally). Reuse the Filer's drafted cancellation letters where they fit. Recipients are allowlisted: only our replica provider domains; a real domain is refused in code with a test.
+- **Replica reply:** a small BayTel responder (in the webhooks service or the portal, wherever the replica lives) reads that inbox (Mailpit API locally), applies the same rules the phone rep follows (authorised owner named, account matches), and replies with a ticket number and the lines it cancelled; anything off-plan gets a refusal reply. The Negotiator waits for the reply (bounded, with a timeout that marks the step blocked, never done) and records the outcome exactly as the call path does (ticket, lines cancelled), so Finance and the ledger work unchanged.
+- **UI:** the Negotiator's view shows the email thread (sent and reply, with a small envelope icon) in place of the call; timeline action words cover email; nothing claims "sent" or "cancelled" without the recorded outcome. The approval card UI and the Negotiator view live on `fleet/agents-redesign`: merge that branch into yours first and again before you finish (it is not on main yet), and build the choice into its amber approval card.
+- No voice credit, no live calls, VOICE_MODE stays sim. One sim run with email chosen, browser muted.
+
+**Acceptance checks:**
+- Choosing Email: the request lands in the replica inbox, the reply returns a ticket, the 7 lines show cancelled from the reply, ledger and Overview totals match the call path ($12,606.06 / $18,319.32 / $9,277.61).
+- Choosing Call: unchanged; `scripts/rehearse-stage.ts` passes in sim.
+- Non-replica recipient refused in code; reply timeout leaves the step blocked; tests for both.
+- `pnpm test`, lint, typecheck (root and dashboard) pass. Screenshots at 1440: approval card with the choice, Negotiator email view, done.
+
+**Estimate:** 2.5 hours
+
+**depends on:** agents-redesign (branch, merged in)
+
+**parallel with:** agents-redesign
