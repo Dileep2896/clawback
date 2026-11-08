@@ -123,12 +123,13 @@ export function Chip({ children, at = "top-right" }: { children: ReactNode; at?:
 export type Utterance = { role: string; words: { word: string; start: number; end: number }[] };
 
 // Captions, voice and call alike: one band, bottom centre, unless it would cover a box (then `place` moves it).
-export const CAPTION = { bottom: 110, fontSize: 44, lineHeight: 1.3, padX: 22, padY: 10 };
+export const CAPTION = { bottom: 110, fontSize: 44, lineHeight: 1.3, padX: 26, padY: 14 };
 export type CaptionPlace = { bottom: number } | { top: number };
 function CaptionBand({ place = { bottom: CAPTION.bottom }, children }: { place?: CaptionPlace; children: ReactNode }) {
   return (
     <div style={{ position: "absolute", left: 160, right: 160, ...place, textAlign: "center", fontFamily: SANS, fontSize: CAPTION.fontSize, lineHeight: CAPTION.lineHeight, color: C.ink }}>
-      <span style={{ padding: `${CAPTION.padY}px ${CAPTION.padX}px`, background: "rgb(11 15 20 / 0.88)", borderRadius: 14, boxDecorationBreak: "clone", WebkitBoxDecorationBreak: "clone" }}>{children}</span>
+      {/* One solid rounded band behind all its lines, so busy footage never shows between them. */}
+      <span style={{ display: "inline-block", padding: `${CAPTION.padY}px ${CAPTION.padX}px`, background: "rgb(11 15 20 / 0.88)", borderRadius: 14, border: `1px solid ${C.line}`, boxShadow: "0 10px 34px rgb(0 0 0 / 0.55)" }}>{children}</span>
     </div>
   );
 }

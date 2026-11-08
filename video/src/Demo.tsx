@@ -27,14 +27,20 @@ function bandBox(lines: string[], place: CaptionPlace): Box {
   const y = "top" in place ? place.top : H - place.bottom - h;
   return { x: (W - w) / 2, y, w, h };
 }
-/** Bottom centre, like the call's captions; at the top if that would cover a box or card; else just above what it would cover. */
+const area = (a: Box, b: Box) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+/** Bottom centre, like the call's captions; at the top if that would cover a box or card; else the lowest place, going up
+ *  8 px at a time, clear of everything it would cover during the cue (the camera moves, so a box may be anywhere in it);
+ *  if nowhere is clear, the place covering least. */
 function placeCaption(lines: string[], obstacles: Box[]): CaptionPlace {
+  const clear = (place: CaptionPlace) => !obstacles.some((o) => overlaps(bandBox(lines, place), o));
   const bottom = { bottom: CAPTION.bottom };
-  const hit = obstacles.filter((o) => overlaps(bandBox(lines, bottom), o));
-  if (!hit.length) return bottom;
+  if (clear(bottom)) return bottom;
   const top = { top: 96 };
-  if (!obstacles.some((o) => overlaps(bandBox(lines, top), o))) return top;
-  return { bottom: H - Math.min(...hit.map((o) => o.y)) + 16 };
+  if (clear(top)) return top;
+  const h = bandBox(lines, bottom).h;
+  const places = Array.from({ length: Math.floor((H - 96 - h - CAPTION.bottom) / 8) }, (_, i) => ({ bottom: CAPTION.bottom + 8 * (i + 1) }));
+  const covered = (place: CaptionPlace) => obstacles.reduce((sum, o) => sum + area(bandBox(lines, place), o), 0);
+  return places.find(clear) ?? [bottom, top, ...places].reduce((best, p) => (covered(p) < covered(best) ? p : best));
 }
 
 function SceneView({ s, start, rough }: { s: Scene; start: number; rough: boolean }) {
