@@ -4,7 +4,8 @@ import { connectPortal, type DashboardDeps, parseUpload, startBillRun } from "./
 import { handleInbound, type InboundDeps, type InboundReply } from "./inbound.ts";
 import { handleFireCheck } from "./scheduled.ts";
 
-export const WEBHOOK_PORT = 3002;
+// WEBHOOK_PORT lets a second worktree run its own service beside the main one; the dashboard then needs WEBHOOK_URL to match.
+export const WEBHOOK_PORT = Number(process.env.WEBHOOK_PORT) || 3002;
 export const INBOUND_PATH = "/inbound";
 export const FIRE_CHECK_PATH = "/fire-check";
 export const START_AUDIT_PATH = "/start-audit";

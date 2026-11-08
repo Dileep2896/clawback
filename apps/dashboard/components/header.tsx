@@ -38,7 +38,7 @@ export function Header() {
   const problems = runProblems(snapshot?.boardCards ?? []);
 
   return (
-    <header className="flex flex-wrap items-center gap-x-10 gap-y-2 px-4 py-2">
+    <header className="flex flex-wrap items-center gap-x-8 gap-y-2 px-4 py-2">
       <div>
         <h1 className="text-[2.25rem] leading-tight font-bold">Watch your agents work</h1>
         {snapshot?.customer && (
@@ -48,7 +48,7 @@ export function Header() {
         )}
       </div>
 
-      {run && (
+      {run && snapshot && (
         <>
           <Fact label="Platform" testId="platform">
             {platformLabel(run.platform)}
@@ -56,6 +56,16 @@ export function Header() {
           <Fact label="Run status" testId="run-status">
             {statusLabel(run.status)}
           </Fact>
+          {/* Run-stat chips: counts the snapshot already has, no spinners. The dot pulses only while the run is working. */}
+          <p data-testid="run-stats" className="flex flex-wrap items-center gap-2 leading-tight">
+            <span className="inline-flex items-center gap-2 rounded-full border border-line bg-sheet px-3 py-0.5 tabular-nums">
+              <span aria-hidden="true" className={`size-2.5 rounded-full ${run.status === "running" ? "animate-pulse bg-agent motion-reduce:animate-none" : "bg-faded/50"}`} />
+              {snapshot.auditTotal} steps
+            </span>
+            <span className="rounded-full border border-line bg-sheet px-3 py-0.5 tabular-nums">
+              {snapshot.findings.length} {snapshot.findings.length === 1 ? "finding" : "findings"}
+            </span>
+          </p>
           <div>
             <Fact label="Run cost" testId="run-cost" figure>
               {usd.format(run.costUsd)}
@@ -90,6 +100,10 @@ export function Header() {
       )}
 
       <div className="ml-auto flex items-center gap-3">
+        {/* The sidebar is an icon rail here, so this page's Demo data label lives in its header at projector size. */}
+        <span data-testid="demo-data" className="rounded-full border border-line bg-sheet px-3 py-0.5 font-semibold whitespace-nowrap text-faded">
+          Demo data
+        </span>
         <span aria-hidden="true" className="w-min text-right text-[1.625rem] leading-none font-semibold">
           Human actions
         </span>

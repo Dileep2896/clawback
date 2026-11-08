@@ -7,6 +7,7 @@ import { NoAudit } from "../../../components/no-audit.tsx";
 import { PageHeader } from "../../../components/ui/kit.tsx";
 import { isDemoCustomer } from "../../../lib/accounts.ts";
 import { currentSession } from "../../../lib/session.ts";
+import { Agents } from "../../../components/panels/agents.tsx";
 import { Approval } from "../../../components/panels/approval.tsx";
 import { AuditLog } from "../../../components/panels/audit-log.tsx";
 import { Board } from "../../../components/panels/board.tsx";
@@ -19,7 +20,7 @@ export const metadata: Metadata = { title: "Agents" };
 
 const COLUMN = "grid min-h-0 gap-3 min-[1100px]:grid-rows-[2fr_3fr]";
 
-// The projector view: every word 22 px or larger. Four columns read as the story: the work, the human, the call, the money. One screen wide, stacked when narrow.
+// The projector view: every word 22 px or larger. Four columns read as the story: the work, the human, the agents and the call, the money. One screen wide, stacked when narrow.
 export default async function AgentsPage() {
   // A sign-up with no audit gets an honest empty page. The demo customer keeps its empty panels before the stage run starts.
   const session = await currentSession();
@@ -32,7 +33,7 @@ export default async function AgentsPage() {
     );
   }
   return (
-    <div data-fit-screen className="flex min-h-0 flex-1 flex-col text-[22px] leading-[1.35]">
+    <div data-fit-screen className="flex min-h-0 flex-1 flex-col bg-paper text-[22px] leading-[1.35]">
       <Header />
       <main className="grid min-h-0 flex-1 gap-3 p-3 pt-0 min-[1100px]:grid-cols-[5fr_4fr_5fr_5fr]">
         {/* An even split: the board needs room for all of its states. */}
@@ -44,7 +45,9 @@ export default async function AgentsPage() {
           <Approval />
           <Phone />
         </div>
-        <div className="grid min-h-0">
+        {/* The call fills only the negotiator's step, so the agents share its column. */}
+        <div className="grid min-h-0 gap-3 min-[1100px]:grid-rows-[2fr_3fr]">
+          <Agents />
           <Call />
         </div>
         <div className={COLUMN}>

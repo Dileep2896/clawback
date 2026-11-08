@@ -36,7 +36,9 @@ Two families.
 - **Atkinson Hyperlegible Next** (400, 600, 700): all interface text and headings. Chosen for legibility on a projector.
 - **Source Serif 4** (600): money figures only, via the `font-figure` utility, always with `tabular-nums`.
 
-Scale for product pages (landing, Overview, Bills, Findings, Money, sign-up). Nothing under 16 px.
+Two scales. The app is denser and quieter than the landing (`product-polish`, 2026-11-07, after `docs/plan/design-study.md`).
+
+**Landing and sign-up.** Nothing under 16 px.
 
 | Role | Size / line height | Weight |
 |---|---|---|
@@ -48,29 +50,55 @@ Scale for product pages (landing, Overview, Bills, Findings, Money, sign-up). No
 | Stat figure (serif) | 48 / 1.05 | 600 |
 | Hero figure (serif) | 72 to 88 / 1 | 600 |
 
-Stat figures are at least 48 px so the room can read them from the back. Sentence case everywhere. No all-caps labels.
+**Signed-in app pages** (Overview, Bills, Findings, Money, onboarding). The human's ruling: tables at 15/13, the Overview at 16 px or more with money at 40 px or more, because the stage ends on it.
 
-**`/agents` is the projector screen**: every word is 22 px or larger, checked by `scripts/dashboard-shell-check.ts` and the `panels-*-check.ts` scripts. The page wrapper sets 22 px body text; the top bar switches to 22 px there too.
+| Role | Size | Weight |
+|---|---|---|
+| Small labels: table headers, chips, sidebar company, timestamps | 13 | 600 (labels) / 400 |
+| Table rows, sidebar items, drawer meta | 15 | 400 / 600 |
+| Page body, Overview text, breadcrumb, card titles in grey | 16 | 400 / 600 |
+| Card title (h2) | 18 | 600 |
+| Page title (h1) | 24 | 600 |
+| Overview statement figures (serif) | 40 | 600 |
+| Hero figure, "You keep" (serif) | 56 to 72 | 600 |
+
+Sentence case everywhere. No all-caps labels.
+
+**`/agents` is the projector screen**: every word is 22 px or larger, checked by `scripts/dashboard-shell-check.ts` and the `panels-*-check.ts` scripts. The page wrapper sets 22 px body text, and the sidebar becomes a 64 px icon rail there (its hidden labels are set at 22 px too, because the check measures hidden text). The Demo data label moves into the `/agents` header on that page.
 
 ## Space and shape
 
 - Spacing steps: 4, 8, 12, 16, 24, 32, 48, 64 px (Tailwind 1, 2, 3, 4, 6, 8, 12, 16).
-- Product pages: content left-aligned in a column up to 1200 px wide, 24 px side gutter (16 px under 640 px).
-- Radii by hierarchy: 14 px for cards and panels (`rounded-card`), 8 px for buttons and inputs (`rounded-control`), full for badges and pills.
-- Top bar: 56 px tall, white, hairline bottom border.
-- `/agents`: full width, 12 px gaps, panels fill the rest of a 1080 px screen with no page scroll. If a panel gets tight, cut panel padding before text size.
+- **App shell** (Linear/Harvey): a 240 px left sidebar on `paper` with a hairline right border; content on `sheet`. Sidebar: wordmark, the company in 13 px grey, nav items with a 20 px line icon and label, the active item a `sheet` pill with a 1 px `line` ring and 6 px radius; Demo data chip and Log out at the foot (dark is the only theme, so there is no toggle). Under 1024 px it is a top bar with a scrolling nav row.
+- **In-content top bar** (`PageHeader`): breadcrumb "Company / Page" in 16 px grey, 24 px title, one-line description, actions on the right, a hairline under it. No full-width coloured header.
+- App pages: centred column up to 1440 px, 32 px side gutter (16 px under 640 px).
+- Radii by hierarchy: 10 px for cards and panels (`rounded-card`), 8 px for buttons and inputs (`rounded-control`), 6 px for nav pills and chips, full for status pills.
+- Cards: 1 px `line` border, 24 px padding (32 px on a hero tile), no shadows, no glows.
+- `/agents`: full width on `paper`, 12 px gaps, panels fill the rest of a 1080 px screen with no page scroll. If a panel gets tight, cut panel padding before text size.
 
 ## Components (`apps/dashboard/components/ui/`)
 
 | Component | When |
 |---|---|
-| `Button` / `ButtonLink` | `primary` (green fill) for the one main action on a screen; `secondary` (outlined) for the rest; `ghost` for low-weight links in bars. The label says what happens: "Approve", "Start my audit". |
-| `Card` | A surface grouping related content. Optional title. Don't nest cards. |
-| `StatTile` | One money or count figure with a label and optional note. `tone="money"` for customer money (green serif), `tone="plain"` otherwise. |
-| `Table` | Bills, findings, ledger rows. Money columns right-aligned with `tabular-nums`. |
+| `Button` / `ButtonLink` | `primary` (lime fill, near-black text) for the one main action on a screen; `secondary` (outlined) for the rest; `ghost` for low-weight links in bars. The label says what happens: "Approve", "Start my audit". |
+| `Card` | A surface grouping related content. Optional 18 px title. Don't nest cards. |
+| `StatTile` | One money or count figure (40 px serif) with a label and optional note. `tone="money"` for customer money, `tone="plain"` otherwise. |
+| `Table` | Bills, findings, ledger rows: 15 px rows about 44 px tall, 13 px grey header, hairline dividers, no zebra, `paper` hover tint, money right-aligned with `tabular-nums`. `grouped` takes one `<tbody>` per group with a group header row (Bills by location). |
+| `StatusDot` | A status as a dot plus a word, never a filled badge. `alert` (coral) only for a wrong bill amount or an error; `money` (lime) for money confirmed or won; `agent` (blue) for agents at work on it; `plain` (grey) otherwise; `live` pulses blue only while a run works, and not under reduced motion. |
+| `Chip` | A small outlined 13 px label, such as a finding's rule. Filter chips on Bills are the pressable version (`aria-pressed`, ink fill when on). |
 | `EmptyState` | A page or card with nothing yet: say what will appear and give the one action that makes it appear. |
-| `PageHeader` | h1 plus an optional one-line description and actions on the right. |
-| `AppNav` | The signed-in top bar: Overview, Bills, Findings, Agents, Money. The current page is marked with `aria-current="page"` and a green underline. |
+| `PageHeader` | The in-content top bar above. Pass `crumb` (the customer's name). |
+| `AppNav` | The sidebar above, `nav[aria-label="Main"]`, current page marked with `aria-current="page"`. |
+
+## App pages
+
+Each page has one idea and one loud element at most.
+
+- **Overview** (Mercury): the approval card is the only loud thing: a plain card with a full 1 px `warn` (amber) border, an amber "Needs you" dot, the action count and one large lime Approve. No side stripe. Below, two equal cards: "You keep" as the hero figure in lime serif with "+ refund claimed across all audits", a small staircase of money arriving, and a You keep versus fee bar; and "Your statement" with refund, yearly savings and fee at 40 px. A slim run strip (status dot, start time, decision, findings) closes the page.
+- **Bills** (Ramp/Stripe): filter row (Provider chips, Store select, Status chips), one table grouped by location. Status is honest: "Overcharged" only for a bill a finding's evidence names as billed too much (meter or bill-math evidence); other bills on an account with a finding read "Finding on account"; the rest "OK".
+- **Findings** (Linear): a table with site, title, rule chip, state and amounts; a row opens a 720 px side sheet with the counter "n / N", J and K (and arrow buttons) to move, the amount in lime serif, "Why it was flagged" in a grey quote block, the evidence sections, and an Activity timeline built only from rows that exist (actions, the approval, calls, ledger rows; untimed rows have no time). The `/agents` projector drawer is the same component without the counter and timeline, unchanged at 22 px.
+- **Money** (Mercury): "You keep" with an "All audits" period chip (the ledger is per customer) and one lime staircase area chart (baseline only, no gridlines); a Totals card; then the ledger, where claimed or due amounts are grey and confirmed amounts lime, so the honesty rule is visible; invoice and card payments side by side below.
+- **Agents** (Linear agent panel, Attio run card): panels on `paper`; run-stat chips ("47 steps", "16 findings") whose dot pulses blue only while the run works. An Agents panel shares the call's column: one row per agent in the order it first acted (status dot, name, current action, elapsed from its first to last recorded row), and a detail pane with the selected agent's newest tool calls. The pane follows the working agent until someone picks a row. Dots: blue pulsing = working, coral = blocked, hollow = queued, grey = done. The CEO and the run card have no row: they show on the Board.
 
 ## Landing page (`/`)
 

@@ -5,10 +5,29 @@ import { money } from "../../lib/evidence.ts";
 import { replayOf } from "../../lib/replay.ts";
 import { findingState } from "../../lib/run-state.ts";
 import { useLive } from "../../lib/use-live.tsx";
+import { findingActivity } from "../../lib/activity.ts";
 import { EvidenceDrawer } from "../evidence/drawer.tsx";
-import { ButtonLink, EmptyState, PageHeader, Table } from "../ui/kit.tsx";
+import { ButtonLink, Chip, EmptyState, PageHeader, StatusDot, Table } from "../ui/kit.tsx";
 import { NoAudit } from "../no-audit.tsx";
 import { Page } from "./common.tsx";
+
+/** The rule that raised a finding, as a short chip label. */
+export const RULE_LABEL: Record<string, string> = {
+  meterMultiplierJump: "Meter multiplier",
+  rateOptimization: "Rate plan",
+  unusedLines: "Unused line",
+  promoExpiry: "Promo ended",
+  arithmeticCheck: "Bill math",
+  thirdPartySupplier: "Third-party supplier",
+};
+
+// Agents at work on it: blue. Won is money: lime. Waiting and not acted on stay grey, so the approval card stays the one loud thing.
+const MOVING = new Set(["Approved, agents at work", "Filed with the provider"]);
+
+/** The finding J/K or the chevrons move to: the next or previous id, or the same one at either end. */
+export function stepFinding(ids: string[], openId: string, step: number) {
+  return ids[ids.indexOf(openId) + step] ?? openId;
+}
 
 export function FindingsList() {
   const { snapshot } = useLive();
@@ -18,11 +37,17 @@ export function FindingsList() {
   const actions = snapshot?.actions ?? [];
   // Biggest first, as on the Findings panel. A sort is stable, so ties keep their fixed order.
   const findings = [...(snapshot?.findings ?? [])].sort((a, b) => b.refundCents - a.refundCents || b.annualSavingsCents - a.annualSavingsCents);
-  const open = findings.find((f) => f.id === openId);
+  const index = findings.findIndex((f) => f.id === openId);
+  const open = findings[index];
+  const move = (step: number) => setOpenId((id) => id && stepFinding(findings.map((f) => f.id), id, step));
 
   return (
     <Page>
-      <PageHeader title="Findings" description="What the agents found on your bills. Open one to see the evidence." />
+      <PageHeader
+        title="Findings"
+        crumb={snapshot?.customer?.name}
+        description={findings.length > 0 ? `${findings.length} findings, biggest first. Open one to see the evidence.` : "What the agents found on your bills. Open one to see the evidence."}
+      />
       {snapshot && !snapshot.run && <NoAudit />}
       {snapshot?.run && findings.length === 0 && (
         <EmptyState title="No findings yet" action={<ButtonLink href="/agents">Watch your agents work</ButtonLink>}>
@@ -31,38 +56,52 @@ export function FindingsList() {
       )}
       {findings.length > 0 && (
         <Table
-          head={[{ label: "Finding" }, { label: "Where it stands" }, { label: "Refund claimed", numeric: true }, { label: "Yearly savings", numeric: true }]}
+          head={[{ label: "Finding" }, { label: "Rule" }, { label: "Where it stands" }, { label: "Refund claimed", numeric: true }, { label: "Yearly savings", numeric: true }]}
         >
           {findings.map((finding) => {
             const site = finding.accountId ? sites[finding.accountId] : undefined;
             const state = findingState(finding, actions, snapshot?.approval);
             return (
-              <tr key={finding.id} data-finding-row={finding.id}>
-                <td>
-                  {site && <span className="block text-base text-faded">{site}</span>}
+              <tr key={finding.id} data-finding-row={finding.id} onClick={() => setOpenId(finding.id)} className="cursor-pointer">
+                <td className="py-3!">
+                  {site && <span className="block text-[13px] text-faded">{site}</span>}
                   <button
                     type="button"
                     data-finding={finding.id}
                     aria-haspopup="dialog"
                     onClick={() => setOpenId(finding.id)}
-                    className="cursor-pointer text-left font-semibold underline decoration-line decoration-2 underline-offset-4 hover:decoration-agent"
+                    className="cursor-pointer text-left font-semibold decoration-agent decoration-2 underline-offset-4 hover:underline"
                   >
                     {finding.title}
                   </button>
                 </td>
-                <td data-testid="finding-state" className={state === "Found, not acted on" ? "text-faded" : ""}>
-                  {state}
+                <td>
+                  <Chip>{RULE_LABEL[finding.type] ?? finding.type}</Chip>
                 </td>
-                <td className="text-right font-figure tabular-nums">{finding.refundCents > 0 ? money(finding.refundCents) : "None"}</td>
-                <td className="text-right font-figure tabular-nums">{finding.annualSavingsCents > 0 ? money(finding.annualSavingsCents) : "None"}</td>
+                <td>
+                  <StatusDot tone={MOVING.has(state) ? "agent" : state === "Won" ? "money" : "plain"}>
+                    <span data-testid="finding-state">{state}</span>
+                  </StatusDot>
+                </td>
+                <td className={`text-right font-figure tabular-nums ${finding.refundCents > 0 ? "" : "text-faded"}`}>{finding.refundCents > 0 ? money(finding.refundCents) : "None"}</td>
+                <td className={`text-right font-figure tabular-nums ${finding.annualSavingsCents > 0 ? "" : "text-faded"}`}>
+                  {finding.annualSavingsCents > 0 ? money(finding.annualSavingsCents) : "None"}
+                </td>
               </tr>
             );
           })}
         </Table>
       )}
-      {findings.length > 0 && <p className="mt-3 text-base text-faded">A finding&apos;s own estimate. Only what the agents act on reaches your statement.</p>}
+      {findings.length > 0 && <p className="mt-3 text-[13px] text-faded">A finding&apos;s own estimate. Only what the agents act on reaches your statement.</p>}
       {open && (
-        <EvidenceDrawer finding={open} site={open.accountId ? sites[open.accountId] : undefined} replay={replayOf(snapshot?.run)} onClose={() => setOpenId(null)} />
+        <EvidenceDrawer
+          finding={open}
+          site={open.accountId ? sites[open.accountId] : undefined}
+          replay={replayOf(snapshot?.run)}
+          onClose={() => setOpenId(null)}
+          nav={{ index, count: findings.length, prev: () => move(-1), next: () => move(1) }}
+          activity={snapshot ? findingActivity(open, snapshot) : undefined}
+        />
       )}
     </Page>
   );

@@ -4,7 +4,7 @@ import { type MeterDetail, monthLabel, monthName, quantity } from "../../lib/evi
 const TALLEST_BAR_PCT = 85;
 const MAX_MONTH_LABELS = 18;
 // The stripes tell the series apart without colour.
-const BILLED_FILL = "bg-alert bg-[repeating-linear-gradient(45deg,transparent_0_3px,rgb(255_255_255/0.5)_3px_6px)]";
+const BILLED_FILL = "bg-alert bg-[repeating-linear-gradient(45deg,transparent_0_3px,color-mix(in_srgb,var(--ink)_50%,transparent)_3px_6px)]";
 
 function Swatch({ className, label }: { className: string; label: string }) {
   return (
@@ -42,7 +42,7 @@ export function KwhChart({ detail }: { detail: MeterDetail }) {
           {bills.map((bill, i) => (
             <div key={bill.billId} data-chart-month={bill.periodStart.slice(0, 7)} className="relative flex min-w-0 flex-1 items-end justify-center gap-0.5 px-0.5">
               {i === swapIndex && (
-                <div data-testid="swap-marker" className="absolute inset-y-0 left-0 border-l-4 border-dashed border-ink">
+                <div data-testid="swap-marker" className="absolute inset-y-0 left-0 border-l-2 border-dashed border-ink">
                   <span className="absolute top-0 left-2 font-semibold whitespace-nowrap">
                     Meter swap: {oldMeter} to {newMeter}
                   </span>
