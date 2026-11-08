@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { billStatuses, bySite } from "./bills.tsx";
+import { billStatuses, bySite, statusFilter } from "./bills.tsx";
 
 const bill = (id: string, locationId: string, city: string) =>
   ({ id, locationId, site: "Store #1", city, accountId: `${locationId}-acct` }) as Parameters<typeof bySite>[0][number];
@@ -37,4 +37,17 @@ it("marks only the bills the evidence shows overbilled, and the rest of a flagge
   // A rate finding lists bills too, but a better plan is not an overcharge on them.
   expect(statusOf({ id: "oak-1", accountId: "oakland" })).toBe("Finding on account");
   expect(statusOf({ id: "x", accountId: "elsewhere" })).toBe("OK");
+});
+
+it("drops a Status pick that no bill has any more, so a hidden chip cannot keep filtering", () => {
+  const bills = [
+    { id: "sep", accountId: "fremont" },
+    { id: "oak-1", accountId: "oakland" },
+  ];
+  // Before: no findings, every bill OK, and the user picks OK.
+  expect(statusFilter(bills, billStatuses([]), "OK")).toEqual({ options: ["OK"], active: "OK" });
+  // Live findings then flag both accounts: OK is gone, so the pick no longer applies.
+  const flagged = billStatuses([meter, { ...rate, accountId: "oakland" }]);
+  expect(statusFilter(bills, flagged, "OK")).toEqual({ options: ["Overcharged", "Finding on account"], active: null });
+  expect(statusFilter(bills, flagged, "Overcharged").active).toBe("Overcharged");
 });

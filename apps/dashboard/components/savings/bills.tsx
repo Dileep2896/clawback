@@ -38,6 +38,15 @@ export function billStatuses(findings: Pick<Snapshot["findings"][number], "type"
   return (bill: Pick<Bill, "id" | "accountId">): BillStatus => (overcharged.has(bill.id) ? "Overcharged" : flagged.has(bill.accountId) ? "Finding on account" : "OK");
 }
 
+/**
+ * The Status chips to show, and the one in force. Live findings can take a status off every bill; a pick that no bill has
+ * any more is dropped, so a hidden chip can never keep filtering the table.
+ */
+export function statusFilter(bills: Pick<Bill, "id" | "accountId">[], statusOf: ReturnType<typeof billStatuses>, picked: BillStatus | null) {
+  const options = (["Overcharged", "Finding on account", "OK"] as const).filter((s) => bills.some((bill) => statusOf(bill) === s));
+  return { options, active: picked && options.includes(picked) ? picked : null };
+}
+
 const STATUS_TONE = { Overcharged: "alert", "Finding on account": "plain", OK: "plain" } as const;
 
 function FilterChip({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: string }) {
@@ -76,11 +85,11 @@ export function Bills() {
   const statusOf = billStatuses(snapshot?.findings ?? []);
   const [provider, setProvider] = useState<string | null>(null);
   const [site, setSite] = useState<string | null>(null);
-  const [status, setStatus] = useState<BillStatus | null>(null);
+  const [picked, setStatus] = useState<BillStatus | null>(null);
 
   const providers = [...new Set(all.map((bill) => bill.provider))];
   const sites = bySite(all).map(([id, bills]) => ({ id, name: `${bills[0]!.site}, ${bills[0]!.city}` }));
-  const statuses = (["Overcharged", "Finding on account", "OK"] as const).filter((s) => all.some((bill) => statusOf(bill) === s));
+  const { options: statuses, active: status } = statusFilter(all, statusOf, picked);
   const bills = all.filter((bill) => (!provider || bill.provider === provider) && (!site || bill.locationId === site) && (!status || statusOf(bill) === status));
 
   return (
