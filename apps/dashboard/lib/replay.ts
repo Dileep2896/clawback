@@ -10,8 +10,12 @@ const FASTEST_SPEECH = 2;
 
 export const replayOf = (run: Snapshot["run"] | undefined) => (run?.replay ?? null) as ReplayInfo | null;
 
+/** The full sentence, for the sandbox pill's popover and screen readers. */
 export const replayLabel = ({ recordedAt, speed }: ReplayInfo) =>
-  `REPLAY · recorded ${when.format(new Date(recordedAt))} · ${speed === 1 ? "real speed" : `playing at ${speed}× speed`} · times shown are as recorded`;
+  `A recorded audit replayed for you, recorded ${when.format(new Date(recordedAt))}, ${speed === 1 ? "at real speed" : `playing at ${speed}× speed`}. Times shown are as recorded.`;
+
+/** The pill itself: "Sandbox replay · 2×". */
+export const replayPill = ({ speed }: ReplayInfo) => (speed === 1 ? "Sandbox replay" : `Sandbox replay · ${speed}×`);
 
 /** The moment of the recording now on screen. The timer uses it, so it ticks at the replay's speed and ends on the true length of the call. */
 export const recordedNow = ({ recordedAt, speed, startedAt }: ReplayInfo, now: number) =>

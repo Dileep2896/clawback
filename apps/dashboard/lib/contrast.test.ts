@@ -45,7 +45,6 @@ const TEXT_PAIRS = [
   ["agent-text", "agent"],
   ["alert-text", "alert"],
   ["warn-text", "warn"],
-  ["register-text", "register"],
   ["paper", "ink"],
 ] as const;
 

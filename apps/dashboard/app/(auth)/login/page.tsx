@@ -16,7 +16,7 @@ function LogInForm() {
       <input type="hidden" name="next" value={next} />
       <Field label="Work email" name="email" type="email" autoComplete="email" required defaultValue={state.fields?.email} />
       <Field label="Password" name="password" type="password" autoComplete="current-password" required />
-      <button type="submit" disabled={pending} className="mt-2 inline-flex min-h-12 cursor-pointer items-center justify-center rounded-control bg-action px-6 text-[1.125rem] font-semibold text-action-text hover:brightness-110 disabled:cursor-wait disabled:opacity-70">
+      <button type="submit" disabled={pending} className="mt-2 inline-flex min-h-12 cursor-pointer items-center justify-center rounded-control bg-action px-6 text-body font-semibold text-action-text hover:brightness-110 disabled:cursor-wait disabled:opacity-70">
         {pending ? "Logging in…" : "Log in"}
       </button>
     </form>
@@ -27,14 +27,14 @@ export default function LogInPage() {
   return (
     <div className="rounded-card border border-line bg-sheet p-6 sm:p-8">
       <title>Log in · Clawback</title>
-      <h1 className="text-[2.5rem] leading-tight font-bold">Log in</h1>
+      <h1 className="text-page leading-tight font-semibold">Log in</h1>
       <p className="mt-1 text-faded">See your savings and anything waiting for your approval.</p>
       <Suspense>
         <LogInForm />
       </Suspense>
       <p className="mt-6 text-faded">
         New to Clawback?{" "}
-        <Link href="/signup" className="font-semibold text-ink underline underline-offset-4">
+        <Link href="/signup" className="text-ink underline underline-offset-4">
           Create an account
         </Link>
       </p>

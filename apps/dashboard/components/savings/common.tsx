@@ -14,5 +14,5 @@ export const SERVICES: Record<string, string> = { electric: "Electric", gas: "Ga
 
 /** The product-page column from docs/plan/design.md: 16 px base, denser than the landing. */
 export function Page({ children }: { children: ReactNode }) {
-  return <main className="mx-auto w-full max-w-[1440px] px-4 py-8 text-base sm:px-8">{children}</main>;
+  return <main className="mx-auto w-full max-w-[1440px] px-4 py-8 text-body sm:px-8">{children}</main>;
 }

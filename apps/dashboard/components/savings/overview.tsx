@@ -1,5 +1,6 @@
 "use client";
 
+import { replayOf } from "../../lib/replay.ts";
 import { money } from "../../lib/evidence.ts";
 import { ledgerView } from "../../lib/ledger.ts";
 import { STOPPED_TEXT, statusLabel } from "../../lib/run-state.ts";
@@ -14,10 +15,10 @@ function StatementLine({ label, note, testId, children }: { label: string; note?
   return (
     <div className="flex items-baseline justify-between gap-6 py-4">
       <dt className="min-w-0">
-        <span className="font-semibold">{label}</span>
+        <span>{label}</span>
         {note && <span className="block text-faded">{note}</span>}
       </dt>
-      <dd data-testid={testId} className="font-figure text-[2.5rem] leading-none whitespace-nowrap">
+      <dd data-testid={testId} className="font-figure text-page leading-none whitespace-nowrap">
         {children}
       </dd>
     </div>
@@ -62,29 +63,29 @@ function ApprovalCard() {
     >
       <div className="flex flex-wrap items-center justify-between gap-6">
         <div className="min-w-0 flex-1">
-          <p className="inline-flex items-center gap-2 font-semibold text-warn">
+          <p className="inline-flex items-center gap-2 text-warn">
             <span aria-hidden="true" className="size-2 rounded-full bg-warn" />
             Needs you
           </p>
-          <h2 id="approval-title" className="mt-1 text-[1.75rem] leading-tight font-semibold">
+          <h2 id="approval-title" className="mt-1 text-page leading-tight font-semibold">
             Approval needed
           </h2>
           <p className="mt-1 text-faded">{count}. Nothing is sent to a provider until you approve.</p>
         </div>
         {canApprove && (
-          <Button data-testid="overview-approve" disabled={busy} onClick={approve} className="min-h-14 px-10 text-[1.25rem]">
+          <Button data-testid="overview-approve" disabled={busy} onClick={approve} className="min-h-14 px-10 text-title">
             {busy ? "Approving" : "Approve"}
           </Button>
         )}
       </div>
-      {replay && <p className="mt-3 font-semibold text-warn">Waiting for the recorded reply</p>}
+      {replay && <p className="mt-3 text-warn">Waiting for the recorded reply</p>}
       {stopped && (
-        <p role="alert" className="mt-3 font-semibold text-alert">
+        <p role="alert" className="mt-3 text-alert">
           {STOPPED_TEXT}
         </p>
       )}
       {failed && (
-        <p role="alert" data-testid="overview-approve-error" className="mt-3 font-semibold text-alert">
+        <p role="alert" data-testid="overview-approve-error" className="mt-3 text-alert">
           Approve failed. Try again.
         </p>
       )}
@@ -115,6 +116,7 @@ export function Overview() {
       <PageHeader
         title="Overview"
         crumb={snapshot?.customer?.name}
+        replay={replayOf(run)}
         description={run ? `From your audit started ${runDate(run.startedAt)}.` : "Loading your latest audit."}
         actions={
           <ButtonLink href="/agents" variant="secondary">
@@ -128,15 +130,15 @@ export function Overview() {
 
         <div className="grid gap-6 min-[1000px]:grid-cols-2">
           {/* The hero tile: what the owner keeps is core's figure, never worked out here. */}
-          <section aria-labelledby="keeps-title" className="flex flex-col rounded-card border border-line bg-sheet p-8">
-            <h2 id="keeps-title" className="font-semibold text-faded">
+          <section aria-labelledby="keeps-title" className="flex flex-col rounded-card border border-line bg-sheet p-6">
+            <h2 id="keeps-title" className="text-label text-faded">
               You keep
             </h2>
-            <p data-testid="overview-keeps" className="mt-3 font-figure text-[3.5rem] leading-none text-money sm:text-[4.5rem]">
+            <p data-testid="overview-keeps" data-hero-figure className="mt-3 font-figure text-hero text-money">
               {view.customerKeepsCents === null ? NOT_RECORDED : money(view.customerKeepsCents)}
             </p>
             {view.refundCents > 0 && (
-              <p className="mt-4 font-semibold text-money">
+              <p className="mt-4 text-money">
                 + {money(view.refundCents)} refund claimed <span className="font-normal text-faded">across all audits</span>
               </p>
             )}
@@ -148,7 +150,7 @@ export function Overview() {
 
           {/* Every line is a ledger sum. */}
           <section aria-labelledby="statement-title" className="rounded-card border border-line bg-sheet px-6 py-5">
-            <h2 id="statement-title" className="font-semibold text-faded">
+            <h2 id="statement-title" className="text-label text-faded">
               Your statement
             </h2>
             <dl className="mt-1 divide-y divide-line">
@@ -171,20 +173,20 @@ export function Overview() {
               <dl className="flex flex-wrap gap-x-12 gap-y-4">
                 <div>
                   <dt className="text-faded">Status</dt>
-                  <dd data-testid="overview-run-status" className="font-semibold">
+                  <dd data-testid="overview-run-status">
                     <StatusDot tone={run.status === "running" ? "live" : run.status === "success" ? "plain" : "alert"}>{statusLabel(run.status)}</StatusDot>
                   </dd>
                 </div>
                 <div>
                   <dt className="text-faded">Started</dt>
-                  <dd data-testid="overview-run-date" className="font-semibold tabular-nums">
+                  <dd data-testid="overview-run-date" className="tabular-nums">
                     {runDate(run.startedAt)}
                   </dd>
                 </div>
                 {approval && approval.status !== "pending" && (
                   <div>
                     <dt className="text-faded">Approval</dt>
-                    <dd data-testid="overview-decision" className={`font-semibold ${approval.status === "approved" ? "" : "text-alert"}`}>
+                    <dd data-testid="overview-decision" className={approval.status === "approved" ? undefined : "text-alert"}>
                       {approval.status === "approved" ? "Approved" : "Denied"} by {approval.approvedBy}
                       {approval.channel && `, ${APPROVAL_CHANNELS[approval.channel]}`}
                     </dd>
@@ -192,7 +194,7 @@ export function Overview() {
                 )}
                 <div>
                   <dt className="text-faded">Findings</dt>
-                  <dd className="font-semibold tabular-nums">{snapshot?.findings.length ?? 0}</dd>
+                  <dd className="tabular-nums">{snapshot?.findings.length ?? 0}</dd>
                 </div>
               </dl>
               <div className="ml-auto flex flex-wrap gap-3">
