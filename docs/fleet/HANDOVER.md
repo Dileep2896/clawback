@@ -12,6 +12,10 @@ Picked up 2026-11-06, still running 2026-11-07 about 02:30.
 - Voice credit estimate after 3 live calls: Retell about $9.18, Vapi about $4.41; option A call about $0.40. Read the dashboards before the talk.
 - A fresh worktree lacks .env, .vault/, data/bills/ and portal logins (all gitignored); see rehearsal-notes.md "Setting up a fresh worktree".
 
+## Decided 2026-11-08 (human, terminal)
+- "I am happy with the UI too. Once everything is done, re-record our demo video and finalize it too." Treated as: ship approval for agents-redesign, judge-link, email-negotiator and the demo-video tool once each is review-clean (recorded per lane with this quote); then one sandbox redeploy (human runs pnpm sandbox:redeploy); then one live run to re-record the video (about $1.18: Retell ~$0.23, Vapi ~$0.17, Claude ~$0.78; floor $3 Retell / $2 Vapi), reuse the nine voice clips, final render to ~/Desktop/clawback-video/.
+- "go ahead": baytel.example added to ALLOWED_EMAIL_DOMAINS (root .env done). Email option in the judge sandbox too.
+
 ## Waiting on the human
 - Human, 2026-11-08: "we can ship once UI is perfect on the judge and the video". Hold judge-link and demo-video; agents-redesign merges fleet/judge-link into its branch and the human reviews the combined UI in the preview first. Then ship judge-link, agents-redesign, demo-video; one sandbox redeploy; decide the video re-record.
 - Confirm the agents-redesign UI (screenshots), then decide whether to re-record the demo video (one more live run, about $1.18). Human: "no let me first confirm the UI then we can re-record". The current ~/Desktop/clawback-video/demo-final.mp4 shows the old /agents page.
