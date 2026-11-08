@@ -153,7 +153,7 @@ export function EmailCard({ start, holdSec = 3 }: { start: number; holdSec?: num
   const show = f < end ? interpolate(f, [0, inF], [0, 1], ease) : interpolate(f, [end, end + inF], [1, 0], ease);
   if (f < 0 || show <= 0) return null;
   return (
-    <div style={{ position: "absolute", top: 96, left: "50%", transform: `translate(-50%, ${(1 - show) * 24}px)`, opacity: show, display: "flex", alignItems: "center", gap: 20, padding: "22px 34px", borderRadius: 18, background: "rgb(20 26 33 / 0.94)", border: `1px solid ${C.line}`, boxShadow: "0 18px 50px rgb(0 0 0 / 0.45)", fontFamily: SANS, fontSize: 40, color: C.ink, whiteSpace: "nowrap" }}>
+    <div style={{ position: "absolute", top: 660, left: "50%", transform: `translate(-50%, ${(1 - show) * 24}px)`, opacity: show, display: "flex", alignItems: "center", gap: 20, padding: "22px 34px", borderRadius: 18, background: "rgb(20 26 33 / 0.94)", border: `1px solid ${C.line}`, boxShadow: "0 18px 50px rgb(0 0 0 / 0.45)", fontFamily: SANS, fontSize: 40, color: C.ink, whiteSpace: "nowrap" }}>
       <svg width="46" height="34" viewBox="0 0 46 34" aria-hidden="true">
         <rect x="2" y="2" width="42" height="30" rx="4" fill="none" stroke={C.agent} strokeWidth="3" />
         <path d="M3 4 L23 19 L43 4" fill="none" stroke={C.agent} strokeWidth="3" strokeLinejoin="round" />

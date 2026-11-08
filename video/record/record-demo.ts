@@ -173,6 +173,9 @@ try {
     if (!callSeen && snap.calls.length) {
       callSeen = true;
       await log("call-start", now);
+      // The call's head (waveform, timer) is what the call scenes zoom on; the pane itself is mostly empty during a live call.
+      await now.getByTestId("call-timer").waitFor({ timeout: 10_000 });
+      await log("call-head", now.getByTestId("call-timer"));
     }
     if (callSeen && !callEnded && snap.calls.every((call) => call.endedAt)) {
       callEnded = true;
