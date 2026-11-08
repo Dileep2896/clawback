@@ -26,7 +26,7 @@ Answers applied: the naïve board mirror is dropped (Q2), and there is one card 
 
 - `packages/platform/src/naive/board.ts`: our `board_cards` only. `mirror.ts` and `mirror.test.ts` are deleted, so nothing is written to naïve's board and no board-digest sessions start.
 - `packages/platform/src/naive/agent-runtime.ts`:
-  - On naïve the CEO is not offered `board_update`, and a note in its prompt says so. The runtime makes a card through the run's own `board_update` handler when a member thread starts: titled with the first line of the delegated task, `doing`. It moves the card to `done` on `thread.idle`, to `blocked` on failure or `thread.terminated`, and to `blocked` if the member never reported. The CEO's first MCP result is now its summary email, so it and the members it starts stay unflagged.
+  - On naïve the CEO is not offered `board_update`, and a note in its prompt says so. The runtime makes a card through the run's own `board_update` handler when a member thread starts: titled with the first line of the delegated task, `doing`. It moves the card to `done` on `thread.idle`, to `blocked` on failure or `thread.terminated`, and to `blocked` if the member never reported. The CEO no longer calls MCP tools for the board, but the probes later showed every member thread starts flagged anyway (see Live results).
   - On stop, `cancelAll` cancels every session the run owns (root and threads), retrying every 5 s for up to 5 min while naïve is unreachable. `409 session_terminal` counts as done, and anything left is printed by id.
   - Parks (total and ungated), sessions and duration go in the final `naïve cost:` text line and in an `audit_log` row `naive_run_stats`.
 - `packages/platform/src/naive/flag-probe.ts`: the live probe (Haiku, $0.001).
@@ -73,3 +73,8 @@ Try: `pnpm exec vitest run packages/platform/src/naive` (new tests are under "na
 - **Blocking 1, denied or cancelled tasks appear completed (agent-runtime.ts:324):** the runtime now remembers each thread it denied a gated call on, and on `thread.idle` a thread that was denied, or whose session is `cancelled` (as well as `failed` or stopped), closes its card as `blocked`, not `done`. This replaces the known limit from rounds 3 and 4. New test: "blocks the card of a member that was cancelled, or denied a gated call before it ended its turn"; it fails on the old code and passes now.
 - Not covered: a gated call refused by our own tool server (its `onDenied` names only the agent, not the thread) does not mark the thread. That only happens when naïve runs a call we did not allow.
 - Lint, typecheck and `pnpm test` pass (111 files, 1815 passed, 1 skipped).
+
+## Fix round 6
+- **Blocking 1, cross-package relative import (agent-runtime.test.ts:4):** the test now imports `defineTool`/`wrapTool` from `@bill-fighter/agents/tool-wrapper` (the package's `./*` export) instead of `../../../agents/src/tool-wrapper.ts`. It resolves through the workspace root; `@bill-fighter/agents` is not added to platform's `package.json` because agents already depends on platform and that would make a cycle.
+- Non-blocking: the stale "members stay unflagged" line in this plan now matches the probe results. `docs/plan/naive-rehearsal-notes.md:67` left alone (not a file this fix edits).
+- Lint, typecheck and `pnpm test` pass (111 files, 1815 passed, 1 skipped). No `origin` remote, so not pushed.

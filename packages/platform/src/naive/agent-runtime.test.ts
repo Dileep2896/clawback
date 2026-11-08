@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 // The real audit wrapper, so the test sees how a tool fails when only its audit row cannot be written.
-import { defineTool, wrapTool } from "../../../agents/src/tool-wrapper.ts";
+import { defineTool, wrapTool } from "@bill-fighter/agents/tool-wrapper";
 import type { Approval, ApprovalGate, Audit, Board, BoardCard, Budget, RunEvent, RunSpec, ToolDef } from "../types.ts";
 import { cancelAll, createAgentRuntime, MAX_RUN_USD, pickModel, toolsetFor } from "./agent-runtime.ts";
 import { type NaiveApi, NaiveError, type NaiveRequest } from "./runtime-http.ts";
