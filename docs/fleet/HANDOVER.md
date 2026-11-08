@@ -13,6 +13,8 @@ Picked up 2026-11-06, still running 2026-11-07 about 02:30.
 - A fresh worktree lacks .env, .vault/, data/bills/ and portal logins (all gitignored); see rehearsal-notes.md "Setting up a fresh worktree".
 
 ## Waiting on the human
+- Confirm the agents-redesign UI (screenshots), then decide whether to re-record the demo video (one more live run, about $1.18). Human: "no let me first confirm the UI then we can re-record". The current ~/Desktop/clawback-video/demo-final.mp4 shows the old /agents page.
+- "ship" for demo-video (review-clean after the merge).
 - Listen to the offline replay speech (Mac local voices).
 - Choose a stage script from rehearsal's options. The slot is 3 to 4 minutes and must include a real live call, but the call alone is about 3 minutes and a full live run 5:18.
 - Record the backup video into a local folder outside the repo (human will do it).
