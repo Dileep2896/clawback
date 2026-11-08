@@ -316,3 +316,28 @@ Orchestrator decisions:
 **depends on:** landing-live
 
 **parallel with:** product-polish, naive-runtime-cost
+
+### `demo-video`
+
+**Goal:** A 2:00 demo video for the hackathon submission, recorded from one real live run, edited in Remotion with zooms, cursor, callouts and captions, under the human's own voiceover. Research: `docs/plan/demo-video.md` (read it first; this section overrides it).
+
+Orchestrator decisions:
+- **One live run, approved by the human on 2026-11-07 in the terminal: "yes, plan one live run for the video".** Real Retell and Vapi call, expected about $0.23 Retell plus $0.17 Vapi plus about $0.40 Claude. Only one. Before dialing, ask the orchestrator in `questions.md` and wait for "go" (the orchestrator checks the credit floor: keep at least $3 Retell and $2 Vapi). If the take fails, stop and ask; never redial on your own. Allowlisted numbers only.
+- Not replay: no REPLAY banner, Linda taps Approve on screen. Follow the stage script in `docs/plan/rehearsal-notes.md` (sign up Mission Dumplings, upload the sample bill, Linda approves, /agents, end on Overview).
+- **Call audio:** after the run, fetch the call's recording from Retell (or Vapi) with a read-only API GET (free) and use it as the call audio. Never use the Mac's built-in speech. Keys stay in `.env`, never printed.
+- **Capture:** CDP `Page.startScreencast` at 1920x1080 (deviceScaleFactor 2), ffmpeg to a constant 60 fps ProRes master, browser muted; log `events.json` with `{t, kind, box}` for every step and click (approve button, finding, refund figure `overview-refund`, call panel). Footage and audio go in a gitignored `video/out/`; keep the master outside git.
+- **Edit:** `video/` folder at the repo root, outside the pnpm workspace (`pnpm install --ignore-workspace`), Remotion pinned to 4.0.528. About 6 scenes in about 1:50: problem (landing hero), sign-up and upload, agents at work, the call (real audio and transcript, sped up only if labelled), approval, money on Overview, close. `ZoomTo` driven by `events.json` (spring scale plus translate), drawn cursor, ring and count-up on $12,606.06, short title cards in the dark theme fonts and colours. Hard cap 3,600 frames at 30 fps.
+- **Voiceover:** render a silent rough cut with a scene timeline for the human to read against, then re-time scenes to their recording (`video/in/voiceover.wav`, supplied by the human). Captions from the voiceover via whisper.cpp only if time allows.
+- **Render:** H.264 CRF 16 for upload plus a ProRes HQ master; check for banding on the dark background (add light grain if needed).
+- Check before recording that the sample-bill upload uses the parse cache; if it would call a paid model, ask first.
+
+**Acceptance checks:**
+- One live run recorded end to end, with its cost (Retell, Vapi, Claude) written in `docs/plan/rehearsal-notes.md`.
+- Silent rough cut and timeline handed to the human; final render at 1920x1080, at most 2:00, real call audio, no Mac speech, no replay label.
+- No product code changes; `video/` is not part of the workspace and nothing in `video/out/` is committed.
+
+**Estimate:** 3 hours plus the human's voiceover
+
+**depends on:** product-polish (final look on screen)
+
+**parallel with:** landing-pages, naive-runtime-cost
