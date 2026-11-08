@@ -408,3 +408,17 @@ Orchestrator decisions (apply app-wide, not only /agents):
 - Recheck the Overview, Bills, Findings, Money and sign-up/onboarding pages against this scale and fix them in this lane.
 - After this lane ships, the sandbox on naïve gets one redeploy with all of it (the orchestrator arranges it).
 Screenshots for the human: /agents at 1920x1080 and 1440x900 (approval and call moments), Overview, and 390x844, each next to the before.
+## Each agent gets its own view (human, 2026-11-08, after trying the preview)
+Human, verbatim: "Why is intake and collector data the same, auditor and filer data the same in agents when I switching, I don't see any differences?"
+Cause: `BY_AGENT` in `lib/now.ts` maps intake and collector to "bills", auditor and filer to "findings", finance and monitor to "ledger". Picking an agent must show *that agent's* work. Orchestrator decisions:
+- **Intake:** the inbound email it read (from, subject, received time, the bill attachment name) and what it concluded (the customer it matched, the accounts and stores found).
+- **Collector:** what it gathered: the portal it logged into, each bill downloaded (provider, account, period, amount, pages) and the usage data (meter, interval count, date range), as a compact table.
+- **Auditor:** the checks it ran (each rule by name with pass or the finding it produced) and the findings with their evidence (kWh chart, rate table).
+- **Filer:** the documents it drafted, each as a card with its title and an excerpt of the real text: the Rule 17.1 refund claim, the rate change requests, the cancellation letters. Status "Drafted" or "Filed" from the real data, never claiming more.
+- **Approver:** the approval (as now). **Negotiator:** the call (as now).
+- **Finance:** the ledger and the invoice (Stripe test mode, status as recorded, never "sent" unless it was).
+- **Monitor:** what it scheduled: the next check date and what it will watch for.
+- Every agent view starts with a short line "What <Agent> did" and its steps in plain words (the tool words), then its own content. Use only data the snapshot has; if a field is missing, leave it out rather than invent it. If the snapshot lacks something (for example the email or the drafted letters), add it to the snapshot from existing tables; no schema changes without asking.
+- Automatic following while the run is live stays as it is; this is about picking an agent.
+- Tests: each agent's pick shows a different view on the recorded run. Screenshots of all nine picks at 1440 for the human.
+Do this together with merging main after judge-link ships (or now, if judge-link has not shipped by the time you start; merge after).
