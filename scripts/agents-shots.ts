@@ -1,7 +1,8 @@
 /// <reference lib="dom" />
 // Screenshots /agents at five moments of the recorded run (start, finding, approval, call, done) at 1920x1080, 1440x900 and 390x844, and checks each:
 // no "No … yet" text, no horizontal scroll, no clipped agent action, the call at its newest line. Then, on the finished run at 1440, picks
-// each agent in turn (pick-<agent>-1440.png, and pick-follow-1440.png) and checks every pick shows a view of its own. Replays data/replay/run.jsonl into DATABASE_URL, so point it at your own database.
+// each agent in turn with the full log open (pick-<agent>-1440.png, and pick-follow-1440.png) and checks every pick shows a view of its own.
+// Every shot, and Overview, Bills, Findings and Money at each size, must end where its content ends. Replays data/replay/run.jsonl into DATABASE_URL, so point it at your own database.
 // pnpm dev:dashboard must be running. No model, voice or network cost.
 // pnpm exec tsx --env-file-if-exists=.env scripts/agents-shots.ts <folder> [--speed N] [--no-check]
 import { spawn } from "node:child_process";
@@ -49,6 +50,10 @@ async function problems(page: Page) {
     const found: string[] = [];
     const doc = document.documentElement;
     if (doc.scrollWidth > doc.clientWidth) found.push(`horizontal scroll: ${doc.scrollWidth} > ${doc.clientWidth}`);
+    // The page ends where its content does: nothing out of sight (sr-only text in a scroller, say) may stretch it into empty background.
+    const content = document.querySelector("[data-fit-screen]") ?? document.querySelector("main");
+    const end = content ? Math.ceil(content.getBoundingClientRect().bottom + window.scrollY + parseFloat(getComputedStyle(content.parentElement!).paddingBottom || "0")) : 0;
+    if (content && document.scrollingElement!.scrollHeight > Math.max(end, window.innerHeight) + 1) found.push(`page taller than its content: ${document.scrollingElement!.scrollHeight} > ${end}`);
     const empty = document.body.innerText.match(/\bNo [a-z ]+ yet\b/);
     if (empty) found.push(`empty state: "${empty[0]}"`);
     // Entering the call with a long transcript must land on its newest line, or useFollow stops following.
@@ -110,6 +115,8 @@ try {
 
   // Each agent's pick on the finished run: its own view and its own content, never another agent's.
   const { page } = pages.find(({ viewport }) => viewport.name === "1440")!;
+  // With the full log open, as the human had it when the page grew an empty screen.
+  await page.locator("summary", { hasText: "Show the full log" }).click();
   const seen = new Map<string, string>();
   for (const agent of [...ROSTER, "follow"]) {
     if (agent === "follow") await page.getByRole("button", { name: "Follow live" }).click();
@@ -125,6 +132,17 @@ try {
     if (check) for (const problem of await problems(page)) failures.push(`pick ${agent}: ${problem}`);
   }
   console.info("shot the picks");
+
+  // The other app pages, at every size: the same height check.
+  if (check) {
+    for (const { viewport, page } of pages) {
+      for (const path of ["/overview", "/bills", "/findings", "/money"]) {
+        await page.goto(`${BASE}${path}`);
+        await page.waitForTimeout(1500);
+        for (const problem of await problems(page)) failures.push(`${path} at ${viewport.name}: ${problem}`);
+      }
+    }
+  }
 } finally {
   replay.kill();
   await browser.close();
