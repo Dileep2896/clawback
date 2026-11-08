@@ -76,7 +76,9 @@ const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
 export function wallTime(iso: string, state: SandboxState, approvalT = sandboxPlan().approvalT) {
   const sinceStart = Date.parse(iso) - Date.parse(state.recordedAt);
   const pausedMs = state.pausedMs ?? 0;
-  return new Date(Date.parse(state.startedAt) - pausedMs + sinceStart / state.speed + (sinceStart >= approvalT ? pausedMs : 0)).toISOString();
+  const at = Date.parse(state.startedAt) - pausedMs + sinceStart / state.speed + (sinceStart >= approvalT ? pausedMs : 0);
+  // An early tap skips the rest of the wait: what was recorded before the approval still lands no later than the tap.
+  return new Date(sinceStart < approvalT && state.approvedAt ? Math.min(at, Date.parse(state.approvedAt)) : at).toISOString();
 }
 
 function eventFor(event: ReplayEvent, customerId: string, known: Set<string>, state: SandboxState): ReplayEvent {
@@ -185,7 +187,8 @@ async function play(client: Client, customerId: string, state: SandboxState, now
   const plan = sandboxPlan();
   const known = await knownIds(client);
   const recordedNow = (now - new Date(state.startedAt).getTime()) * state.speed;
-  const until = state.approvedAt ? recordedNow : Math.min(recordedNow, plan.approvalT - 1);
+  // Once approved, everything up to the approval is due at once, so an early tap jumps playback to it.
+  const until = state.approvedAt ? Math.max(recordedNow, plan.approvalT - 1) : Math.min(recordedNow, plan.approvalT - 1);
   let cursor = state.cursor;
   while (cursor < plan.events.length && plan.events[cursor]!.t <= until) cursor++;
   if (cursor === state.cursor) return;
@@ -224,13 +227,13 @@ export async function approveSandbox(db: Db, customerId: string, runId: string, 
       [runId, approvedBy, tap],
     );
     if (approved) {
-      const startedAt = new Date(now - sandboxPlan().approvalT / SANDBOX_SPEED).toISOString();
-      // pausedMs is how far the clock moved, so rows recorded after the approval land after the tap (wallTime).
-      const { rowCount } = await client.query(
-        "update runs set replay = replay || jsonb_build_object('approvedAt', $2::text, 'startedAt', $3::text, 'pausedMs', extract(epoch from $3::timestamptz - (replay->>'startedAt')::timestamptz) * 1000) where id = $1 and replay->>'sandbox' = 'true' and replay->>'approvedAt' is null",
-        [runId, tap, startedAt],
-      );
-      if (rowCount !== 1) throw new Error(`Run ${runId} is not a sandbox replay waiting at its approval`);
+      const replay = (await client.query<{ replay: unknown }>("select replay from runs where id = $1", [runId])).rows[0]?.replay;
+      if (!isSandboxReplay(replay) || replay.approvedAt) throw new Error(`Run ${runId} is not a sandbox replay waiting at its approval`);
+      // pausedMs is how long the judge waited at the approval, so rows recorded after it land after the tap (wallTime).
+      // A tap before playback reached the approval waited 0: the clock never moves back, and play() jumps to the approval.
+      const pausedMs = Math.max(0, now - sandboxPlan().approvalT / replay.speed - Date.parse(replay.startedAt));
+      const next: SandboxState = { ...replay, approvedAt: tap, startedAt: new Date(Date.parse(replay.startedAt) + pausedMs).toISOString(), pausedMs };
+      await client.query("update runs set replay = $2 where id = $1", [runId, JSON.stringify(next)]);
     }
     const { rows } = await client.query<{ status: string; channel: string; approvedBy: string; approvedAt: Date }>(
       `select id, run_id as "runId", status, channel, approved_by as "approvedBy", approved_at as "approvedAt" from approvals where run_id = $1`,

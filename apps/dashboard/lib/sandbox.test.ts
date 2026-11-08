@@ -70,6 +70,11 @@ describe("wallTime", () => {
     const waited = { ...state, startedAt: "2026-02-01T00:00:30.000Z", pausedMs: 30_000 };
     expect(wallTime("2026-01-01T00:00:10.000Z", waited, 60_000)).toBe("2026-02-01T00:00:05.000Z");
     expect(wallTime("2026-01-01T00:01:10.000Z", waited, 60_000)).toBe("2026-02-01T00:01:05.000Z");
+    // Approved early, at 20 s on the judge's clock: what came before the approval lands no later than the tap.
+    const early = { ...state, approvedAt: "2026-02-01T00:00:20.000Z" };
+    expect(wallTime("2026-01-01T00:00:10.000Z", early, 60_000)).toBe("2026-02-01T00:00:05.000Z");
+    expect(wallTime("2026-01-01T00:00:50.000Z", early, 60_000)).toBe("2026-02-01T00:00:20.000Z");
+    expect(wallTime("2026-01-01T00:01:10.000Z", early, 60_000)).toBe("2026-02-01T00:00:35.000Z");
   });
 });
 
@@ -148,6 +153,43 @@ describe("the judge sandbox", { timeout: 180_000 }, () => {
         expect(createdAt.getTime()).toBeGreaterThan(approvedAt);
       }
       expect(run!.finishedAt!.getTime()).toBeLessThanOrEqual(at(END, tap - plan.approvalT / SANDBOX_SPEED) + 1);
+    }));
+
+  it("takes a tap before playback reaches the approval without moving the clock back or dating anything after its write", () =>
+    withTestDb("sandbox_approve_early", async (db) => {
+      await loadSeed(db, generateSeed());
+      const customerId = "sandbox-e";
+      const runId = await judge(db, customerId);
+      const askT = plan.events.find(({ table, row }) => table === "approvals" && row?.status === "pending")!.t;
+      await advanceSandbox(db, customerId, at(askT));
+      // The Approve button shows from here, while the approval text has not played yet.
+      expect(await db.$count(smsMessages, sql`starts_with(${smsMessages.id}, ${`${customerId}:`})`)).toBe(0);
+
+      const tap = at(askT) + 100;
+      expect(tap).toBeLessThan(at(plan.approvalT));
+      await approveSandbox(db, customerId, runId, "Judge", tap);
+      expect((await db.select().from(runs).where(eq(runs.id, runId)))[0]!.replay).toMatchObject({ pausedMs: 0, startedAt: new Date(START).toISOString() });
+
+      // The next poll jumps to the approval: the text plays at once, dated no later than the tap.
+      await advanceSandbox(db, customerId, tap + 1);
+      const [text] = await db.select().from(smsMessages).where(sql`starts_with(${smsMessages.id}, ${`${customerId}:`})`);
+      expect(text!.createdAt.getTime()).toBeLessThanOrEqual(tap);
+      expect(await db.$count(ledger, eq(ledger.customerId, customerId))).toBe(0);
+
+      // Then it plays on at its own pace: everything after the approval is dated after the tap, none of it in the future.
+      const end = at(END) + 1;
+      await advanceSandbox(db, customerId, end);
+      const [run] = await db.select().from(runs).where(eq(runs.id, runId));
+      expect(run!.status).toBe("success");
+      expect(await totals(db, customerId)).toMatchObject({ refund: 1_260_606, savings: 1_831_932, fee: 927_761 });
+      const ownCalls = await db.select({ startedAt: calls.startedAt }).from(calls).where(sql`starts_with(${calls.id}, ${`${customerId}:`})`);
+      expect(ownCalls.length).toBeGreaterThan(0);
+      for (const call of ownCalls) expect(call.startedAt.getTime()).toBeGreaterThan(tap);
+      for (const { createdAt } of await db.select({ createdAt: ledger.createdAt }).from(ledger).where(eq(ledger.customerId, customerId))) {
+        expect(createdAt.getTime()).toBeGreaterThan(tap);
+        expect(createdAt.getTime()).toBeLessThanOrEqual(end);
+      }
+      expect(run!.finishedAt!.getTime()).toBeLessThanOrEqual(end);
     }));
 
   it("approves as the signed-in judge, and leaves the approval pending if the replay cannot resume", () =>
