@@ -1,4 +1,4 @@
-import { money } from "./evidence.ts";
+import { money, parseEvidence } from "./evidence.ts";
 import type { Snapshot } from "./snapshot.ts";
 
 export type ActivityEntry = { at: string | null; text: string };
@@ -19,8 +19,20 @@ const CHANNEL: Record<string, string> = { dashboard: "on the dashboard", sms: "b
  * What happened to one finding, from rows the snapshot already holds. Actions carry no time, so their lines come first with none;
  * the approval, calls and ledger rows follow in time order. Nothing is invented: no row, no line.
  */
-export function findingActivity(finding: Pick<Snapshot["findings"][number], "id">, snapshot: Pick<Snapshot, "actions" | "approval" | "calls" | "ledger">): ActivityEntry[] {
-  const own = snapshot.actions.filter((action) => action.findingId === finding.id);
+export function findingActivity(
+  finding: Pick<Snapshot["findings"][number], "id" | "type" | "evidenceJson">,
+  snapshot: Pick<Snapshot, "actions" | "approval" | "calls" | "ledger">,
+): ActivityEntry[] {
+  // The approver bundles every cancellation into one provider call with no finding, naming the lines in its payload.
+  const evidence = parseEvidence(finding.type, finding.evidenceJson);
+  const line = evidence?.type === "unusedLines" ? evidence.detail.number : null;
+  const callsLine = (payload: unknown) => {
+    const lines = (payload as { cancelLines?: unknown } | null)?.cancelLines;
+    return Array.isArray(lines) && lines.includes(line);
+  };
+  const own = snapshot.actions.filter(
+    (action) => action.findingId === finding.id || (line !== null && action.findingId === null && action.kind === "call" && callsLine(action.payloadJson)),
+  );
   const ownIds = new Set(own.map((action) => action.id));
   const untimed: ActivityEntry[] = [{ at: null, text: "Found by the auditor" }];
   if (own.length === 0) untimed.push({ at: null, text: "Found, not acted on" });
