@@ -1,5 +1,5 @@
 import type { Db } from "@bill-fighter/db/client";
-import { accounts, approvals, calls, customers, findings, ledger, locations, runs, smsMessages } from "@bill-fighter/db/schema";
+import { accounts, approvals, auditLog, calls, customers, findings, ledger, locations, runs, smsMessages } from "@bill-fighter/db/schema";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
 import { generateSeed } from "@bill-fighter/db/seed/generate";
 import { loadSeed } from "@bill-fighter/db/seed/load";
@@ -184,6 +184,7 @@ describe("the judge sandbox", { timeout: 180_000 }, () => {
       const [first, second] = await Promise.all([approveSandbox(db, customerId, runId, "Judge", "call", tap), approveSandbox(db, customerId, runId, "Judge", "call", tap + 1)]);
       expect(first).toMatchObject({ status: "approved", channel: "dashboard", approvedBy: "Judge" });
       expect(second.approvedAt).toEqual(first.approvedAt);
+      expect(await db.$count(auditLog, sql`${auditLog.runId} = ${runId} and ${auditLog.tool} = 'approve'`)).toBe(1);
 
       // The recording carries on from the tap, not from where its clock would have been.
       await advanceSandbox(db, customerId, tap + 1000);
@@ -242,6 +243,13 @@ describe("the judge sandbox", { timeout: 180_000 }, () => {
         expect(own.map((call) => call.mode)).toEqual([mode]);
         expect(own[0]!.startedAt.getTime()).toBeGreaterThan(tap);
         expect((await db.select().from(approvals).where(eq(approvals.runId, runId)))[0]).toMatchObject({ status: "approved", contact: mode === "email" ? "email" : "call" });
+      }
+      // One approval audit row each, the judge's own, with their choice; none replayed from the recordings.
+      for (const [customerId, runId, contact, approvedBy] of [[a, runA, "call", "Judge A"], [b, runB, "email", "Judge B"]] as const) {
+        const rows = await db.select().from(auditLog).where(sql`${auditLog.runId} = ${runId} and ${auditLog.tool} = 'approve'`);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ agent: "owner", inputJson: { contact }, outputJson: { approvedBy }, createdAt: new Date(tap) });
+        expect(rows[0]!.id.startsWith(`${customerId}:`)).toBe(true);
       }
       // Watch it again starts over as a call.
       await restartSandbox(db, b, end);

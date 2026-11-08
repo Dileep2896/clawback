@@ -8,6 +8,7 @@ import type { Db } from "@bill-fighter/db/client";
 import { applyEvents, parseRecording, type Recording, type ReplayEvent, TABLES } from "@bill-fighter/db/replay";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
 import { isSandboxReplay, sandboxId, type SandboxState } from "./replay.ts";
+import { EMAIL_INSTEAD } from "./run-state.ts";
 
 export { isSandboxReplay, sandboxId };
 
@@ -40,7 +41,7 @@ export const sandboxUsage = (customerId: string) =>
 
 export type SandboxPlan = {
   recordedAt: string;
-  /** What plays, in order. The recorded decision and the recorded YES are left out: the judge's tap is the human action. */
+  /** What plays, in order. The recorded decision, its audit row and the recorded YES are left out: the judge's tap is the human action. */
   events: ReplayEvent[];
   /** The time of the recorded approval. Nothing from here on plays until the judge approves. */
   approvalT: number;
@@ -52,7 +53,10 @@ export function planOf(recording: Recording): SandboxPlan {
   const approvedAt = recording.events.find(({ table, row }) => table === "approvals" && row?.status === "approved")?.t;
   if (approvedAt === undefined) throw new Error("The recording has no approval to wait at");
   const events = recording.events.filter(
-    ({ table, row }) => !(table === "approvals" && row?.status === "approved") && !(table === "sms_messages" && row?.direction === "inbound"),
+    ({ table, row }) =>
+      !(table === "approvals" && row?.status === "approved") &&
+      !(table === "sms_messages" && row?.direction === "inbound") &&
+      !(table === "audit_log" && row?.agent === "owner" && row?.tool === "approve"),
   );
   return { recordedAt: recording.recordedAt, events, approvalT: approvedAt, ids: new Set(recording.events.map(({ id }) => id)) };
 }
@@ -271,6 +275,14 @@ export async function approveSandbox(db: Db, customerId: string, runId: string, 
         "update approvals set status = 'approved', channel = 'dashboard', approved_by = $2, approved_at = $3, contact = $4 where run_id = $1 and status = 'pending'",
         [runId, approvedBy, tap, contact],
       );
+      // The judge's own approval row, as approveRun writes it; the recorded one never plays. Prefixed, so Watch it again removes it.
+      await client.query("insert into audit_log (id, run_id, agent, tool, input_json, output_json, created_at) values ($1, $2, 'owner', 'approve', $3, $4, $5)", [
+        sandboxId(customerId, crypto.randomUUID()),
+        runId,
+        JSON.stringify({ contact }),
+        JSON.stringify({ approvedBy, note: contact === "email" ? EMAIL_INSTEAD : "We will call BayTel." }),
+        tap,
+      ]);
     }
     const { rows } = await client.query<{ status: string; channel: string; approvedBy: string; approvedAt: Date; contact: "call" | "email" }>(
       `select id, run_id as "runId", status, channel, approved_by as "approvedBy", approved_at as "approvedAt", contact from approvals where run_id = $1`,
