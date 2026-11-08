@@ -29,6 +29,16 @@ export const replayPill = ({ speed }: ReplayInfo) => (speed === 1 ? "Sandbox rep
 export const recordedNow = ({ recordedAt, speed, startedAt }: ReplayInfo, now: number) =>
   new Date(recordedAt).getTime() + (now - new Date(startedAt).getTime()) * speed;
 
+/**
+ * Seconds the run has taken. A recorded replay keeps its recorded times, so its clock is the recording's; a judge's sandbox
+ * rows are rewritten onto the judge's clock (sandbox.ts wallTime), so theirs is the plain clock.
+ */
+export function runSeconds(run: Pick<NonNullable<Snapshot["run"]>, "startedAt" | "finishedAt" | "replay">, now: number) {
+  const replay = replayOf(run as Snapshot["run"]);
+  const end = run.finishedAt ? Date.parse(run.finishedAt) : replay && !isSandboxReplay(replay) ? recordedNow(replay, now) : now;
+  return Math.max(0, Math.round((end - Date.parse(run.startedAt)) / 1000));
+}
+
 /** The speech rate for this speed, or null when it plays silent. */
 export const speechRate = (replay: ReplayInfo | null) => {
   if (!replay) return 1;

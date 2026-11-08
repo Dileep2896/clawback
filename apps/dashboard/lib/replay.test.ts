@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recordedNow, replayLabel, replayOf, replayPill, speechRate, type ReplayInfo } from "./replay.ts";
+import { recordedNow, replayLabel, replayOf, replayPill, runSeconds, speechRate, type ReplayInfo } from "./replay.ts";
 import type { Snapshot } from "./snapshot.ts";
 
 const info = (speed: number): ReplayInfo => ({ recordedAt: "2026-11-06T10:00:00.000Z", speed, startedAt: "2026-11-07T20:00:00.000Z" });
@@ -51,4 +51,21 @@ describe("speechRate", () => {
     expect(speechRate(info(2))).toBe(2);
   });
   it("is off above 2×", () => expect(speechRate(info(2.5))).toBeNull());
+});
+
+describe("runSeconds (review: sandbox elapsed stayed at 0:00)", () => {
+  const T0 = "2026-11-08T20:00:00.000Z";
+  const at = (iso: string) => Date.parse(iso);
+  it("a judge's sandbox run counts on the judge's clock, running and finished", () => {
+    const replay = { ...info(4), startedAt: T0, sandbox: true, cursor: 0, approvedAt: null };
+    expect(runSeconds({ startedAt: T0, finishedAt: null, replay }, at("2026-11-08T20:01:30.000Z"))).toBe(90);
+    expect(runSeconds({ startedAt: T0, finishedAt: "2026-11-08T20:03:00.000Z", replay }, at("2026-11-08T21:00:00.000Z"))).toBe(180);
+  });
+  it("a recorded replay counts on the recording's clock", () => {
+    const replay = info(2);
+    expect(runSeconds({ startedAt: replay.recordedAt, finishedAt: null, replay }, at("2026-11-07T20:00:30.000Z"))).toBe(60);
+  });
+  it("a live run counts on the plain clock", () => {
+    expect(runSeconds({ startedAt: T0, finishedAt: null, replay: null }, at("2026-11-08T20:00:05.000Z"))).toBe(5);
+  });
 });
