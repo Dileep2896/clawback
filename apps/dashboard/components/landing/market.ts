@@ -2,10 +2,6 @@
 // checked in docs/plan/competitors.md ("Market sources"). Every figure here is an estimate; /market shows the derivation,
 // the landing shows the two headline figures.
 
-export const MARKET_TEASER = [
-  { value: "$500B+", label: "US businesses pay every year in electricity, gas, water and phone bills" },
-  { value: "$5 to 16B", label: "a year left on the table: 1 to 3% of it is billed wrong or on the wrong plan" },
-];
 
 /** The landing's one-line source note under the two figures. */
 export const MARKET_NOTE =
@@ -41,16 +37,29 @@ export const SPEND: { label: string; billions: number; how: string; sources: Sou
 /** Water is real spend but we found no national figure for it, so it is left out: the total errs low. */
 export const SPEND_TOTAL = SPEND.reduce((sum, line) => sum + line.billions, 0);
 
+// Every figure below is worked out from SPEND_TOTAL, so the funnel always adds up: 1% to 3% of it, then 30% of that.
+export const WRONG_BILLIONS = [0.01, 0.03].map((share) => SPEND_TOTAL * share);
+export const REVENUE_BILLIONS = WRONG_BILLIONS.map((wrong) => wrong * 0.3);
+const range = ([low, high]: number[]) => `$${low.toFixed(1)} to ${high.toFixed(1)}B`;
+export const SPEND_FIGURE = `$${SPEND_TOTAL}B`;
+export const WRONG_FIGURE = range(WRONG_BILLIONS);
+export const REVENUE_FIGURE = range(REVENUE_BILLIONS);
+
+export const MARKET_TEASER = [
+  { value: SPEND_FIGURE, label: "US businesses pay every year in electricity, gas and phone bills" },
+  { value: WRONG_FIGURE, label: "a year left on the table: 1 to 3% of it is billed wrong or on the wrong plan" },
+];
+
 /** The funnel, outermost first. */
 export const FUNNEL: { value: string; label: string; how: string; sources: Source[] }[] = [
   {
-    value: "$500B+",
+    value: SPEND_FIGURE,
     label: "US business utility and phone spend a year",
-    how: `The three lines below add to about $${SPEND_TOTAL}B. We say $500B+ to stay under it.`,
+    how: "The three lines below, added up. Water is left out, so it errs low.",
     sources: [],
   },
   {
-    value: "$5 to 16B",
+    value: WRONG_FIGURE,
     label: "billed wrong or on the wrong plan",
     how: "1% to 3% of that spend is our assumption, kept low on purpose. Published error rates run higher: Gartner, as cited by the UK government’s buying agency, puts telecom invoices with errors at up to 20%; a City of San Diego audit found 1.6% of water bills showing double the previous usage or more.",
     sources: [
@@ -58,5 +67,5 @@ export const FUNNEL: { value: string; label: string; how: string; sources: Sourc
       { label: "San Diego City Auditor, 2018", href: "https://www.sandiego.gov/sites/default/files/19-003_pud_water_billing.pdf" },
     ],
   },
-  { value: "$1.5 to 4.8B", label: "Clawback’s revenue at 30%", how: "30% of $5B to $16B, if every dollar were recovered. It won’t be: this is a ceiling, not a forecast.", sources: [] },
+  { value: REVENUE_FIGURE, label: "Clawback’s revenue at 30%", how: `30% of ${WRONG_FIGURE}, if every dollar were recovered. It won’t be: this is a ceiling, not a forecast.`, sources: [] },
 ];

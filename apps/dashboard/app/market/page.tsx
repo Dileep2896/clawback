@@ -2,17 +2,17 @@
  * design-system: docs/plan/design.md */
 import type { Metadata } from "next";
 import { LABEL, MoreLink, PageIntro, SiteFrame, Statement, WIDTH } from "../../components/landing/chrome.tsx";
-import { FUNNEL, SPEND, SPEND_TOTAL } from "../../components/landing/market.ts";
+import { FUNNEL, REVENUE_BILLIONS, REVENUE_FIGURE, SPEND, SPEND_FIGURE, SPEND_TOTAL, WRONG_BILLIONS, WRONG_FIGURE } from "../../components/landing/market.ts";
 import { Reveal } from "../../components/landing/motion.tsx";
 
 export const metadata: Metadata = { title: "The market" };
 
-// The nested squares are drawn to scale by area: side = √(share of $500B). 3% of $500B is a square 17% as wide.
-const side = (billions: number) => Math.sqrt(billions / 500) * 100;
+// The nested squares are drawn to scale by area: side = √(share of the spend). 3% of it is a square 17% as wide.
+const side = (billions: number) => Math.sqrt(billions / SPEND_TOTAL) * 100;
 const SQUARES = [
-  { billions: 16, className: "fill-warn/30 stroke-warn", delay: 0 },
-  { billions: 5, className: "fill-none stroke-warn [stroke-dasharray:1.5_1.5]", delay: 150 },
-  { billions: 4.8, className: "fill-money stroke-money", delay: 350 },
+  { billions: WRONG_BILLIONS[1], className: "fill-warn/30 stroke-warn", delay: 0 },
+  { billions: WRONG_BILLIONS[0], className: "fill-none stroke-warn [stroke-dasharray:1.5_1.5]", delay: 150 },
+  { billions: REVENUE_BILLIONS[1], className: "fill-money stroke-money", delay: 350 },
 ];
 
 function EstimateTag() {
@@ -42,28 +42,28 @@ function NestedSquares() {
           })}
         </svg>
         <p className="absolute top-5 left-5 grid gap-1">
-          <span className="font-figure text-[clamp(2rem,4vw,3rem)] leading-none">$500B+</span>
+          <span className="font-figure text-[clamp(2rem,4vw,3rem)] leading-none">{SPEND_FIGURE}</span>
           <span className="text-[15px] text-faded">spent a year</span>
         </p>
         {/* Labels for the small squares sit to their right: one level with the top of the big one, one at the bottom. */}
         {/* Under sm the squares are too small to label beside, so the legend below takes over. */}
-        <p className="reveal-fade absolute grid gap-0.5 text-[15px] max-sm:hidden" style={{ left: `${side(16) + 3}%`, bottom: `${side(16) - 7}%` }}>
-          <span className="font-figure text-[1.375rem] leading-none text-warn">$5 to 16B</span>
+        <p className="reveal-fade absolute grid gap-0.5 text-[15px] max-sm:hidden" style={{ left: `${side(WRONG_BILLIONS[1]) + 3}%`, bottom: `${side(WRONG_BILLIONS[1]) - 7}%` }}>
+          <span className="font-figure text-[1.375rem] leading-none text-warn">{WRONG_FIGURE}</span>
           <span className="text-faded">billed wrong</span>
         </p>
-        <p className="reveal-fade absolute grid gap-0.5 text-[15px] max-sm:hidden" style={{ left: `${side(16) + 3}%`, bottom: "1%" }}>
-          <span className="font-figure text-[1.375rem] leading-none text-money">$1.5 to 4.8B</span>
+        <p className="reveal-fade absolute grid gap-0.5 text-[15px] max-sm:hidden" style={{ left: `${side(WRONG_BILLIONS[1]) + 3}%`, bottom: "1%" }}>
+          <span className="font-figure text-[1.375rem] leading-none text-money">{REVENUE_FIGURE}</span>
           <span className="text-faded">our 30%, at most</span>
         </p>
       </div>
       <ul className="grid gap-2 text-[15px] sm:hidden">
         <li className="flex items-center gap-2">
           <span aria-hidden="true" className="size-3 border border-warn bg-warn/30" />
-          <span className="font-figure text-warn">$5 to 16B</span> <span className="text-faded">billed wrong</span>
+          <span className="font-figure text-warn">{WRONG_FIGURE}</span> <span className="text-faded">billed wrong</span>
         </li>
         <li className="flex items-center gap-2">
           <span aria-hidden="true" className="size-3 bg-money" />
-          <span className="font-figure text-money">$1.5 to 4.8B</span> <span className="text-faded">our 30%, at most</span>
+          <span className="font-figure text-money">{REVENUE_FIGURE}</span> <span className="text-faded">our 30%, at most</span>
         </li>
       </ul>
       <p className="text-[15px] text-faded">Drawn to scale by area. The dashed square is the low end, 1%.</p>
@@ -112,7 +112,7 @@ export default function MarketPage() {
 
       <section aria-labelledby="spend-title" className="border-y border-line bg-sheet">
         <div className={`${WIDTH} py-24 lg:py-36`}>
-          <Statement id="spend-title" lead="Where $500B+ comes from.">
+          <Statement id="spend-title" lead={`Where ${SPEND_FIGURE} comes from.`}>
             Three lines of business spend we could source. Water is left out, so the total errs low.
           </Statement>
           <div className="mt-12 overflow-hidden rounded-[12px] border border-line">
@@ -155,7 +155,7 @@ export default function MarketPage() {
                 <tr className="border-t-2 border-ink">
                   <td className="px-5 py-4 font-semibold">Counted</td>
                   <td className="px-5 py-4 text-right font-figure text-[1.5rem] tabular-nums">${SPEND_TOTAL}B</td>
-                  <td className="hidden px-5 py-4 text-faded md:table-cell">We round down to $500B+.</td>
+                  <td className="hidden px-5 py-4 text-faded md:table-cell">The figure every step above is worked out from.</td>
                 </tr>
               </tbody>
             </table>
