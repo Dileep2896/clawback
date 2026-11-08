@@ -4,8 +4,10 @@ import type { Snapshot } from "./snapshot.ts";
 export type Moment = "bills" | "findings" | "approval" | "call" | "ledger" | "steps";
 
 const doing = (s: Snapshot, agent: string) => s.boardCards.some((c) => c.agent === agent && c.status === "doing");
-// The ledger is per customer, so only rows written since this run started say this run reached the money.
-const runLedger = (s: Snapshot) => !!s.run && s.ledger.some((row) => row.createdAt >= s.run!.startedAt);
+// The ledger is per customer, so only this run's evidence counts: rows written since it started, or (when
+// record_savings updated an earlier audit's rows in place, leaving createdAt old) this run's finance card done.
+const runLedger = (s: Snapshot) =>
+  !!s.run && s.ledger.length > 0 && (s.ledger.some((row) => row.createdAt >= s.run!.startedAt) || s.boardCards.some((c) => c.agent === "finance" && c.status === "done"));
 
 /** The moment each agent's work is shown by, if its data is there yet. */
 const BY_AGENT: Record<string, (s: Snapshot) => Moment | null> = {
@@ -23,8 +25,11 @@ const BY_AGENT: Record<string, (s: Snapshot) => Moment | null> = {
  * Follows the run: the approval while it waits on the owner, the call while the negotiator is on it, then the money,
  * the findings and the bills, whichever the run has reached. A picked agent shows its own moment instead.
  * Never a moment with nothing in it: "steps" (the agent's own actions) is the fallback.
+ * `reading`: an evidence drawer is open, so the findings stay until it closes.
  */
-export function nowMoment(s: Snapshot, picked: string | null = null): Moment {
+export function nowMoment(s: Snapshot, picked: string | null = null, reading = false): Moment {
+  // Someone reading a finding's evidence keeps the findings on screen: a new moment would close the drawer under them.
+  if (reading && s.findings.length) return "findings";
   if (picked) return BY_AGENT[picked]?.(s) ?? "steps";
   if (s.approval?.status === "pending") return "approval";
   if (s.calls.some((c) => !c.endedAt) || (s.calls.length && doing(s, "negotiator"))) return "call";

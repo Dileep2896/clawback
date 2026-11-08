@@ -51,8 +51,7 @@ const amountOf = (f: Snapshot["findings"][number]) =>
   f.refundCents > 0 ? `${money(f.refundCents)} refund` : f.annualSavingsCents > 0 ? `${money(f.annualSavingsCents)} a year` : "To check";
 
 /** The biggest finding at full size with its evidence, then the rest. Any finding opens its evidence. */
-function Findings({ snapshot }: { snapshot: Snapshot }) {
-  const [openId, setOpenId] = useState<string | null>(null);
+function Findings({ snapshot, openId, setOpenId }: { snapshot: Snapshot; openId: string | null; setOpenId: (id: string | null) => void }) {
   const sites = snapshot.findingSites;
   // Biggest first. A sort is stable, so ties keep their fixed order.
   const findings = [...snapshot.findings].sort((a, b) => b.refundCents - a.refundCents || b.annualSavingsCents - a.annualSavingsCents);
@@ -70,7 +69,7 @@ function Findings({ snapshot }: { snapshot: Snapshot }) {
             {site(lead) && <p className="text-label text-faded">{site(lead)}</p>}
             <h3 className="text-title font-semibold">{lead.title}</h3>
           </div>
-          <p className="font-figure text-page text-money tabular-nums">{amountOf(lead)}</p>
+          <p className="font-figure text-body text-money tabular-nums">{amountOf(lead)}</p>
         </div>
         <p className="max-w-[72ch] text-faded">{lead.explanation}</p>
         {evidence?.type === "meterMultiplierJump" && <KwhChart detail={evidence.detail} />}
@@ -137,14 +136,16 @@ const TITLES: Record<Moment, (s: Snapshot, row: AgentRow | undefined) => string>
 export function NowPane({ rows, picked, speech }: { rows: AgentRow[]; picked: string | null; speech: { speechFailed: boolean; silent: boolean } }) {
   const { snapshot } = useLive();
   const body = useRef<HTMLDivElement>(null);
-  const moment = snapshot?.run ? nowMoment(snapshot, picked) : null;
+  // Held here, not in Findings, so nowMoment can keep the findings up while their evidence is open.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const moment = snapshot?.run ? nowMoment(snapshot, picked, openId !== null) : null;
   // The first moment is there on arrival; only a change of moment fades in (render-time state, so the same commit).
   const [entered, setEntered] = useState<Moment | "changed" | null>(null);
   if (moment && entered === null) setEntered(moment);
   else if (moment && entered !== "changed" && entered !== moment) setEntered("changed");
-  // A new moment starts at its top; only the call follows its newest line (useFollow).
+  // A new moment starts at its top; the call is left to useFollow, which has already scrolled it to its newest line.
   useEffect(() => {
-    if (body.current) body.current.scrollTop = 0;
+    if (body.current && moment !== "call") body.current.scrollTop = 0;
   }, [moment]);
   if (!snapshot?.run || !moment) return null;
   // The agent this moment belongs to, else the first one at work, else the last one that worked.
@@ -153,7 +154,7 @@ export function NowPane({ rows, picked, speech }: { rows: AgentRow[]; picked: st
     rows.find((r) => r.agent === owner && r.state !== "next") ?? rows.find((r) => r.state === "working" || r.state === "waiting") ?? rows.findLast((r) => r.state !== "next");
   const views: Record<Moment, () => ReactNode> = {
     bills: () => <Bills bills={snapshot.bills} />,
-    findings: () => <Findings snapshot={snapshot} />,
+    findings: () => <Findings snapshot={snapshot} openId={openId} setOpenId={setOpenId} />,
     approval: () => <Approval />,
     call: () => <Call {...speech} />,
     ledger: () => <Ledger />,

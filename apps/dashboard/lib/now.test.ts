@@ -32,6 +32,21 @@ it("ends on the money, counting only ledger rows this run wrote", () => {
   expect(nowMoment(at({ findings, ledger: [{ createdAt: "2026-10-01T00:00:00.000Z" }] }))).toBe("findings");
 });
 
+it("reaches the money on a repeat audit whose ledger rows were updated in place", () => {
+  // record_savings updates the earlier rows without touching createdAt; this run's finance card finishing is the evidence.
+  const old = [{ createdAt: "2026-10-01T00:00:00.000Z" }];
+  expect(nowMoment(at({ findings, ledger: old, boardCards: [{ agent: "finance", status: "doing" }] }))).toBe("findings");
+  expect(nowMoment(at({ findings, ledger: old, boardCards: [{ agent: "finance", status: "done" }] }))).toBe("ledger");
+});
+
+it("keeps the findings while their evidence is open, with no agent picked", () => {
+  const pending = at({ bills, findings, approval: { status: "pending" } });
+  expect(nowMoment(pending, null, true)).toBe("findings");
+  expect(nowMoment(at({ findings, calls: [{ endedAt: null }] }), null, true)).toBe("findings");
+  // Closed again: the run's moment comes back.
+  expect(nowMoment(pending, null, false)).toBe("approval");
+});
+
 it("shows a picked agent's own moment, or its steps when it has none yet", () => {
   const s = at({ bills, findings, approval: { status: "approved" }, calls: [{ endedAt: LATER }], ledger: [{ createdAt: LATER }] });
   expect(nowMoment(s, "collector")).toBe("bills");
