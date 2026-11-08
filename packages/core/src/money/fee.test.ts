@@ -53,13 +53,21 @@ describe("feeByLine", () => {
     expect(fees.reduce((sum, fee) => sum + fee, 0)).toBe(927_761);
   });
 
-  it("puts the rounding remainder on the last line", () => {
-    // 5 + 5 cents at 30% is a fee of 3, while each 5 alone rounds to 2.
+  it("gives the rounding remainder a cent at a time to the largest dropped fractions", () => {
+    // 5 + 5 cents at 30% is a fee of 3, while each 5 alone is 1.5.
     expect(feeByLine({ linesCents: [5, 5], totalFeeCents: 3, sharePct: 30 })).toEqual([2, 1]);
+  });
+
+  it("never makes a fee negative", () => {
+    // Taking the remainder on the last line gave [2, 2, 2, -1].
+    const fees = feeByLine({ linesCents: [5, 5, 5, 1], totalFeeCents: 5, sharePct: 30 });
+    expect(fees).toEqual([2, 2, 1, 0]);
+    expect(fees.every((fee) => fee >= 0)).toBe(true);
   });
 
   it("handles no lines and one line", () => {
     expect(feeByLine({ linesCents: [], totalFeeCents: 0, sharePct: 30 })).toEqual([]);
+    expect(() => feeByLine({ linesCents: [], totalFeeCents: 100, sharePct: 30 })).toThrow("out of date");
     expect(feeByLine({ linesCents: [1_000], totalFeeCents: 300, sharePct: 30 })).toEqual([300]);
   });
 

@@ -21,15 +21,15 @@ export function splitFee({ totalFeeCents, wonCents, sharePct }: { totalFeeCents:
   return { dueNowCents, dueWhenGrantedCents: totalFeeCents - dueNowCents };
 }
 
-/** Each line's fee is its own share, and the last line takes the rounding remainder, so the fees add up to the recorded fee to the cent. */
+/** Each line's fee is its own share rounded down, and the rounding remainder goes a cent at a time to the lines with the largest dropped fractions, so no fee is negative and they add up to the recorded fee to the cent. */
 export function feeByLine({ linesCents, totalFeeCents, sharePct }: { linesCents: number[]; totalFeeCents: number; sharePct: number }) {
-  const fees = linesCents.map((cents) => feeCents({ refundCents: cents, annualSavingsCents: 0, sharePct }));
-  const own = fees.at(-1);
-  if (own === undefined) return fees;
-  const last = totalFeeCents - fees.slice(0, -1).reduce((sum, fee) => sum + fee, 0);
-  // Rounding each line moves the total by under a cent per line; more than that means the fee belongs to other lines.
-  if (Math.abs(last - own) >= fees.length) throw new Error(`Fee of ${totalFeeCents} cents does not match these lines, so the fee row is out of date`);
-  fees[fees.length - 1] = last;
+  feeCents({ refundCents: 0, annualSavingsCents: 0, sharePct }); // validates sharePct
+  const fees = linesCents.map((cents) => Math.floor((cents * sharePct) / 100));
+  const remainder = totalFeeCents - fees.reduce((sum, fee) => sum + fee, 0);
+  // Rounding down each line drops under a cent per line; anything else means the fee belongs to other lines.
+  if (remainder < 0 || (remainder > 0 && remainder >= fees.length)) throw new Error(`Fee of ${totalFeeCents} cents does not match these lines, so the fee row is out of date`);
+  const byDropped = linesCents.map((cents, i) => ({ i, dropped: (cents * sharePct) % 100 })).sort((a, b) => b.dropped - a.dropped);
+  for (const { i } of byDropped.slice(0, remainder)) fees[i]! += 1;
   return fees;
 }
 
