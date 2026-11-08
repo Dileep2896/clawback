@@ -88,6 +88,8 @@ export type OutboundEmail = {
   text: string;
   html?: string;
   attachments?: { filename: string; path: string }[];
+  /** The Message-ID (without angle brackets) this answers, sent as In-Reply-To and References. */
+  inReplyTo?: string;
 };
 
 export type InboundEmail = {

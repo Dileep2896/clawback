@@ -100,6 +100,47 @@ describe("runEmail", () => {
     }
   });
 
+  withData("ignores BayTel mail with the request's subject that is not a reply to our request, or not to us", async (db) => {
+    const inbox = fakeInbox();
+    // Answers each request twice, both wrong: In-Reply-To another message, and the right In-Reply-To to someone else.
+    const forger = setInterval(() => {
+      for (const request of inbox.box.filter((m) => m.To?.[0]?.Address === "support@baytel.example" && !m.Read)) {
+        request.Read = true;
+        const reply = { from: "support@baytel.example", subject: `Re: ${request.Subject}`, text: acceptedReply("BT-7001", PLAN.cancelLines) };
+        inbox.deliver({ ...reply, to: "bills@billfighter.local", inReplyTo: "unrelated@mailpit.test" });
+        inbox.deliver({ ...reply, to: "someone@billfighter.local", inReplyTo: request.MessageID });
+      }
+    }, 2);
+    try {
+      await expect(runEmail({ db, mail: inbox.mail, mailpit: inbox.mailpit, actionId: ACTION, plan: PLAN, timeoutMs: 60, pollMs: 5 })).rejects.toThrow(/No reply from BayTel/);
+    } finally {
+      clearInterval(forger);
+    }
+    expect(inbox.box.filter((m) => m.Subject.startsWith("Re: "))).toHaveLength(2);
+    const [row] = await db.select().from(calls);
+    expect((row!.transcriptJson as TranscriptRow[]).map(({ role }) => role)).toEqual(["agent", "system"]);
+    expect(row!.outcomeJson).toBeNull();
+  });
+
+  withData("the desk retries a request whose reply failed to send, and answers it once", async (db) => {
+    const inbox = fakeInbox();
+    const send = inbox.mail.send;
+    let failures = 1;
+    inbox.mail.send = async (email) => {
+      if (email.from === "support@baytel.example" && failures-- > 0) throw new Error("SMTP down");
+      return send(email);
+    };
+    const stop = startEmailRep({ db, mail: inbox.mail, mailpit: inbox.mailpit, intervalMs: 5 });
+    try {
+      await runEmail({ db, mail: inbox.mail, mailpit: inbox.mailpit, actionId: ACTION, plan: PLAN, pollMs: 5 });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    } finally {
+      stop();
+    }
+    expect(failures).toBe(-1);
+    expect(inbox.sent.filter(({ from }) => from === "support@baytel.example")).toHaveLength(1);
+  });
+
   withData("refuses a non-replica recipient before sending anything", async (db) => {
     const inbox = fakeInbox();
     await expect(runEmail({ db, mail: inbox.mail, mailpit: inbox.mailpit, actionId: ACTION, plan: PLAN, to: "support@baytel.com" })).rejects.toThrow(/replica/);

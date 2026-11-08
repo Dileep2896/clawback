@@ -41,6 +41,7 @@ export async function answerRequest(db: Db, text: string): Promise<string> {
 export function startEmailRep({ db, mail, mailpit, intervalMs = 1000 }: { db: Db; mail: Mail; mailpit: Mailpit; intervalMs?: number }) {
   // Kept as well as the read flag, so a failed markRead never answers a request twice in this process.
   const answered = new Set<string>();
+  const warn = (error: unknown) => console.warn(`BayTel email desk: ${error instanceof Error ? error.message : String(error)}`);
   let busy = false;
   const tick = async () => {
     if (busy) return;
@@ -48,13 +49,19 @@ export function startEmailRep({ db, mail, mailpit, intervalMs = 1000 }: { db: Db
     try {
       for (const summary of await mailpit.search(`to:"${BAYTEL_SUPPORT}" is:unread`)) {
         if (answered.has(summary.ID)) continue;
-        answered.add(summary.ID);
-        await mailpit.markRead([summary.ID]);
-        const message = await mailpit.read(summary.ID);
-        await mail.send({ from: BAYTEL_SUPPORT, to: message.From.Address, subject: `Re: ${message.Subject}`, text: await answerRequest(db, message.Text) });
+        // Done only once the reply is sent: a failure leaves it unread, and the next tick tries again.
+        try {
+          const message = await mailpit.read(summary.ID);
+          const text = await answerRequest(db, message.Text);
+          await mail.send({ from: BAYTEL_SUPPORT, to: message.From.Address, subject: `Re: ${message.Subject}`, text, inReplyTo: message.MessageID });
+          answered.add(summary.ID);
+          await mailpit.markRead([summary.ID]);
+        } catch (error) {
+          warn(error);
+        }
       }
     } catch (error) {
-      console.warn(`BayTel email desk: ${error instanceof Error ? error.message : String(error)}`);
+      warn(error);
     } finally {
       busy = false;
     }

@@ -1,7 +1,7 @@
-import type { Mailpit } from "@bill-fighter/platform/local/mailpit";
+import type { Mailpit, MailpitMessage } from "@bill-fighter/platform/local/mailpit";
 import type { Mail, OutboundEmail } from "@bill-fighter/platform/types";
 
-type Stored = { ID: string; From: { Address: string }; To: string; Subject: string; Text: string; Read: boolean };
+type Stored = MailpitMessage & { Read: boolean };
 
 const field = (query: string, name: string) => new RegExp(`${name}:"([^"]*)"`).exec(query)?.[1];
 
@@ -9,12 +9,25 @@ const field = (query: string, name: string) => new RegExp(`${name}:"([^"]*)"`).e
 export function fakeInbox() {
   const box: Stored[] = [];
   const sent: OutboundEmail[] = [];
+  const deliver = (email: OutboundEmail) => {
+    const ID = `m${box.length + 1}`;
+    const MessageID = `${ID}@mailpit.test`;
+    box.push({
+      ID,
+      MessageID,
+      From: { Address: email.from ?? "bills@billfighter.local" },
+      To: [{ Address: email.to }],
+      Subject: email.subject,
+      Text: email.text.replaceAll("\n", "\r\n"),
+      InReplyTo: email.inReplyTo ?? null,
+      Read: false,
+    });
+    return MessageID;
+  };
   const mail: Mail = {
     async send(email) {
       sent.push(email);
-      const ID = `m${box.length + 1}`;
-      box.push({ ID, From: { Address: email.from ?? "bills@billfighter.local" }, To: email.to, Subject: email.subject, Text: email.text.replaceAll("\n", "\r\n"), Read: false });
-      return { id: ID };
+      return { id: deliver(email) };
     },
     parseInbound: () => {
       throw new Error("not used");
@@ -22,9 +35,16 @@ export function fakeInbox() {
   };
   const mailpit: Mailpit = {
     async search(query) {
-      const [to, from, subject] = [field(query, "to"), field(query, "from"), field(query, "subject")];
+      const [to, from, subject, id] = ["to", "from", "subject", "message-id"].map((name) => field(query, name));
       return box
-        .filter((m) => (!to || m.To === to) && (!from || m.From.Address === from) && (!subject || m.Subject.includes(subject)) && (!query.includes("is:unread") || !m.Read))
+        .filter(
+          (m) =>
+            (!to || m.To?.some(({ Address }) => Address === to)) &&
+            (!from || m.From.Address === from) &&
+            (!subject || m.Subject.includes(subject)) &&
+            (!id || m.MessageID === id) &&
+            (!query.includes("is:unread") || !m.Read),
+        )
         .reverse();
     },
     async read(id) {
@@ -36,5 +56,6 @@ export function fakeInbox() {
       for (const m of box) if (ids.includes(m.ID)) m.Read = true;
     },
   };
-  return { box, sent, mail, mailpit };
+  // deliver: drops a message into the inbox without the sent list, for a stranger's mail.
+  return { box, sent, mail, mailpit, deliver };
 }

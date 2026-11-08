@@ -3,9 +3,12 @@ import { z } from "zod";
 // Reads the local Mailpit inbox over its HTTP API, for the BayTel email replica and the Negotiator waiting on its reply.
 const Summary = z.object({ ID: z.string(), From: z.object({ Address: z.string() }), Subject: z.string(), Read: z.boolean() });
 const Search = z.object({ messages: z.array(Summary).nullish() });
-const Message = z.object({ ID: z.string(), From: z.object({ Address: z.string() }), Subject: z.string(), Text: z.string() });
+const Address = z.object({ Address: z.string() });
+const Message = z.object({ ID: z.string(), MessageID: z.string(), From: Address, To: z.array(Address).nullish(), Subject: z.string(), Text: z.string() });
+const Headers = z.record(z.string(), z.array(z.string()));
 
-export type MailpitMessage = z.infer<typeof Message>;
+/** `InReplyTo` is the answered Message-ID without angle brackets, or null. */
+export type MailpitMessage = z.infer<typeof Message> & { InReplyTo: string | null };
 
 export type Mailpit = {
   /** Mailpit search syntax, such as `to:"a@b.example" is:unread`. Newest first. */
@@ -26,7 +29,11 @@ export function createMailpit(env: Record<string, string | undefined> = process.
       return Search.parse(await (await call(`/api/v1/search?limit=50&query=${encodeURIComponent(query)}`)).json()).messages ?? [];
     },
     async read(id) {
-      return Message.parse(await (await call(`/api/v1/message/${encodeURIComponent(id)}`)).json());
+      const path = `/api/v1/message/${encodeURIComponent(id)}`;
+      const message = Message.parse(await (await call(path)).json());
+      // The message JSON has no In-Reply-To, so it comes from the raw headers.
+      const header = Headers.parse(await (await call(`${path}/headers`)).json())["In-Reply-To"]?.[0];
+      return { ...message, InReplyTo: header ? header.trim().replace(/^<|>$/g, "") : null };
     },
     async markRead(ids) {
       if (ids.length === 0) return;

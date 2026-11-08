@@ -37,15 +37,19 @@ export async function runEmail(input: {
   const callId = row!.id;
   try {
     const { subject, text } = requestEmail(facts, plan.accountNumber, lines, callId.slice(0, 8));
-    await mail.send({ to, subject, text, ...(attachments?.length ? { attachments } : {}) });
+    const { id: sentId } = await mail.send({ to, subject, text, ...(attachments?.length ? { attachments } : {}) });
     await appendRow(db, callId, transcriptRow("agent", "email", message(subject, text)));
 
     const deadline = Date.now() + timeoutMs;
+    let ours: string | undefined;
     while (Date.now() < deadline) {
-      const [reply] = await mailpit.search(`from:"${to}" subject:"${subject}"`);
-      if (reply) {
-        const { Subject, Text } = await mailpit.read(reply.ID);
-        await appendRow(db, callId, transcriptRow("provider", "email", message(Subject, Text)));
+      // Our own address, from the sent message, so only a reply to us counts.
+      ours ??= (await mailpit.search(`message-id:"${sentId}"`))[0]?.From.Address;
+      // Only a reply to our request: from BayTel, to us, In-Reply-To our Message-ID. The subject search just narrows it.
+      for (const candidate of ours ? await mailpit.search(`from:"${to}" subject:"${subject}"`) : []) {
+        const reply = await mailpit.read(candidate.ID);
+        if (reply.InReplyTo !== sentId || !reply.To?.some(({ Address }) => Address === ours)) continue;
+        await appendRow(db, callId, transcriptRow("provider", "email", message(reply.Subject, reply.Text)));
         return { callId };
       }
       await sleep(pollMs);
