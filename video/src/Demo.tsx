@@ -3,8 +3,8 @@ import { AbsoluteFill, Freeze, Series, staticFile, useCurrentFrame } from "remot
 import eventsFile from "../public/events.json";
 import transcript from "../public/call.transcript.json";
 import scenesFile from "../public/scenes.json";
-import { Boxes, C, CallCaptions, Callout, Camera, CAPTION, type CaptionPlace, CARD_RECT, cameraAt, Chip, Cursor, EmailCard, Grain, MarketCard, ModelCard, NaiveCard, onScreen, SANS, type Shot, TitleCard, type Utterance, VoCaptions } from "./effects.tsx";
-import { type Box, bedGainDb, boxesOf, captionCues, cardTimes, clicksIn, eventAt, type Ev, FPS, footageStartMs, highlightTimes, layout, type Scene, sceneFrameOf, sceneFrames, stamp, unionBox, voiceFrames, type Word } from "./timeline.ts";
+import { Boxes, C, CallCaptions, Callout, Camera, CARD_RECT, cameraAt, Chip, Cursor, EmailCard, Grain, MarketCard, ModelCard, NaiveCard, onScreen, SANS, type Shot, TitleCard, type Utterance, VoCaptions } from "./effects.tsx";
+import { type Box, bedGainDb, boxesOf, captionCues, cardTimes, clicksIn, eventAt, type Ev, FPS, footageStartMs, highlightTimes, layout, placeCaption, type Scene, sceneFrameOf, sceneFrames, stamp, unionBox, voiceFrames, type Word } from "./timeline.ts";
 import voWords from "./vo-words.json";
 
 export const scenes = scenesFile.scenes as Scene[];
@@ -18,30 +18,6 @@ const SAY_AS = { "$12,600": "$12,606" };
 const BED_DB = bedGainDb(scenes, WORDS);
 const W = 1920;
 const H = 1080;
-
-const overlaps = (a: Box, b: Box, margin = 12) => a.x < b.x + b.w + margin && b.x < a.x + a.w + margin && a.y < b.y + b.h + margin && b.y < a.y + a.h + margin;
-/** The caption band's box at a place: centred, as wide as its longest line (about half an em a character). */
-function bandBox(lines: string[], place: CaptionPlace): Box {
-  const h = lines.length * CAPTION.fontSize * CAPTION.lineHeight + CAPTION.padY * 2;
-  const w = Math.max(...lines.map((l) => l.length)) * CAPTION.fontSize * 0.5 + CAPTION.padX * 2;
-  const y = "top" in place ? place.top : H - place.bottom - h;
-  return { x: (W - w) / 2, y, w, h };
-}
-const area = (a: Box, b: Box) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
-/** Bottom centre, like the call's captions; at the top if that would cover a box or card; else the lowest place, going up
- *  8 px at a time, clear of everything it would cover during the cue (the camera moves, so a box may be anywhere in it);
- *  if nowhere is clear, the place covering least. */
-function placeCaption(lines: string[], obstacles: Box[]): CaptionPlace {
-  const clear = (place: CaptionPlace) => !obstacles.some((o) => overlaps(bandBox(lines, place), o));
-  const bottom = { bottom: CAPTION.bottom };
-  if (clear(bottom)) return bottom;
-  const top = { top: 96 };
-  if (clear(top)) return top;
-  const h = bandBox(lines, bottom).h;
-  const places = Array.from({ length: Math.floor((H - 96 - h - CAPTION.bottom) / 8) }, (_, i) => ({ bottom: CAPTION.bottom + 8 * (i + 1) }));
-  const covered = (place: CaptionPlace) => obstacles.reduce((sum, o) => sum + area(bandBox(lines, place), o), 0);
-  return places.find(clear) ?? [bottom, top, ...places].reduce((best, p) => (covered(p) < covered(best) ? p : best));
-}
 
 function SceneView({ s, start, rough }: { s: Scene; start: number; rough: boolean }) {
   const frame = useCurrentFrame();

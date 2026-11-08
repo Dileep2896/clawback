@@ -4,7 +4,7 @@ import "@fontsource/source-serif-4/600.css";
 import type { ReactNode } from "react";
 import { AbsoluteFill, Easing, interpolate, random, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { REVENUE_BILLIONS, SPEND_TOTAL, WRONG_BILLIONS } from "../../apps/dashboard/components/landing/market.ts";
-import type { Box } from "./timeline.ts";
+import { type Box, CAPTION, type CaptionPlace } from "./timeline.ts";
 
 // The dashboard's dark theme (apps/dashboard/app/globals.css).
 export const C = { paper: "#0b0f14", sheet: "#141a21", line: "#263040", ink: "#e8edf2", faded: "#8a96a6", money: "#c6f432", agent: "#3ba7ff", warn: "#ffb547" };
@@ -123,8 +123,6 @@ export function Chip({ children, at = "top-right" }: { children: ReactNode; at?:
 export type Utterance = { role: string; words: { word: string; start: number; end: number }[] };
 
 // Captions, voice and call alike: one band, bottom centre, unless it would cover a box (then `place` moves it).
-export const CAPTION = { bottom: 110, fontSize: 44, lineHeight: 1.3, padX: 26, padY: 14 };
-export type CaptionPlace = { bottom: number } | { top: number };
 function CaptionBand({ place = { bottom: CAPTION.bottom }, children }: { place?: CaptionPlace; children: ReactNode }) {
   return (
     <div style={{ position: "absolute", left: 160, right: 160, ...place, textAlign: "center", fontFamily: SANS, fontSize: CAPTION.fontSize, lineHeight: CAPTION.lineHeight, color: C.ink }}>
