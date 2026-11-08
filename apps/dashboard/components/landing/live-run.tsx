@@ -144,7 +144,8 @@ export function LiveRun() {
         </nav>
 
         <div className="grid min-w-0 content-start gap-4 p-4 sm:p-6">
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+          {/* auto-fit: the tiles stack whenever two 17.5rem columns do not fit (e.g. 1024px, beside the sidebar and agents). */}
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,17.5rem),1fr))] gap-4">
             <div className="rounded-[10px] border border-line p-4">
               <p className="text-faded">Refund claimed</p>
               <p className="mt-2 font-figure text-[2.5rem] leading-none text-money">{dollars(REFUND_CENTS)}</p>

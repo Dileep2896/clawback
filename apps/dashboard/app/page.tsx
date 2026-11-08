@@ -47,7 +47,7 @@ export default function Landing() {
   return (
     <div className="min-h-dvh overflow-x-clip">
       <header className="sticky top-0 z-10 border-b border-line/70 bg-paper/80 backdrop-blur-md">
-        <div className={`${WIDTH} flex min-h-16 items-center gap-x-4 sm:gap-x-8`}>
+        <div className={`${WIDTH} flex min-h-16 flex-wrap items-center gap-x-4 gap-y-2 py-2 sm:gap-x-8`}>
           <a href="#top" className="shrink-0 rounded-control text-[1.25rem] sm:text-[1.375rem]">
             <Wordmark />
           </a>

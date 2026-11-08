@@ -153,11 +153,10 @@ async function checkLanding(page: Page, name: string) {
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/landing-${name}.png`, fullPage: true });
 }
 
-// The hero at 320px: every piece of text in the app frame sits inside it (the frame clips with overflow-hidden).
-// Text cut short on purpose with an ellipsis (the window bar's breadcrumb) is fine.
+// The hero: every piece of text in the app frame sits inside its own card, or the frame when it is in no card (the frame
+// clips with overflow-hidden). Text cut short on purpose with an ellipsis (the window bar's breadcrumb) is fine.
 const CLIPPED_IN_HERO = `(() => {
   const figure = document.querySelector("figure");
-  const box = figure.getBoundingClientRect();
   const clipped = [];
   const walker = document.createTreeWalker(figure, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
@@ -168,6 +167,7 @@ const CLIPPED_IN_HERO = `(() => {
     range.selectNodeContents(node);
     const r = range.getBoundingClientRect();
     if (!r.width && !r.height) continue; // not laid out: hidden at this width
+    const box = (parent.closest("figure [class*='rounded-[10px]']") ?? figure).getBoundingClientRect();
     if (r.left < box.left - 0.5 || r.right > box.right + 0.5) clipped.push(node.textContent.trim());
   }
   return clipped;
@@ -178,7 +178,19 @@ async function checkLandingNarrowest(page: Page) {
   assert.deepEqual(await page.evaluate<string[]>(CLIPPED_IN_HERO), [], "landing 320: hero text clipped");
   const { scrollWidth, innerWidth } = await page.evaluate<PageMeasure>(MEASURE_PAGE);
   assert.ok(scrollWidth <= innerWidth, `landing 320: page scrolls sideways, ${scrollWidth}px wide in ${innerWidth}px`);
+  for (const id of ["log-in", "get-started"]) {
+    const box = await page.getByTestId(id).boundingBox();
+    assert.ok(box && box.x >= 0 && box.x + box.width <= innerWidth, `landing 320: ${id} is cut off`);
+  }
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/landing-320.png` });
+}
+
+// The hero at 1024px, where the app frame shows its sidebar and agents beside a narrow Overview: no tile spills.
+async function checkLanding1024(page: Page) {
+  await page.goto(BASE);
+  await page.getByText("Linda Park replied YES", { exact: true }).waitFor();
+  assert.deepEqual(await page.evaluate<string[]>(CLIPPED_IN_HERO), [], "landing 1024: hero text spills out of its card");
+  if (screenshotDir) await page.locator("figure").screenshot({ path: `${screenshotDir}/landing-1024.png` });
 }
 
 // The hero's replay: it moves a cursor through the agents' feed; turning reduced motion on mid-replay stops it on the
@@ -244,6 +256,7 @@ try {
   await checkLanding(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage(), "1920");
   await checkLanding(await (await signedInContext(browser, BASE, { viewport: { width: 390, height: 844 } })).newPage(), "390");
   await checkLandingNarrowest(await (await signedInContext(browser, BASE, { viewport: { width: 320, height: 640 } })).newPage());
+  await checkLanding1024(await (await signedInContext(browser, BASE, { viewport: { width: 1024, height: 768 } })).newPage());
   await checkLandingReducedMotionChange(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage());
   await checkNav(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage());
   console.info("dashboard-shell check passed");
