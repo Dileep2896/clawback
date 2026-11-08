@@ -18,13 +18,25 @@ type Row = Record<string, unknown>;
 type Client = Pick<Db["$client"], "query">;
 
 // shortcut: read from disk next to the repo (next runs from apps/dashboard, tests from the root); bundle it as data if the host has no filesystem.
-function readRecording(): Recording {
+function readReplayFile(name: string): string {
   for (const dir of [process.cwd(), join(process.cwd(), "../..")]) {
-    const file = join(dir, "data/replay/run.jsonl");
-    if (existsSync(file)) return parseRecording(readFileSync(file, "utf8"));
+    const file = join(dir, "data/replay", name);
+    if (existsSync(file)) return readFileSync(file, "utf8");
   }
-  throw new Error("No recording at data/replay/run.jsonl");
+  throw new Error(`No data/replay/${name}`);
 }
+const readRecording = (): Recording => parseRecording(readReplayFile("run.jsonl"));
+
+type UsageSummary = { accountId: string; meterNumber: string | null; intervals: number; from: string; to: string }[];
+let usageCache: UsageSummary | undefined;
+/** The demo customer's meter readings as the judge's own accounts. The sandbox database holds no intervals, so they come from usageSummary in the seed. */
+export const sandboxUsage = (customerId: string) =>
+  (usageCache ??= JSON.parse(readReplayFile("usage.json")) as UsageSummary).map((u) => ({
+    ...u,
+    accountId: sandboxId(customerId, u.accountId),
+    from: new Date(u.from),
+    to: new Date(u.to),
+  }));
 
 export type SandboxPlan = {
   recordedAt: string;
