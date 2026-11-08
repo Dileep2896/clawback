@@ -1,52 +1,70 @@
-// The landing hero's playback, as pure functions of one clock (ms into the loop). live-run.tsx renders it.
-// A shortened playback of the recorded demo run (data/replay/run.jsonl, 4 min 28 s), in the run's own order;
-// the landing-live lane notes list the run row behind every word and number.
+// The landing's figures and the hero's replay clock, as pure data and functions. live-run.tsx and bento.tsx render them.
+// Every value is from the recorded demo run (data/replay/run.jsonl, 4 min 28 s); the landing-live lane notes list the row behind each.
 
-export const LOOP = 18_000;
-export const FADE_AT = 17_300;
-/** Every step done: the frame shown under prefers-reduced-motion, and where the progress line is full. */
-export const FINISHED = 15_000;
-/** A frame longer than this (a background tab, a stall) counts as this much, so the playback never jumps ahead. */
+/** The agent feed in the hero's app frame, in the run's order, stamped with the run's own clock (m:ss from the start). */
+export type FeedEntry = { at: string; agent: string; text: string; detail?: string; found?: boolean };
+
+export const FEED: FeedEntry[] = [
+  { at: "0:17", agent: "Collector", text: "Downloaded and stored bills and usage" },
+  { at: "1:03", agent: "Auditor", text: "Fremont meter billed 2x since September 2025", detail: "Sep 2025: billed 4,611 kWh, the meter read 2,305", found: true },
+  { at: "1:41", agent: "Approver", text: "Asked Linda Park to approve by SMS", detail: "Refund to claim: $12,606.06. Yearly savings: $18,319.32." },
+  { at: "1:57", agent: "Approver", text: "Linda Park replied YES" },
+  { at: "1:59", agent: "Negotiator", text: "Calling BayTel to cancel 7 unused lines", detail: "“Please cancel phone line (415) 555-0102 on account BT-7001.”" },
+  { at: "4:01", agent: "Filer", text: "Filed the Rule 17.1 refund claim and 2 rate changes" },
+  { at: "4:03", agent: "Finance", text: "Recorded the $12,606.06 refund, due only when granted" },
+];
+
+/** How long the replay cursor stays on each entry, and the full loop. */
+export const STEP = 2_400;
+export const LOOP = STEP * FEED.length;
+/** How long an entry's detail line takes to stream in once the cursor reaches it. */
+export const TYPE_MS = 1_200;
+/** A frame longer than this (a background tab, a stall) counts as this much, so the replay never jumps ahead. */
 export const MAX_FRAME = 100;
 
-export type Mark = "idle" | "doing" | "done" | "found" | "call";
+/** The entry the cursor is on at t, or -1 before the replay starts (the finished feed, as rendered on the server). */
+export const activeAt = (t: number) => (t < 0 ? -1 : Math.floor(t / STEP) % FEED.length);
 
-export type Step = { agent: string; text: string; start: number; end: number; endMark: Mark; doingMark?: Mark };
-
-export const STEPS: Step[] = [
-  { agent: "Collector", text: "downloading bills and usage", start: 0, end: 2_400, endMark: "done" },
-  { agent: "Auditor", text: "Fremont meter billed 2x", start: 2_600, end: 4_400, endMark: "found" },
-  { agent: "Approver", text: "Linda Park approved by SMS", start: 5_600, end: 6_800, endMark: "done" },
-  { agent: "Negotiator", text: "calling BayTel", start: 7_000, end: 11_600, endMark: "done", doingMark: "call" },
-  { agent: "Finance", text: "refund claimed", start: 11_800, end: 14_400, endMark: "done" },
-];
-
-// The BayTel call transcript, lines 9 and 10, typed out while the Negotiator is on the call.
-export const CALL = [
-  { who: "Clawback", text: "Please cancel phone line (415) 555-0102 on account BT-7001.", start: 7_500, end: 9_700 },
-  { who: "BayTel", text: "Yes, that is cancelled.", start: 10_100, end: 10_900 },
-];
-
-export const REFUND_CENTS = 1_260_606;
-export const COUNT_START = 12_000;
-export const COUNT_END = 14_200;
-
-export const progress = (t: number, start: number, end: number) => Math.min(1, Math.max(0, (t - start) / (end - start)));
-
-export function markAt(step: Step, t: number): Mark {
-  if (t < step.start) return "idle";
-  if (t < step.end) return step.doingMark ?? "doing";
-  return step.endMark;
+/** How many characters of an entry's detail show at t: all of it unless the cursor is on it, then streaming in. */
+export function typedAt(index: number, t: number) {
+  const detail = FEED[index]?.detail ?? "";
+  if (activeAt(t) !== index) return detail.length;
+  return Math.round(detail.length * Math.min(1, (t % STEP) / TYPE_MS));
 }
-
-/** How many characters of a line show at t. */
-export const typedAt = (text: string, t: number, start: number, end: number) => Math.round(text.length * progress(t, start, end));
-
-/** The refund counter at t: rolls up with an ease-out from COUNT_START, lands exactly on the refund. Display only. */
-export const refundCentsAt = (t: number) => Math.round(REFUND_CENTS * (1 - (1 - progress(t, COUNT_START, COUNT_END)) ** 3));
 
 /** The clock after one animation frame of dt ms. It stands still while paused or off-screen, and wraps at the loop's end. */
 export const advance = (elapsed: number, dt: number, running: boolean) => (running ? (elapsed + Math.min(Math.max(dt, 0), MAX_FRAME)) % LOOP : elapsed);
 
-/** Where the clock starts: the finished run, still, when the viewer asked for reduced motion. */
-export const startAt = (reducedMotion: boolean) => (reducedMotion ? FINISHED : 0);
+/** Fremont electric, one point per bill: what the bill charged for, and what the meter recorded (finding evidence_json.detail.bills). */
+export const FREMONT = [
+  { month: "2025-07", billed: 2510, meter: 2510 },
+  { month: "2025-08", billed: 2424, meter: 2424 },
+  { month: "2025-09", billed: 4611, meter: 2305 },
+  { month: "2025-10", billed: 4778, meter: 2389 },
+  { month: "2025-11", billed: 4383, meter: 2192 },
+  { month: "2025-12", billed: 4479, meter: 2239 },
+  { month: "2026-01", billed: 4475, meter: 2237 },
+  { month: "2026-02", billed: 4068, meter: 2034 },
+  { month: "2026-03", billed: 4569, meter: 2285 },
+  { month: "2026-04", billed: 4402, meter: 2201 },
+  { month: "2026-05", billed: 4598, meter: 2299 },
+  { month: "2026-06", billed: 4719, meter: 2359 },
+  { month: "2026-07", billed: 5035, meter: 2517 },
+  { month: "2026-08", billed: 4848, meter: 2424 },
+  { month: "2026-09", billed: 4653, meter: 2326 },
+  { month: "2026-10", billed: 4742, meter: 2371 },
+];
+/** The first bill on the new meter: where the two lines split. */
+export const SWAP_INDEX = FREMONT.findIndex((point) => point.billed !== point.meter);
+
+/** Ledger and approval figures, in cents. KEEP is what is left of refund plus yearly savings after the fee. */
+export const REFUND_CENTS = 1_260_606;
+export const YEARLY_CENTS = 1_831_932;
+export const FEE_CENTS = 927_761;
+export const KEEP_CENTS = REFUND_CENTS + YEARLY_CENTS - FEE_CENTS;
+
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+export const dollars = (cents: number) => usd.format(cents / 100);
+
+/** A roll-up from 0 to `to` over `ms`, eased out, landing exactly on `to`. Display only. */
+export const rollAt = (to: number, elapsed: number, ms: number) => Math.round(to * (1 - (1 - Math.min(1, Math.max(0, elapsed / ms))) ** 3));

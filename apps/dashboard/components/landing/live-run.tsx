@@ -1,104 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { advance, CALL, COUNT_END, COUNT_START, FADE_AT, FINISHED, markAt, REFUND_CENTS, refundCentsAt, startAt, STEPS, typedAt, type Mark } from "./timeline.ts";
+import { useEffect, useRef, useState } from "react";
+import { KwhLines } from "./kwh-lines.tsx";
+import { useReducedMotion } from "./motion.tsx";
+import { activeAt, advance, dollars, FEE_CENTS, FEED, KEEP_CENTS, REFUND_CENTS, typedAt, YEARLY_CENTS } from "./timeline.ts";
 
-// What the playback shows besides the timeline, all from the recorded demo run (data/replay/run.jsonl).
+// The hero: the app's Overview after the recorded demo run, framed like a window, with the agents' feed streaming in a
+// panel on the right. It is complete on load; the replay only moves a cursor through the feed and streams that entry's line.
 
-// The meter finding's evidence: billed kWh against the meter's own readings.
-const EVIDENCE = [
-  { month: "Sep 2025", billed: "4,611", meter: "2,305" },
-  { month: "Oct 2025", billed: "4,778", meter: "2,389" },
-];
+const SIDEBAR = ["Overview", "Bills", "Findings", "Money", "Agents"];
 
-// Yearly savings by finding (annual_savings_cents on the findings rows), shown as the Auditor finds them; they sum to the
-// approval's "Yearly savings: $18,319.32". The total lands when Finance records it.
-const SAVINGS = [
-  { label: "Meter fixed", amount: "$10,710.37" },
-  { label: "2 rate changes", amount: "$2,568.95" },
-  { label: "7 unused lines", amount: "$5,040.00" },
-];
-const SAVINGS_TOTAL = "$18,319.32";
-
-const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-
-const MARK_WORD: Record<Mark, string> = { idle: "", doing: "working", call: "on the call", done: "done", found: "found" };
-const MARK_COLOUR: Record<Mark, string> = {
-  idle: "text-band-faded",
-  doing: "text-band-money",
-  call: "text-band-money",
-  done: "text-band-faded",
-  found: "text-band-alert",
-};
-
-function Glyph({ mark }: { mark: Mark }) {
-  const pulse = mark === "doing" || mark === "call" ? "live-pulse" : "";
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" className={`${MARK_COLOUR[mark]} ${pulse}`}>
-      {mark === "idle" && <circle cx="10" cy="10" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />}
-      {mark === "doing" && <circle cx="10" cy="10" r="5" fill="currentColor" />}
-      {mark === "done" && (
-        <path d="M4.5 10.5l3.5 3.5 7.5-8" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      )}
-      {mark === "found" && (
-        <>
-          <circle cx="10" cy="10" r="8" fill="currentColor" />
-          <path d="M10 5.5v5.5" stroke="var(--band)" strokeWidth="2.2" strokeLinecap="round" />
-          <circle cx="10" cy="14.2" r="1.3" fill="var(--band)" />
-        </>
-      )}
-      {/* A handset, drawn. */}
-      {mark === "call" && (
-        <path
-          d="M6.2 3.2l2.2 3.1-1.5 1.6a9.3 9.3 0 004.9 4.9l1.6-1.5 3.1 2.2-1.2 2.6c-.3.6-1 .9-1.6.8C8.3 16.1 3.9 11.7 3.1 6.3c-.1-.6.2-1.3.8-1.6z"
-          fill="currentColor"
-        />
-      )}
-    </svg>
-  );
-}
-
-/** Text that types out over [start, end] without moving anything: the full line holds the space, invisibly. */
-function Typed({ text, t, start, end }: { text: string; t: number; start: number; end: number }) {
-  const shown = typedAt(text, t, start, end);
-  return (
-    <span className="grid">
-      <span className="invisible col-start-1 row-start-1">{text}</span>
-      <span className="col-start-1 row-start-1">
-        {text.slice(0, shown)}
-        {shown > 0 && shown < text.length && <span className="live-caret">▍</span>}
-      </span>
-    </span>
-  );
-}
-
-function Row({ step, t }: { step: (typeof STEPS)[number]; t: number }) {
-  const mark = markAt(step, t);
-  return (
-    // The status column has a fixed width, so a row never re-wraps when its word changes ("" → "on the call" → "done").
-    <div className={`grid grid-cols-[1.5rem_minmax(0,1fr)_5.5rem] items-center gap-x-2 sm:grid-cols-[1.5rem_minmax(0,1fr)_6.5rem] sm:gap-x-3 py-2.5 ${mark === "idle" ? "text-band-faded" : ""}`}>
-      <Glyph mark={mark} />
-      <span className="flex min-w-0 flex-wrap gap-x-4">
-        <span className="w-[10ch] shrink-0 font-sans font-semibold">{step.agent}</span>
-        <span className="min-w-0">{step.text}</span>
-      </span>
-      <span className={`text-right font-sans text-base ${MARK_COLOUR[mark]}`}>{MARK_WORD[mark]}</span>
-    </div>
-  );
-}
-
-const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
-const onReducedMotionChange = (notify: () => void) => {
-  const query = matchMedia(REDUCED_MOTION);
-  query.addEventListener("change", notify);
-  return () => query.removeEventListener("change", notify);
-};
-
-function useRunClock() {
-  // Live, so turning reduced motion on mid-loop stops the clock and shows the finished run.
-  const reduced = useSyncExternalStore(onReducedMotionChange, () => matchMedia(REDUCED_MOTION).matches, () => false);
-  const [t, setT] = useState(0);
-  const [canPlay, setCanPlay] = useState(false);
+/** The replay clock: -1 (finished feed, no cursor) until it starts, then ms into the loop. Pauses off-screen and on request. */
+function useReplay() {
+  const reduced = useReducedMotion();
+  const [t, setT] = useState(-1);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const ref = useRef<HTMLElement>(null);
@@ -108,8 +23,7 @@ function useRunClock() {
   }, [paused]);
 
   useEffect(() => {
-    setT(startAt(reduced));
-    setCanPlay(!reduced);
+    setT(-1);
     if (reduced) return;
     let visible = true;
     let elapsed = 0;
@@ -119,125 +33,163 @@ function useRunClock() {
       visible = entry?.isIntersecting ?? true;
     });
     if (ref.current) observer.observe(ref.current);
-    const tick = (now: number) => {
-      elapsed = advance(elapsed, now - last, visible && !pausedRef.current);
-      last = now;
-      setT(elapsed);
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
+    // A beat on the finished screen before the cursor starts.
+    const start = setTimeout(() => {
+      last = performance.now();
+      frame = requestAnimationFrame(function tick(now) {
+        elapsed = advance(elapsed, now - last, visible && !pausedRef.current);
+        last = now;
+        setT(elapsed);
+        frame = requestAnimationFrame(tick);
+      });
+    }, 1200);
     return () => {
+      clearTimeout(start);
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
   }, [reduced]);
 
-  return { t, ref, canPlay, paused, setPaused };
+  return { t, ref, canPlay: !reduced, paused, setPaused };
 }
 
-/** The hero: the demo run playing back, agent by agent, ending on the refund. */
+function Tile({ label, cents, tone }: { label: string; cents: number; tone?: "money" }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-t border-line py-2.5 first:border-0">
+      <dt className="text-faded">{label}</dt>
+      <dd className={`font-figure text-[1.375rem] leading-none ${tone === "money" ? "text-money" : ""}`}>{dollars(cents)}</dd>
+    </div>
+  );
+}
+
+function Feed({ t }: { t: number }) {
+  const active = activeAt(t);
+  return (
+    <ol className="grid">
+      {FEED.map((entry, i) => {
+        const on = i === active;
+        const shown = typedAt(i, t);
+        return (
+          <li
+            key={`${entry.at}-${entry.agent}`}
+            className={`relative grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-3 rounded-control px-3 py-2.5 transition-colors duration-300 ${on ? "bg-paper" : ""}`}
+          >
+            <span className="pt-px text-[13px] text-faded tabular-nums">{entry.at}</span>
+            <span className="min-w-0">
+              <span className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className={`size-2 shrink-0 rounded-full ${on ? "live-pulse bg-ink" : entry.found ? "bg-alert" : "bg-line"}`}
+                />
+                <span className="font-semibold">{entry.agent}</span>
+              </span>
+              <span className="block text-faded">{entry.text}</span>
+              {entry.detail && (
+                // The full line holds its space invisibly, so streaming it never moves the rows below.
+                <span className="mt-1 grid text-[14px]">
+                  <span className="invisible col-start-1 row-start-1">{entry.detail}</span>
+                  <span className={`col-start-1 row-start-1 ${entry.found ? "text-alert" : ""}`}>
+                    {entry.detail.slice(0, shown)}
+                    {on && shown < entry.detail.length && <span className="live-caret">▍</span>}
+                  </span>
+                </span>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** The framed app screen at the top of the landing. */
 export function LiveRun() {
-  const { t, ref, canPlay, paused, setPaused } = useRunClock();
-  const flagged = markAt(STEPS[1]!, t) === "found";
-  const cents = refundCentsAt(t);
+  const { t, ref, canPlay, paused, setPaused } = useReplay();
 
   return (
-    // data-paused also freezes the CSS loops (dot pulse, caret, flash): globals.css.
-    <figure
-      ref={ref}
-      aria-labelledby="live-caption"
-      data-paused={paused || undefined}
-      className="min-w-0 overflow-hidden rounded-card border border-band-line"
-    >
-      <p className="sr-only">
-        A shortened playback of the recorded demo run. The Collector downloaded the bills and usage. The Auditor found the Fremont meter billed
-        twice the metered usage. Linda Park approved by SMS. The Negotiator called BayTel: “Please cancel phone line (415) 555-0102 on account
-        BT-7001.” “Yes, that is cancelled.” Finance recorded a refund claim of $12,606.06, due only when granted, and $18,319.32 a year in savings:
-        $10,710.37 from the fixed meter, $2,568.95 from 2 rate changes and $5,040.00 from 7 unused lines.
-      </p>
-      <div aria-hidden="true">
-        <div className="h-0.5 bg-band-line">
-          <div className="h-full origin-left bg-band-money" style={{ transform: `scaleX(${Math.min(1, t / FINISHED)})` }} />
-        </div>
-        <div
-          className="live-fade grid gap-x-12 gap-y-4 px-4 pt-3 pb-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)]"
-          style={{ opacity: t > FADE_AT ? 0 : 1 }}
-        >
-          <div className="min-w-0 font-mono text-[1rem] sm:text-[1.125rem] lg:text-[1.25rem]">
-            <Row step={STEPS[0]!} t={t} />
-            <Row step={STEPS[1]!} t={t} />
-            <dl
-              className={`mb-1 ml-9 grid grid-cols-1 justify-start gap-x-6 text-base sm:grid-cols-[auto_auto_auto] sm:whitespace-nowrap ${flagged ? "" : "invisible"}`}
-            >
-              {EVIDENCE.map((row) => (
-                <div key={row.month} className={`col-span-full grid grid-cols-subgrid ${flagged ? "live-flash" : ""}`}>
-                  <dt className="text-band-faded">{row.month}</dt>
-                  <dd className="text-band-alert tabular-nums">billed {row.billed} kWh</dd>
-                  <dd className="text-band-faded tabular-nums">meter {row.meter}</dd>
-                </div>
-              ))}
-            </dl>
-            <Row step={STEPS[2]!} t={t} />
-            <Row step={STEPS[3]!} t={t} />
-            <div className="mb-1 ml-9 grid gap-1 border-l-2 border-band-line pl-4">
-              {CALL.map((line) => (
-                <p key={line.who} className={line.who === "BayTel" ? "text-band-faded" : ""}>
-                  <Typed text={`“${line.text}”`} t={t} start={line.start} end={line.end} />
-                </p>
-              ))}
-            </div>
-            <Row step={STEPS[4]!} t={t} />
-          </div>
-          {/* The register: where the run's money lands. */}
-          <div className="ml-9 grid content-between gap-8 lg:ml-0 lg:border-l lg:border-band-line lg:py-2 lg:pl-10">
-            {/* The savings ledger fills as the Auditor finds each line; nothing shows before it is found. */}
-            <div className="grid gap-1 text-base">
-              <p className="mb-1 text-band-faded">Yearly savings found</p>
-              <dl className="contents">
-                {SAVINGS.map((line, i) => (
-                  <div
-                    key={line.label}
-                    className={`flex justify-between gap-4 tabular-nums transition-opacity duration-300 motion-reduce:transition-none ${flagged ? "" : "opacity-0"}`}
-                    style={{ transitionDelay: flagged ? `${i * 150}ms` : "0ms" }}
-                  >
-                    <dt>{line.label}</dt>
-                    <dd>{line.amount}</dd>
-                  </div>
-                ))}
-                <div
-                  className={`mt-1 flex justify-between gap-4 border-t border-band-line pt-2 font-semibold tabular-nums ${t < STEPS[4]!.end ? "invisible" : ""}`}
-                >
-                  <dt>Recorded by Finance</dt>
-                  <dd className="text-band-money">{SAVINGS_TOTAL}</dd>
-                </div>
-              </dl>
-            </div>
-            {/* The refund appears only once Finance starts counting it: no $0.00 while other agents work. */}
-            <div className={`grid gap-2 ${t < COUNT_START ? "invisible" : ""}`}>
-              <span className="text-base text-band-faded">Refund across 14 Fremont bills</span>
-              <span className="grid font-figure text-[clamp(2.25rem,11vw,3rem)] sm:text-[clamp(3rem,4.4vw,5.25rem)] leading-none text-band-money">
-                <span className="invisible col-start-1 row-start-1">{usd.format(REFUND_CENTS / 100)}</span>
-                <span className="col-start-1 row-start-1">{usd.format(cents / 100)}</span>
-              </span>
-              <span className="text-base text-band-faded">{t < COUNT_END ? "Counting…" : "Claimed, due only when granted"}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <figcaption className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-band-line px-4 py-2 text-base text-band-faded sm:px-6">
-        <span id="live-caption" className="mr-auto flex flex-wrap gap-x-4">
-          <span>Golden Gate Noodle Co., one audit.</span>
-          <span>Recorded demo run, 4 min 28 s, shortened.</span>
+    <figure ref={ref} data-paused={paused || undefined} className="overflow-hidden rounded-[12px] border border-line bg-sheet text-[15px] text-ink">
+      <figcaption className="sr-only">
+        The Clawback Overview for the demo customer after one audit: a refund of {dollars(REFUND_CENTS)} claimed, {dollars(YEARLY_CENTS)} a year in
+        savings, a fee of {dollars(FEE_CENTS)} and {dollars(KEEP_CENTS)} for the owner to keep. Beside it, the agents’ log from the recorded run:
+        {FEED.map((entry) => ` ${entry.at}, ${entry.agent}: ${entry.text}.${entry.detail ? ` ${entry.detail}` : ""}`).join("")}
+      </figcaption>
+
+      {/* The app's top bar: a breadcrumb, and Pause for the replay (WCAG 2.2.2). */}
+      <div className="flex min-h-11 items-center gap-3 border-b border-line px-4">
+        <span aria-hidden="true" className="truncate text-[13px] text-faded">
+          Golden Gate Noodle Co. <span className="px-1">/</span> <span className="text-ink">Overview</span>
         </span>
-        {/* WCAG 2.2.2: anything that moves on its own for more than 5 s can be stopped. Holds its space before hydration. */}
+        <span aria-hidden="true" className="ml-auto hidden rounded-full border border-line px-2.5 text-[13px] text-faded sm:inline">
+          Demo data
+        </span>
         <button
           type="button"
           onClick={() => setPaused(!paused)}
-          className={`min-h-10 rounded-control px-3 font-semibold text-band-text hover:bg-band-line ${canPlay ? "" : "invisible"}`}
+          aria-label={paused ? "Play the agents’ replay" : "Pause the agents’ replay"}
+          className={`min-h-9 rounded-control px-2.5 text-[13px] font-semibold text-faded hover:bg-paper hover:text-ink ${canPlay ? "" : "invisible"}`}
         >
           {paused ? "Play" : "Pause"}
         </button>
-      </figcaption>
+      </div>
+
+      <div aria-hidden="true" className="grid lg:grid-cols-[11rem_minmax(0,1fr)_23rem] xl:grid-cols-[12.5rem_minmax(0,1fr)_25rem]">
+        <nav className="hidden border-r border-line bg-paper/60 p-3 lg:block">
+          <ul className="grid gap-0.5">
+            {SIDEBAR.map((item) => (
+              <li key={item} className={`rounded-[6px] px-3 py-1.5 ${item === "Overview" ? "bg-sheet font-semibold shadow-[0_0_0_1px_var(--line)]" : "text-faded"}`}>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <div className="grid min-w-0 content-start gap-4 p-4 sm:p-6">
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+            <div className="rounded-[10px] border border-line p-4">
+              <p className="text-faded">Refund claimed</p>
+              <p className="mt-2 font-figure text-[2.5rem] leading-none text-money">{dollars(REFUND_CENTS)}</p>
+              <p className="mt-2 text-[14px] text-faded">Across 14 Fremont bills, due only when granted</p>
+            </div>
+            <dl className="rounded-[10px] border border-line px-4 py-1.5">
+              <Tile label="Yearly savings" cents={YEARLY_CENTS} tone="money" />
+              <Tile label="Clawback’s fee" cents={FEE_CENTS} />
+              <Tile label="You keep" cents={KEEP_CENTS} tone="money" />
+            </dl>
+          </div>
+
+          <div className="rounded-[10px] border border-line p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+              <p className="font-semibold">Billed 2x metered usage since the 2025-09 meter change</p>
+              <p className="font-figure text-[1.25rem] text-money">{dollars(REFUND_CENTS)}</p>
+            </div>
+            <p className="text-[14px] text-faded">Fremont electric · BayCurrent · Electric Rule 17.1</p>
+            <div className="mt-3">
+              <KwhLines compact />
+            </div>
+          </div>
+
+          {/* The one loud card: the approval, with its money-green rule. */}
+          <div className="rounded-[10px] border border-line border-l-4 border-l-money p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="font-semibold">Approval</p>
+              <p className="rounded-full bg-money-soft px-2.5 text-[13px] font-semibold text-money">Approved by Linda Park, by SMS</p>
+            </div>
+            <ul className="mt-2 grid gap-0.5 text-[14px] text-faded">
+              <li>We will file 1 Rule 17.1 refund claim.</li>
+              <li>We will file 2 Rule 12 rate change requests.</li>
+              <li>On the BayTel call we will cancel 7 unused lines.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="min-w-0 border-t border-line p-3 lg:border-t-0 lg:border-l">
+          <p className="flex items-center justify-between px-3 pt-1 pb-2">
+            <span className="font-semibold">Agents</span>
+            <span className="text-[13px] text-faded">Recorded run, 4 min 28 s</span>
+          </p>
+          <Feed t={t} />
+        </div>
+      </div>
     </figure>
   );
 }

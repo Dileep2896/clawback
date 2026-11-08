@@ -156,8 +156,14 @@ body {
   outline-color: var(--band-money);
 }
 
-/* Landing hero, the run playing back: a working agent's dot breathes, the call has a caret, the overcharge flashes once.
-   The playback itself is clocked in components/landing/live-run.tsx; these only run when motion is welcome. */
+/* Landing: the dark canvas behind the app frame and under the closing band, with a faint dot grid. */
+.canvas {
+  background-image: radial-gradient(color-mix(in srgb, var(--band-text) 9%, transparent) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+/* Landing motion. The hero's replay is clocked in components/landing/live-run.tsx; the rest plays once, when its
+   <Reveal> scrolls into view (data-reveal: done, the server's finished state → ready, unseen → play). */
 @media (prefers-reduced-motion: no-preference) {
   .live-pulse {
     animation: live-pulse 1200ms cubic-bezier(0.65, 0, 0.35, 1) infinite alternate;
@@ -167,23 +173,45 @@ body {
     animation: live-caret 900ms steps(1) infinite;
   }
 
-  .live-flash {
-    animation: live-flash 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-
-  .live-fade {
-    transition: opacity 500ms cubic-bezier(0.65, 0, 0.35, 1);
-  }
-
-  /* Pause stops everything, not just the clock. */
-  [data-paused] :is(.live-pulse, .live-caret, .live-flash) {
+  /* Pause stops everything in the frame, not just the clock. */
+  [data-paused] :is(.live-pulse, .live-caret) {
     animation-play-state: paused;
+  }
+
+  [data-reveal="ready"] .reveal-draw {
+    clip-path: inset(0 100% 0 0);
+  }
+  [data-reveal="play"] .reveal-draw {
+    animation: reveal-draw 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  [data-reveal="ready"] :is(.reveal-fade, .reveal-line) {
+    opacity: 0;
+  }
+  [data-reveal="play"] .reveal-fade {
+    animation: reveal-fade 300ms ease-out 500ms both;
+  }
+  [data-reveal="play"] .reveal-line {
+    animation: reveal-line 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  [data-reveal="ready"] .reveal-grow {
+    transform: scaleX(0);
+  }
+  [data-reveal="play"] .reveal-grow {
+    transform-origin: left;
+    animation: reveal-grow 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* The call's waveform speaks while the transcript lines arrive, then rests: about 3 s, so no stop control is needed. */
+  [data-reveal="play"] .wave-bar {
+    animation: wave 420ms ease-in-out 7 alternate;
   }
 }
 
 @keyframes live-pulse {
   to {
-    opacity: 0.45;
+    opacity: 0.35;
   }
 }
 
@@ -193,8 +221,36 @@ body {
   }
 }
 
-@keyframes live-flash {
+@keyframes reveal-draw {
   from {
-    background: color-mix(in srgb, var(--band-alert) 22%, transparent);
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes reveal-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes reveal-line {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes reveal-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes wave {
+  to {
+    transform: scaleY(0.3);
   }
 }

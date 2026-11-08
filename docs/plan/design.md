@@ -75,29 +75,30 @@ Stat figures are at least 48 px so the room can read them from the back. Sentenc
 
 ## Landing page (`/`)
 
-Added by `landing-redesign`, 2026-11-07. The landing is the one page allowed a darker voice than the app; it still uses the wordmark, the money green, both fonts and the app's own surfaces.
+Rebuilt by `landing-live` design pass 2, 2026-11-07, from `docs/plan/design-study.md` (Landing 1 to 8). The landing uses the app's own light tokens (paper, sheet, ink, faded, line, money, alert); the dark `band` is only the canvas behind the app frame and the closing band.
 
-- **Idea: agents at work** (`landing-live`, 2026-11-07, replacing the audited statement). The hero is full height and dark, and plays an 18 s loop of the recorded demo run (`components/landing/live-run.tsx`): five agent rows light up in the run's order, the Fremont meter evidence flashes, the BayTel call lines type out, and the refund rolls up to $12,606.06 in a register column on the right. The headline "Your bills are wrong. Agents fix them." and "Start my audit" sit under it.
-- **Live rows** are set in the system monospace (`font-mono`), agent names in Atkinson 600; status is a small drawn SVG plus a word (working, on the call, found, done), never colour alone. No emoji.
-- **Two dark ink bands** (hero, market) alternate with the sage paper (the run, the result). The bands stay dark in both themes.
-- **Narrative structure:** live run → "Follow one overcharge, start to finish" (four stages in a row under heavy 4 px ink rules, each with the static screen the run produced: kWh table, finding, call transcript, approval and ledger row) → the market → what the owner stands to keep (a statement total under a heavy rule) → footer with the demo-data line.
-- **Width:** up to 1320 px, wider than app pages, so the four stages sit in one row at 1920.
-- **Values are the recorded demo run's** (`data/replay/run.jsonl`); market figures are the landing-tam estimates with their source note.
+- **Colour:** one neutral ground (paper, sheet cards) and one accent, money green, used only on the main button and on money. `alert` only for wrong bill numbers (the doubled kWh, the overcharge gap). No glows, no glass, no shadows: 1 px `line` borders.
+- **Structure:** sticky blurred nav (How it works, Pricing, The market; Log in as text, Start my audit filled) → hero (72 px two-tone headline left, subcopy and CTA right, Harvey split) → a large framed app screen on the dark dotted `band` canvas, running past the fold (sidebar, Overview with money tiles, the meter finding with its kWh lines, the approval card as the one loud card, and an Agents panel streaming the run) → counter strip (five demo-run figures in a hairline grid, marked demo data) → "How it works" bento (5 cards, Fig 1 to 5: bills, findings, calls, approval, ledger; each a two-tone title and a crop of the app's surface bleeding off the card's right and bottom edges) → the market (white band, giant serif figures) → pricing (stacked keep/fee bar plus the statement) → dark CTA band → footer (two link columns plus the demo-data pill).
+- **Type:** headline 72 px, weight 600, -0.03 em, two-tone (claim in ink, rest in `faded`); section intros are one 44 px two-tone sentence instead of h2 plus paragraph; body 18 px. Mono only for 12 px uppercase labels (`Fig 1 · Bills`, the counter label, footer column heads). Inside the app frame and bento crops the text is app scale, 13 to 15 px: these depict the product, and the frame has a full-size screen-reader summary. Landing-only exception to the 16 px floor; the app pages keep it.
+- **Width:** content up to 1320 px, 12-column grid, about 140 px between sections at desktop.
+- **Values** are the recorded demo run's (`components/landing/timeline.ts`, sourced from `data/replay/run.jsonl`); market figures are the landing-tam estimates with their source note.
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `band` | `#0f1a15` | `#070d0a` | Landing dark band background |
+| `band` | `#0f1a15` | `#070d0a` | The canvas behind the app frame (with a faint dot grid, `.canvas`) and the closing CTA band |
 | `band-text` | `#eef4f0` | `#eef4f0` | Text on the band |
 | `band-faded` | `#c3d1c9` | `#c3d1c9` | Secondary text on the band |
-| `band-line` | `#2c3e35` | `#24352d` | Rules on the band, hover fill for band buttons |
-| `band-money` | `#8be6b9` | `#8be6b9` | Money figures, primary button and focus ring on the band |
-| `band-alert` | `#ffbdd0` | `#ffbdd0` | "Found" and overbilled figures on the band; pale so it passes the lit-room check |
+| `band-line` | `#2c3e35` | `#24352d` | Rules on the band |
+| `band-money` | `#8be6b9` | `#8be6b9` | The CTA button and focus ring on the band |
+| `band-alert` | `#ffbdd0` | `#ffbdd0` | Kept for pale alert text on the band; unused by the current landing |
 
 The band text pairs are in `lib/contrast.test.ts`, lit-room check included. On the band, `.band :focus-visible` switches the ring to `band-money`.
 
 ## Motion
 
-Only motion that shows a change: the meter drums rolling, a board card arriving, and on the landing the recorded run playing back. All are off under `prefers-reduced-motion` (the landing then shows the finished run, still). The landing playback pauses off-screen and has a Pause button (WCAG 2.2.2), and never changes the hero's size while it plays. No entrance animations on product pages.
+Only motion that shows a change: the meter drums rolling, a board card arriving. No entrance animations on product pages.
+
+On the landing, every frame looks finished at t=0: the server renders the final state, and motion only replays it. The hero's Agents panel moves a cursor through the recorded run and streams the active entry's line (pauses off-screen, Pause button for WCAG 2.2.2, never changes size). Below the fold, things play once as they scroll into view, 300 to 600 ms ease-out: the kWh lines draw left to right, the call's waveform speaks for about 3 s while the transcript lines arrive, the refund rolls up, the keep/fee bar fills. An element already on screen at load never resets. Under `prefers-reduced-motion` (checked live, not only on load) everything shows its finished state.
 
 ## Copy
 

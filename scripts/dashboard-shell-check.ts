@@ -153,7 +153,8 @@ async function checkLanding(page: Page, name: string) {
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/landing-${name}.png`, fullPage: true });
 }
 
-// The hero at 320px: every piece of text in the playback sits inside the figure, which clips with overflow-hidden.
+// The hero at 320px: every piece of text in the app frame sits inside it (the frame clips with overflow-hidden).
+// Text cut short on purpose with an ellipsis (the window bar's breadcrumb) is fine.
 const CLIPPED_IN_HERO = `(() => {
   const figure = document.querySelector("figure");
   const box = figure.getBoundingClientRect();
@@ -161,38 +162,42 @@ const CLIPPED_IN_HERO = `(() => {
   const walker = document.createTreeWalker(figure, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
     const node = walker.currentNode;
-    if (!node.textContent.trim() || node.parentElement.closest(".sr-only")) continue;
+    const parent = node.parentElement;
+    if (!node.textContent.trim() || parent.closest(".sr-only") || getComputedStyle(parent).textOverflow === "ellipsis") continue;
     const range = document.createRange();
     range.selectNodeContents(node);
     const r = range.getBoundingClientRect();
+    if (!r.width && !r.height) continue; // not laid out: hidden at this width
     if (r.left < box.left - 0.5 || r.right > box.right + 0.5) clipped.push(node.textContent.trim());
   }
   return clipped;
 })()`;
 async function checkLandingNarrowest(page: Page) {
-  await page.emulateMedia({ reducedMotion: "reduce" }); // the finished run: every row, the evidence and the refund showing
   await page.goto(BASE);
-  await page.getByText("Claimed, due only when granted").waitFor();
+  await page.getByText("Linda Park replied YES", { exact: true }).waitFor();
   assert.deepEqual(await page.evaluate<string[]>(CLIPPED_IN_HERO), [], "landing 320: hero text clipped");
   const { scrollWidth, innerWidth } = await page.evaluate<PageMeasure>(MEASURE_PAGE);
   assert.ok(scrollWidth <= innerWidth, `landing 320: page scrolls sideways, ${scrollWidth}px wide in ${innerWidth}px`);
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/landing-320.png` });
 }
 
-// Turning reduced motion on while the hero plays stops it on the finished run, with no Pause button left.
+// The hero's replay: it moves a cursor through the agents' feed; turning reduced motion on mid-replay stops it on the
+// finished feed (no cursor, every line whole) and takes the Pause button away.
+const FEED_STATE = `[document.querySelectorAll("figure .live-pulse").length, document.querySelector("figure ol").innerText]`;
 async function checkLandingReducedMotionChange(page: Page) {
   await page.goto(BASE);
-  const pause = page.getByRole("button", { name: "Pause" });
+  const finished = await page.evaluate<[number, string]>(FEED_STATE);
+  assert.equal(finished[0], 0, "landing: the hero does not start on the finished feed");
+  const pause = page.getByRole("button", { name: "Pause the agents’ replay" });
   await pause.waitFor();
-  await page.waitForTimeout(1000);
+  await page.locator("figure .live-pulse").waitFor({ timeout: 5000 });
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.getByText("Claimed, due only when granted").waitFor({ timeout: 2000 });
+  await page.locator("figure .live-pulse").waitFor({ state: "detached", timeout: 2000 });
   assert.equal(await pause.isVisible(), false, "landing: Pause still shown under reduced motion");
-  const progress = () => page.locator("figure [style*=scaleX]").getAttribute("style");
-  const before = await progress();
-  await page.waitForTimeout(1000);
-  assert.equal(await progress(), before, "landing: playback still moving under reduced motion");
-  assert.match(before ?? "", /scaleX\(1\)/, "landing: reduced motion does not show the finished run");
+  const still = await page.evaluate<[number, string]>(FEED_STATE);
+  await page.waitForTimeout(1500);
+  assert.deepEqual(await page.evaluate<[number, string]>(FEED_STATE), still, "landing: the replay still moves under reduced motion");
+  assert.equal(still[1], finished[1], "landing: reduced motion does not show the finished feed");
 }
 
 // Every nav link reaches its page, and the current page is marked.
