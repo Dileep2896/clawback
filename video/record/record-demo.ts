@@ -4,15 +4,17 @@
 // the meter finding's kWh chart, Overview, Money. A copy of scripts/rehearse-stage.ts's flow, not an import (it has no exports).
 // Run from the repo root after pnpm demo:reset, with dashboard, portal and webhooks up:
 // pnpm exec tsx --env-file-if-exists=.env video/record/record-demo.ts [--live]
-// --live needs VOICE_MODE=live here and on the webhook process, and places one real call. Writes gitignored video/out/.
+// --live needs VOICE_MODE=live here and on the webhook process, and places one real call. Writes a new gitignored video/out/take-<time>/.
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
 import { type BrowserContext, chromium, type Locator, type Page } from "playwright";
+import { liveCallProblem, type TakeCall } from "./live-check.ts";
 
 const BASE = process.env.DASHBOARD_URL ?? "http://localhost:3000";
-const OUT = "video/out";
+// A new folder per take, so a failed attempt never touches earlier takes or renders in video/out/.
+const OUT = join("video/out", `take-${new Date().toISOString().replace(/[:.]/g, "-")}`);
 const FRAMES = join(OUT, "frames");
 const live = process.argv.includes("--live");
 const SAMPLE_BILL = "data/sample-bills/mission-dumplings-baycurrent-2026-09.pdf";
@@ -45,7 +47,7 @@ const click = async (kind: string, target: Locator) => {
   await log(kind, target);
   await target.click();
 };
-type Live = { run: { status: string } | null; calls: { endedAt: string | null }[] };
+type Live = { run: { status: string } | null; calls: TakeCall[] };
 const liveOf = async (page: Page) => (await (await page.request.get(`${BASE}/api/live`)).json()) as Live;
 const runStatus = async (page: Page) => (await liveOf(page)).run?.status;
 
@@ -88,8 +90,10 @@ async function signUp(page: Page, who: typeof LINDA, filmed: boolean) {
   await page.waitForURL(`${BASE}/onboarding`);
 }
 
-rmSync(OUT, { recursive: true, force: true });
-mkdirSync(FRAMES, { recursive: true });
+mkdirSync("video/out", { recursive: true });
+mkdirSync(OUT); // throws if it exists
+mkdirSync(FRAMES);
+console.info(`writing ${OUT}`);
 // Without the flag, headless screencast frames come at CSS size (1920x1080) even with deviceScaleFactor 2.
 const browser = await chromium.launch({ args: ["--mute-audio", "--force-device-scale-factor=2"] });
 const fresh = async (): Promise<[BrowserContext, Page]> => {
@@ -162,15 +166,15 @@ try {
   let callSeen = false;
   let callEnded = false;
   // The feed, not the panel: a live call shows no transcript until it ends, a sim call streams one.
-  let live: Live;
-  while ((live = await liveOf(linda)).run?.status === "running") {
+  let snap: Live;
+  while ((snap = await liveOf(linda)).run?.status === "running") {
     if (Date.now() > deadline) throw new Error("Run still running 8 minutes after Approve; is the webhook process alive?");
     if (await linda.getByTestId("speech-unavailable").isVisible()) throw new Error("Speech-unavailable text on screen");
-    if (!callSeen && live.calls.length) {
+    if (!callSeen && snap.calls.length) {
       callSeen = true;
       await log("call-start", callPanel);
     }
-    if (callSeen && !callEnded && live.calls.every((call) => call.endedAt)) {
+    if (callSeen && !callEnded && snap.calls.every((call) => call.endedAt)) {
       callEnded = true;
       await log("call-end", callPanel);
     }
@@ -195,6 +199,10 @@ try {
 
   assert.equal(await linda.getByTestId("replay-banner").count(), 0, "a REPLAY banner was on screen");
   assert.equal(status, "success");
+  if (live) {
+    const problem = liveCallProblem((await liveOf(linda)).calls);
+    assert.ok(!problem, `not a live take: ${problem}`);
+  }
   assert.deepEqual(seen, EXPECTED);
   console.info(`Take done: ${frames.length} frames, ${((frames.at(-1)!.ts - origin) / 1000).toFixed(1)} s, Overview ${JSON.stringify(seen)}`);
 } finally {
