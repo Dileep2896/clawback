@@ -369,3 +369,33 @@ Orchestrator decisions:
 **depends on:** product-polish
 
 **parallel with:** demo-video, landing-pages
+
+### `agents-redesign`
+
+**Goal:** Redesign the live agents page (`/agents`), which is the screen judges watch longest, both on stage and in the sandbox. Human, 2026-11-07, on a screenshot of the sandbox `/agents` (`docs/plan/agents-before.png`): "what's this UI, it's sooooooo bad."
+
+What is wrong in the screenshot (orchestrator read):
+- A huge amber banner in 30px bold across the top shouts louder than the product.
+- Eight equal panels in a grid, most saying "No … yet", each with its own scrollbar; text truncated ("Identify cust…", "Download…"); the page reads as a debug console, not a product.
+- "Platform: local" is shown to judges on a page hosted on naïve; raw tool names in the audit log ("board_update", "portal_login") break mid-word.
+- Bold everywhere; no hierarchy; no single place to look; the mechanical "Human actions 00" drums sit oddly beside a "Demo data" pill.
+
+Orchestrator decisions:
+- **One story, one focus.** Left column (about 360px): the agent timeline, one row per agent in run order (Intake, Collector, Auditor, Approver, Negotiator, Filer, Finance; CEO as the header): status dot (blue pulsing only while working, lime done, amber waiting on the human, coral failed), name, current action in plain words on up to two lines, elapsed time. Right: a large **"Now"** pane showing what the active agent is doing, at real size: the bill and the kWh chart while auditing, the finding with its dollar figure, the approval card (the one amber element, with the Approve button) while waiting, the call with an animated waveform and the transcript streaming, the ledger filling with lime figures at the end. Finished steps collapse into the timeline; nothing empty is ever shown.
+- **Run header,** one line: run status, elapsed, money found so far (lime, Source Serif, counts up), human actions as "1 human action" text (keep the meaning, drop the drum widget here), run cost. Drop "Platform"; drop the board panel (the timeline replaces it).
+- **Audit log:** collapsed by default under the Now pane ("Show the full log, 42 entries"), plain-language actions ("Logged in to the BayCurrent portal") with the tool name in small mono after it, no mid-word breaks.
+- **Sandbox banner:** a slim one-line bar (about 36px, 14px text, sheet colour with an amber dot): "Sandbox · a recorded audit replayed for you at 2× ·  Watch it again". The banner code lives on `fleet/judge-link`: merge main after `judge-link` ships and restyle it then.
+- Same theme tokens; Hallmark rules (no side stripes, one meaning per colour, 600 weight for titles only, 14px base, motion 200–600 ms ease-out, reduced motion shows finished states). Works for a live local run, the stage replay and the judge sandbox.
+- Then run a Hallmark audit of every other in-app page (Overview, Bills, Findings, Money) at 1440 and 390 and fix anything at "critical" or "major".
+
+**Acceptance checks:**
+- Screenshots at 1920x1080 (stage) and 1440x900 at five moments (start, finding, approval, call, done) and at 390x844, sandbox and local; a before/after pair against `docs/plan/agents-before.png`.
+- No panel shows an empty "No … yet" state; no truncated agent action; no horizontal scroll.
+- The stage script in `docs/plan/rehearsal-notes.md` still passes in sim (`scripts/rehearse-stage.ts`), browser muted.
+- `pnpm test`, lint, typecheck (root and dashboard) pass.
+
+**Estimate:** 2.5 hours
+
+**depends on:** product-polish
+
+**parallel with:** judge-link (merge main after it ships)
