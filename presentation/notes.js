@@ -21,7 +21,7 @@ window.NOTES = {
  "11.0": "The business model is simple. We keep thirty percent of what we recover.",
  "11.1": "Nothing up front, and nothing at all if nothing comes back.",
  "11.2": "At thirty percent, the ceiling is one point seven to five point one billion dollars a year. A ceiling, not a forecast.",
- "11.3": "And there is early interest: we emailed small businesses, and three of them agreed to try Clawback.",
+ "11.3": "And early interest: I reached out to ten small businesses near my house, and three agreed to try Clawback.",
  "12.0": "Clawback runs on naïve.",
  "12.1": "The nine agents run as one naïve team, every action is gated and audited, and each run is capped at two dollars.",
  "12.2": "You can try it right now. It's live as a naïve App, and the link is on the screen.",
