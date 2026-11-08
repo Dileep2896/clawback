@@ -1,0 +1,62 @@
+{
+  "scenes": [
+    { "id": "1-problem", "title": "Landing hero, market card", "vo": "V1.m4a", "voSec": 13.44, "footage": { "from": "landing", "offsetSec": -0.3 }, "cards": [{ "kind": "market", "from": "a wrong meter reading", "step": "billions" }] },
+    { "id": "2-title", "title": "Clawback title card", "vo": "V2.m4a", "voSec": 7.32, "card": "title" },
+    {
+      "id": "3-signup", "title": "Sign-up and upload", "vo": "V3.m4a", "voSec": 9.66,
+      "footage": { "from": "onboarding", "offsetSec": -2.4 },
+      "highlights": [
+        { "say": "upload a bill", "box": "upload-field" },
+        { "say": "provider login", "box": "provider-login" }
+      ]
+    },
+    {
+      "id": "4-agents", "title": "Collector, Auditor, kWh chart", "vo": "V4.m4a", "voSec": 19.35,
+      "footage": { "from": "agents-before" },
+      "highlights": [
+        { "say": "collector", "to": "pulls", "box": "collector-row" },
+        { "say": "two years of bills and meter data", "box": "collector-bills" },
+        { "say": "auditor", "to": "checks", "box": "auditor-row" },
+        { "say": "every line against the tariff", "box": "finding" },
+        { "say": "since the meter was changed in september 2025", "box": "swap-marker" },
+        { "say": "fremont store", "box": "fremont" },
+        { "say": "double the electricity", "to": "it used", "box": "kwh-bars" }
+      ]
+    },
+    {
+      "id": "5-approval", "title": "Linda approves", "vo": "V5.m4a", "voSec": 7.68,
+      "footage": { "from": "approve", "atWord": "tap" },
+      "highlights": [
+        { "say": "asks the owner once", "box": "approval-card" },
+        { "say": "one tap", "box": "approve-button" }
+      ]
+    },
+    {
+      "id": "6-call-opens", "title": "Call panel opens", "vo": "V6.m4a", "voSec": 4.65,
+      "footage": { "from": "approve", "offsetSec": 2.13 },
+      "highlights": [{ "say": "picks up the phone", "box": "call-head" }]
+    },
+    { "id": "7-call", "title": "Real call audio, no voiceover", "sec": 21, "footage": { "from": "approve", "offsetSec": 7.28 }, "zoom": { "at": "call-head", "scale": 1.45, "offsetSec": -10 }, "callAudio": { "fromSec": 6.9 }, "label": "Real call, recorded live · call continues, 2:28 total", "emailCardAtSec": 17 },
+    {
+      "id": "8-findings", "title": "Findings: lines, promos, the claim", "vo": "V7.m4a", "voSec": 11.97,
+      "footage": { "from": "findings" },
+      "highlights": [
+        { "say": "7 lines nobody uses", "box": "cancelled-lines" },
+        { "say": "3 expired promotions", "box": "promos" },
+        { "say": "the filer files the overbilling claim", "to": "rule", "box": "claim-row" }
+      ]
+    },
+    {
+      "id": "9-money", "title": "Overview: refund, savings, fee", "vo": "V8.m4a", "voSec": 11.99,
+      "footage": { "from": "overview" },
+      "highlights": [
+        { "say": "$12,600", "to": "back", "box": "overview-refund", "count": true },
+        { "say": "$18,000 a year", "to": "saved", "box": "overview-savings" },
+        { "say": "30%", "to": "comes back", "box": "overview-fee" }
+      ],
+      "holdSec": 4.5,
+      "cards": [{ "kind": "model", "after": "actually comes back" }]
+    },
+    { "id": "10-close", "title": "Close card", "vo": "V9.m4a", "voSec": 6.46, "card": "close", "holdSec": 3.5, "cards": [{ "kind": "naive", "after": "Clawback" }] }
+  ]
+}

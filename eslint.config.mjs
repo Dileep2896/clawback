@@ -32,7 +32,7 @@ function boundary(packages) {
 }
 
 export default [
-  { ignores: ["**/node_modules/", "**/.next/", "**/dist/", "**/coverage/", "**/next-env.d.ts", "data/"] },
+  { ignores: ["**/node_modules/", "**/.next/", "**/dist/", "**/coverage/", "**/next-env.d.ts", "data/", "video/out/"] },
   ...tseslint.configs.recommended,
   {
     files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],
@@ -40,7 +40,7 @@ export default [
   },
   {
     // Build and test tools only; runtime browser use still goes through Browser (schedule.md decision 10).
-    files: ["scripts/**", "packages/db/src/seed/**", "apps/portal/e2e/**"],
+    files: ["scripts/**", "packages/db/src/seed/**", "apps/portal/e2e/**", "video/record/**"],
     rules: { "no-restricted-syntax": boundary(OTHER_PLATFORM_SDKS) },
   },
   {

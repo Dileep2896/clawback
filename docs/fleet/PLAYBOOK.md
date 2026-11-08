@@ -24,7 +24,7 @@ House rules every agent reads before working. Edit freely.
 - Import by subpath, such as `@bill-fighter/shared/allowlist`, which resolves to `src/allowlist.ts`. No barrel files.
 - Tests sit beside the code as `*.test.ts`. Portal browser tests live in `apps/portal/e2e/` and do not run under `pnpm test`.
 - Money is integer cents, and money math lives in `packages/core`.
-- Platform SDKs (Agent SDK, Playwright, nodemailer, node-cron, naïve) may only be imported inside `packages/platform`, enforced by lint. Playwright alone is also allowed in `scripts/`, `packages/db/src/seed/` and `apps/portal/e2e/`.
+- Platform SDKs (Agent SDK, Playwright, nodemailer, node-cron, naïve) may only be imported inside `packages/platform`, enforced by lint. Playwright alone is also allowed in `scripts/`, `packages/db/src/seed/` and `apps/portal/e2e/`, plus `video/record/` (the demo-video screencast recorder, outside the pnpm workspace).
 - Nothing may require `ANTHROPIC_API_KEY`. Local mode runs Claude through the local Claude Code login.
 
 ## Shared files
