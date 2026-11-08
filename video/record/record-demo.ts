@@ -1,7 +1,7 @@
 // Records the demo video's one take (.fleet-lane brief, docs/plan/demo-video.md) as CDP screencast frames plus an event log.
 // Before the take, not captured: Linda signs up, connects BayCurrent, starts the audit and waits at approval in her own context.
-// The take: landing hero, sample business signs up and uploads its bill, cut to Linda's Overview, Approve, /agents to Success,
-// the meter finding's kWh chart, Overview, Money. A copy of scripts/rehearse-stage.ts's flow, not an import (it has no exports).
+// The take: landing hero, sample business signs up and uploads its bill, cut to Linda on /agents: the Collector, the Auditor's
+// kWh chart, Approve in the amber card, the call in the Now pane to Success, then Overview, Money. A copy of scripts/rehearse-stage.ts's flow, not an import (it has no exports).
 // Run from the repo root after pnpm demo:reset, with dashboard, portal and webhooks up:
 // pnpm exec tsx --env-file-if-exists=.env video/record/record-demo.ts [--live]
 // --live needs VOICE_MODE=live here and on the webhook process, and places one real call. Writes a new gitignored video/out/take-<time>/.
@@ -136,32 +136,32 @@ try {
   const stopLinda = await capture(linda);
   await log("cut-to-linda");
 
-  // The Auditor's evidence, before the approval as in the story: the board so far, then the meter finding's kWh chart.
+  // /agents (timeline + Now pane) while the run waits on Linda: the Collector's view, then the Auditor's with the meter
+  // finding's kWh chart inline (the lead finding is the biggest refund), then back to the amber approval card.
   await linda.goto(`${BASE}/agents`);
-  await linda.getByText("No cards yet").waitFor({ state: "hidden" });
+  const now = linda.locator('section[aria-labelledby="now-title"]');
+  await linda.locator('section[data-moment="approval"]').waitFor();
+  await linda.evaluate(() => document.fonts.ready);
   await log("agents-before");
-  await linda.waitForTimeout(6000);
-  const meter = linda.locator("[data-finding]", { hasText: "Refund" }).first();
-  await click("finding", meter);
+  await log("money-found", linda.getByTestId("money-found"));
+  await linda.waitForTimeout(3000);
+  await click("collector", linda.locator('[data-agent-row="collector"]'));
+  await linda.waitForTimeout(5000);
+  await click("auditor", linda.locator('[data-agent-row="auditor"]'));
   await linda.getByTestId("kwh-plot").waitFor();
   await linda.waitForTimeout(800);
   await log("kwh-plot", linda.getByTestId("kwh-plot"));
-  await linda.waitForTimeout(12_000);
-  await click("evidence-close", linda.getByTestId("evidence-close"));
-  await think(linda);
-  await linda.goto(`${BASE}/overview`);
-  await linda.getByTestId("overview-approval").waitFor();
-  await log("approval", linda.getByTestId("overview-approval"));
+  await linda.waitForTimeout(11_000);
+  await click("follow-live", linda.getByRole("button", { name: "Follow live" }));
+  const card = linda.locator('section[aria-labelledby="approval-title"]');
+  await card.waitFor();
+  await log("approval", card);
   await linda.waitForTimeout(3000);
-  await click("approve", linda.getByTestId("overview-approve"));
-  await linda.getByTestId("overview-decision").waitFor({ timeout: 15_000 });
-  await log("approved", linda.getByTestId("overview-decision"));
-  await think(linda);
-  await linda.goto(`${BASE}/agents`);
-  await linda.getByText("No cards yet").waitFor({ state: "hidden" });
-  await log("agents");
-
-  const callPanel = linda.locator("section", { has: linda.getByRole("heading", { name: "Call", exact: true }) });
+  await click("approve", linda.getByTestId("approve"));
+  // Once approved, the Now pane leaves the approval for the next moment, so the card (and its decision line) unmounts.
+  await linda.locator('section[data-moment="approval"]').waitFor({ state: "detached", timeout: 15_000 });
+  assert.equal(await linda.getByTestId("approve-error").count(), 0, "Approve failed");
+  await log("approved", now);
   const deadline = Date.now() + 8 * 60_000;
   let callSeen = false;
   let callEnded = false;
@@ -172,11 +172,11 @@ try {
     if (await linda.getByTestId("speech-unavailable").isVisible()) throw new Error("Speech-unavailable text on screen");
     if (!callSeen && snap.calls.length) {
       callSeen = true;
-      await log("call-start", callPanel);
+      await log("call-start", now);
     }
     if (callSeen && !callEnded && snap.calls.every((call) => call.endedAt)) {
       callEnded = true;
-      await log("call-end", callPanel);
+      await log("call-end", now);
     }
     await linda.waitForTimeout(500);
   }

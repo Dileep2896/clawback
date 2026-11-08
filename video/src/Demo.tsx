@@ -3,12 +3,12 @@ import { AbsoluteFill, Series, staticFile, useCurrentFrame } from "remotion";
 import eventsFile from "../public/events.json";
 import transcript from "../public/call.transcript.json";
 import scenesFile from "../public/scenes.json";
-import { C, CallCaptions, Callout, Chip, Cursor, Grain, SANS, TitleCard, type Utterance, ZoomTo } from "./effects.tsx";
+import { C, CallCaptions, Callout, Chip, Cursor, EmailCard, Grain, SANS, TitleCard, type Utterance, ZoomTo } from "./effects.tsx";
 import { clicksIn, eventAt, type Ev, FPS, footageStartMs, layout, type Scene, sceneFrameOf, sceneFrames, stamp } from "./timeline.ts";
 
 export const scenes = scenesFile.scenes as Scene[];
 const events = eventsFile.events as Ev[];
-const CLICKS = ["get-started", "create-account", "upload-tab", "upload", "approve", "finding", "evidence-close"];
+const CLICKS = ["get-started", "create-account", "upload-tab", "upload", "collector", "auditor", "follow-live", "approve"];
 const LEAD = 10; // zooms lead the action by a third of a second
 const REFUND_CENTS = 1_260_606;
 
@@ -30,6 +30,7 @@ function SceneView({ s, start, rough }: { s: Scene; start: number; rough: boolea
       {s.vo && <Audio src={staticFile(`vo/${s.vo}`)} />}
       {s.callAudio && <Audio src={staticFile("call.wav")} trimBefore={Math.round(s.callAudio.fromSec * FPS)} />}
       {s.callAudio && <CallCaptions transcript={transcript as Utterance[]} fromSec={s.callAudio.fromSec} />}
+      {s.emailCardAtSec !== undefined && <EmailCard start={Math.round(s.emailCardAtSec * FPS)} />}
       {rate > 1 && <Chip>{rate}× speed</Chip>}
       {s.label && <Chip at="bottom-left">{s.label}</Chip>}
       {rough && (

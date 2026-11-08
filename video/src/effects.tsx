@@ -142,3 +142,25 @@ export function TitleCard({ kind }: { kind: "title" | "close" }) {
     </AbsoluteFill>
   );
 }
+
+/** "We also use email" as a motion note over the footage: in with an ease-out, held, out. Says nothing about this take's path. */
+export function EmailCard({ start, holdSec = 3 }: { start: number; holdSec?: number }) {
+  const { fps } = useVideoConfig();
+  const f = useCurrentFrame() - start;
+  const inF = Math.round(0.4 * fps);
+  const end = inF + Math.round(holdSec * fps);
+  const ease = { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) } as const;
+  const show = f < end ? interpolate(f, [0, inF], [0, 1], ease) : interpolate(f, [end, end + inF], [1, 0], ease);
+  if (f < 0 || show <= 0) return null;
+  return (
+    <div style={{ position: "absolute", top: 96, left: "50%", transform: `translate(-50%, ${(1 - show) * 24}px)`, opacity: show, display: "flex", alignItems: "center", gap: 20, padding: "22px 34px", borderRadius: 18, background: "rgb(20 26 33 / 0.94)", border: `1px solid ${C.line}`, boxShadow: "0 18px 50px rgb(0 0 0 / 0.45)", fontFamily: SANS, fontSize: 40, color: C.ink, whiteSpace: "nowrap" }}>
+      <svg width="46" height="34" viewBox="0 0 46 34" aria-hidden="true">
+        <rect x="2" y="2" width="42" height="30" rx="4" fill="none" stroke={C.agent} strokeWidth="3" />
+        <path d="M3 4 L23 19 L43 4" fill="none" stroke={C.agent} strokeWidth="3" strokeLinejoin="round" />
+      </svg>
+      <span>
+        <b style={{ color: C.agent }}>Prefer email?</b> Clawback can email the provider instead.
+      </span>
+    </div>
+  );
+}

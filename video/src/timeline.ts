@@ -17,6 +17,8 @@ export type Scene = {
   callAudio?: { fromSec: number };
   label?: string;
   marker?: string;
+  /** The "we also email" motion note, in at this second of the scene. */
+  emailCardAtSec?: number;
 };
 
 export const FPS = 30;
