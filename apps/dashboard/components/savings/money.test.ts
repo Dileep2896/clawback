@@ -34,3 +34,20 @@ it("plots only the customer's money, one step per refund or savings row", () => 
   ];
   expect(moneyCurve(rows)).toEqual([0, 100, 150]);
 });
+
+it("labels the totals as all audits, since the ledger holds every run the customer has had", () => {
+  const row = (id: string, kind: string, amountCents: number, findingId: string | null) => ({ id, kind, amountCents, findingId, createdAt: "2026-11-01T00:00:00.000Z" });
+  // Two audits' rows: the ledger is per customer, not per run.
+  const snapshot = {
+    run: { id: "run-2" },
+    ledger: [row("a", "refund", 10000, "f1"), row("b", "fee", 3000, null), row("c", "refund", 5000, "f2"), row("d", "fee", 1500, null)],
+    findings: [],
+    findingSites: {},
+    approval: null,
+    actions: [],
+  } as unknown as Snapshot;
+  const html = renderToStaticMarkup(createElement(MoneyView, { snapshot }));
+  expect(html).toContain("All audits");
+  expect(html).not.toContain("This audit");
+  expect(html).toMatch(/data-testid="money-refund"[^>]*>\$150\.00</);
+});

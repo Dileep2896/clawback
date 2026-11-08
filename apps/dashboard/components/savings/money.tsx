@@ -89,7 +89,7 @@ export function MoneyView({ snapshot }: { snapshot: Snapshot | null | undefined 
                   <h2 id="keeps-title" className="font-semibold text-faded">
                     You keep
                   </h2>
-                  <span className="rounded-full border border-line px-3 py-0.5 text-[13px] font-semibold text-faded">This audit</span>
+                  <span className="rounded-full border border-line px-3 py-0.5 text-[13px] font-semibold text-faded">All audits</span>
                 </div>
                 <p data-testid="money-keeps" className="mt-3 font-figure text-[3.5rem] leading-none text-money">
                   {view.customerKeepsCents === null ? NOT_RECORDED : money(view.customerKeepsCents)}

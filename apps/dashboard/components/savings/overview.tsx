@@ -137,7 +137,7 @@ export function Overview() {
             </p>
             {view.refundCents > 0 && (
               <p className="mt-4 font-semibold text-money">
-                + {money(view.refundCents)} refund claimed <span className="font-normal text-faded">this audit</span>
+                + {money(view.refundCents)} refund claimed <span className="font-normal text-faded">across all audits</span>
               </p>
             )}
             <div className="mt-auto pt-6">
