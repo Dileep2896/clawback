@@ -305,12 +305,11 @@ Orchestrator decisions:
 - **Illustrations and motion:** hand-built SVG and CSS in the theme colours (lime money, blue agents, coral wrong numbers, amber pending), no stock art, no AI images, no emoji. Motion ease-out, 200–600 ms, plays when on screen, finished state under prefers-reduced-motion. Every page looks complete at t=0.
 - Run the Hallmark slop test and the design study's anti-patterns list on each page.
 - **Fifth page, `/naive` ("Built on naïve"), added by the human on 2026-11-07: "Add a page how we used naive in our project in the landing page."** Linked from the landing footer and the How it works page (not a top nav link unless it fits cleanly). Honest and specific, sourced from `docs/plan/naive-notes.md`, `docs/plan/naive-endpoints.md` and `docs/plan/naive-rehearsal-notes.md` (on main once `naive-runtime-cost` ships; read it from branch `fleet/naive-runtime-cost` until then):
-  - What runs on naïve: each agent as a naïve agent (`clawback-<agent>`) with a CEO coordinator delegating to members, our tools served to it over MCP, gated tools set to `ask` so one human approval releases the bundle, audit and budget caps per run, every session cancelled on stop. Draw it as an architecture diagram (naïve side vs our side, the tunnel between them).
-  - What we measured: the full audit run on naïve (19 of 19 actions, success, 13:33, $1.70) next to the local run, and what we learned about paused tool calls (the flag probe). Real numbers only.
-  - What stays on our side and why: voice calls (Retell and Vapi; naïve has no voice), the virtual card (naïve card issuing returned 501), outbound SMS (501), the provider portal and its browser login. Say it plainly.
-  - One switch: the same agents run with `PLATFORM=naive` or `PLATFORM=local`; the stage demo uses local because a naïve run takes about 13 minutes.
+  - What runs on naïve: each agent as a naïve agent (`clawback-<agent>`) with a CEO coordinator delegating to members, our tools served to it over MCP, gated tools set to `ask` so one human approval releases the bundle, audit and budget caps per run, every session cancelled on stop. Draw it as a diagram of the agents and tools on naïve.
+  - What we measured on naïve: the full audit run (19 of 19 actions, success) with its real cost and time, and the run cap. Real numbers only.
+  - Human, 2026-11-07: "Don't mention about what's on our side, just add how we use naive". The page covers only how we use naïve: no section on what runs elsewhere, no local-vs-naïve comparison, no PLATFORM switch, no list of naïve features we don't use.
   - Same theme, motion and illustration rules as the other pages; no naïve logo unless their brand page allows it (link to usenaive.ai instead).
-- Footer line on the landing: "Agents run on naïve or locally." linking to `/naive`.
+- Footer line on the landing: "Built on naïve" linking to `/naive`.
 
 **Acceptance checks:**
 - Four routes render with no console errors and link from the landing nav and footer.
