@@ -18,7 +18,7 @@ function StatementLine({ label, note, testId, children }: { label: string; note?
         <span>{label}</span>
         {note && <span className="block text-faded">{note}</span>}
       </dt>
-      <dd data-testid={testId} className="font-figure text-page leading-none whitespace-nowrap">
+      <dd data-testid={testId} className="font-figure text-body leading-none whitespace-nowrap">
         {children}
       </dd>
     </div>

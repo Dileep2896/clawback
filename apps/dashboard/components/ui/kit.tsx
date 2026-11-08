@@ -38,12 +38,12 @@ export function Card({ title, actions, className = "", children }: { title?: str
   );
 }
 
-/** One figure: money in the green serif, anything else in plain ink. 20 px, because each page has only one larger (hero) figure. */
+/** One figure: money in the green serif, anything else in plain ink. Body size, because each page has only one larger (hero) figure. */
 export function StatTile({ label, value, note, tone = "plain", testId }: { label: string; value: string; note?: string; tone?: "money" | "plain"; testId?: string }) {
   return (
     <div className="rounded-card border border-line bg-sheet p-6">
       <p className="text-label text-faded">{label}</p>
-      <p data-testid={testId} className={`mt-2 font-figure text-page ${tone === "money" ? "text-money" : ""}`}>
+      <p data-testid={testId} className={`mt-2 font-figure text-body ${tone === "money" ? "text-money" : ""}`}>
         {value}
       </p>
       {note && <p className="mt-1 text-label text-faded">{note}</p>}

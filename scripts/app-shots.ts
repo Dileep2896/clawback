@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 // Screenshots every signed-in app page and the sign-up and log-in pages at 1440x900 and 390x844 (full page), for before/after comparisons.
-// Also reports text the app type scale does not allow: under 12px, or over 20px outside the one [data-hero-figure].
+// Also reports text the app type scale does not allow: under 12px, over 20px outside the one [data-hero-figure], or money off body size.
 // pnpm dev:dashboard must be running, with a finished run in the database (scripts/agents-shots.ts leaves one).
 // pnpm exec tsx --env-file-if-exists=.env scripts/app-shots.ts <folder> [--no-check]
 import { mkdir } from "node:fs/promises";
@@ -33,6 +33,8 @@ const offScale = (page: Page) =>
       if (style.visibility === "hidden" || style.display === "none" || el.getClientRects().length === 0) continue;
       const px = Number.parseFloat(style.fontSize);
       if (px < 12 || px > 20) found.add(`${px}px: ${text.slice(0, 40)}`);
+      // Every money figure but the hero sits at body size (14px), not just under the 20px ceiling.
+      else if (el.closest(".font-figure") && px !== 14) found.add(`${px}px money, not body size: ${text.slice(0, 40)}`);
     }
     return [...found];
   });

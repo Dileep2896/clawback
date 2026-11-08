@@ -43,7 +43,7 @@ function Line({ label, note, testId, children }: { label: string; note?: string;
         <span>{label}</span>
         {note && <span className="block text-body text-faded">{note}</span>}
       </dt>
-      <dd data-testid={testId} className="font-figure text-page leading-none whitespace-nowrap">
+      <dd data-testid={testId} className="font-figure text-body leading-none whitespace-nowrap">
         {children}
       </dd>
     </div>
@@ -156,7 +156,7 @@ export function MoneyView({ snapshot }: { snapshot: Snapshot | null | undefined 
               </div>
               <div>
                 <dt className="text-faded">Amount</dt>
-                <dd data-testid="money-invoice-amount" className="font-figure text-page leading-tight">
+                <dd data-testid="money-invoice-amount" className="font-figure text-body leading-tight">
                   {money(invoice.amountCents)}
                 </dd>
               </div>

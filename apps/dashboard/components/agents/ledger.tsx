@@ -17,7 +17,7 @@ function Total({ label, testId, cents, keeps }: { label: string; testId: string;
             {NOT_RECORDED}
           </span>
         ) : (
-          <CountUp cents={cents} testId={testId} className={`font-figure text-page ${keeps ? "text-money" : ""}`} />
+          <CountUp cents={cents} testId={testId} className={`font-figure text-body ${keeps ? "text-money" : ""}`} />
         )}
       </dd>
     </div>

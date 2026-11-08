@@ -93,7 +93,7 @@ export function EvidenceDrawer({
             <h3 id="evidence-title" className="mt-1 text-page font-semibold">
               {finding.title}
             </h3>
-            {amount && <p className="mt-1 font-figure text-page text-money">{amount}</p>}
+            {amount && <p className="mt-1 font-figure text-body text-money">{amount}</p>}
           </div>
           {nav && (
             <div className="flex items-center gap-1">
