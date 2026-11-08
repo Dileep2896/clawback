@@ -44,7 +44,7 @@ function ApprovalCard() {
           </Button>
         )}
       </div>
-      {replay && <p className="mt-3 font-semibold">Waiting for the recorded reply</p>}
+      {replay && <p className="mt-3 font-semibold text-warn">Waiting for the recorded reply</p>}
       {stopped && (
         <p role="alert" className="mt-3 font-semibold text-alert">
           {STOPPED_TEXT}

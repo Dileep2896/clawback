@@ -258,13 +258,11 @@ async function checkCallStates(browser: Browser) {
   assert.equal((await page.locator("main").innerText()).includes("PARTIAL ATTEMPT"), false);
   await shot(page, "call-failed");
 
-  // Dark.
-  await page.getByTestId("theme-toggle").click();
+  // Refused.
   state.calls = [call("sim-1", "sim", [DISCLOSURE, FALLBACK, MENU, PRESS, REFUSED])];
   await page.locator('[data-call-row="refused"]').waitFor({ timeout: 5000 });
-  await checkFits(page, "dark");
-  await shot(page, "call-dark");
-  await page.getByTestId("theme-toggle").click();
+  await checkFits(page, "refused");
+  await shot(page, "call-refused");
   await page.context().close();
 }
 

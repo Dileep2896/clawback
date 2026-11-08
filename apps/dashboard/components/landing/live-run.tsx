@@ -79,7 +79,7 @@ function Feed({ t }: { t: number }) {
               <span className="flex items-center gap-2">
                 <span
                   aria-hidden="true"
-                  className={`size-2 shrink-0 rounded-full ${on ? "live-pulse bg-ink" : entry.found ? "bg-alert" : "bg-line"}`}
+                  className={`size-2 shrink-0 rounded-full ${on ? "live-pulse bg-agent" : entry.found ? "bg-alert" : "bg-line"}`}
                 />
                 <span className="font-semibold">{entry.agent}</span>
               </span>
@@ -169,11 +169,11 @@ export function LiveRun() {
             </div>
           </div>
 
-          {/* The one loud card: the approval, with its money-green rule. */}
-          <div className="rounded-[10px] border border-line border-l-4 border-l-money p-4">
+          {/* The one loud card: the approval, with the approval colour's rule. */}
+          <div className="rounded-[10px] border border-line border-l-4 border-l-warn p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="font-semibold">Approval</p>
-              <p className="rounded-full bg-money-soft px-2.5 text-[13px] font-semibold text-money">Approved by Linda Park, by SMS</p>
+              <p className="rounded-full border border-line px-2.5 text-[13px] font-semibold">Approved by Linda Park, by SMS</p>
             </div>
             <ul className="mt-2 grid gap-0.5 text-[14px] text-faded">
               <li>We will file 1 Rule 17.1 refund claim.</li>

@@ -189,13 +189,6 @@ async function checkThousands(page: Page) {
   console.info(`/api/live ${Math.round(pollMs)}ms and a new row on screen in ${Math.round(appearMs)}ms, with ${total} rows`);
 }
 
-async function checkDark(page: Page) {
-  await page.getByTestId("theme-toggle").click();
-  await checkFits(page, "dark");
-  await shot(page, "dark");
-  await page.getByTestId("theme-toggle").click();
-}
-
 async function checkNoFeeRowYet(page: Page) {
   const live = (await fetchLive(page)) as Live & Record<string, unknown>;
   live.ledger = live.ledger.filter((row) => row.kind !== "fee");
@@ -248,7 +241,6 @@ try {
   await checkAuditColumns(page);
   await checkVault(page);
   await checkThousands(page);
-  await checkDark(page);
   await checkNoFeeRowYet(await context.newPage());
   await checkEmpty(await context.newPage());
   await checkSample(page);

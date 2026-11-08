@@ -104,7 +104,7 @@ export function Bento() {
         <Reveal className="grid gap-4">
           <div aria-hidden="true" className="flex h-12 items-center gap-[3px]">
             {WAVE.map((height, i) => (
-              <span key={i} className="wave-bar w-1 rounded-full bg-ink/70" style={{ height: `${height * 3}px`, animationDelay: `${(i % 7) * 70}ms` }} />
+              <span key={i} className="wave-bar w-1 rounded-full bg-agent" style={{ height: `${height * 3}px`, animationDelay: `${(i % 7) * 70}ms` }} />
             ))}
             <span className="ml-3 text-[13px] text-faded">BayTel Business · recorded</span>
           </div>

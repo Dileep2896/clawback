@@ -32,8 +32,8 @@ export function KwhLines({ compact = false }: { compact?: boolean }) {
         </>
       )}
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="reveal-draw absolute inset-0 size-full overflow-visible" aria-hidden="true">
-        <path d={GAP} className="fill-alert/12" />
-        <path d={line("meter")} fill="none" className="stroke-ink" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+        <path d={GAP} className="fill-warn/25" />
+        <path d={line("meter")} fill="none" className="stroke-agent" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
         <path d={line("billed")} fill="none" className="stroke-alert" strokeWidth={compact ? 2 : 2.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
       </svg>
       {!compact && (

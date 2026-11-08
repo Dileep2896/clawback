@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 import { logOutAction } from "../../app/(auth)/actions.ts";
 import { Wordmark } from "./kit.tsx";
 
@@ -13,29 +12,6 @@ export const NAV = [
   { href: "/agents", label: "Agents" },
   { href: "/money", label: "Money" },
 ];
-
-function ThemeToggle() {
-  const [dark, setDark] = useState(false);
-  useEffect(() => setDark(document.documentElement.dataset.theme === "dark"), []);
-
-  function toggle() {
-    const next = !dark;
-    setDark(next);
-    if (next) document.documentElement.dataset.theme = "dark";
-    else delete document.documentElement.dataset.theme;
-    try {
-      localStorage.setItem("theme", next ? "dark" : "light");
-    } catch {
-      // Storage can be blocked. The theme still changes for this visit.
-    }
-  }
-
-  return (
-    <button type="button" data-testid="theme-toggle" onClick={toggle} className="min-h-11 cursor-pointer rounded-control px-3 font-semibold whitespace-nowrap hover:bg-paper">
-      {dark ? "Light theme" : "Dark theme"}
-    </button>
-  );
-}
 
 /** The signed-in top bar. 56 px tall at desktop; on /agents its text steps up to the projector floor of 22 px. */
 export function AppNav() {
@@ -56,7 +32,7 @@ export function AppNav() {
                 <Link
                   href={item.href}
                   aria-current={current ? "page" : undefined}
-                  className={`flex min-h-11 items-center border-b-[3px] px-3 font-semibold whitespace-nowrap md:h-14 ${current ? "border-action text-ink" : "border-transparent text-faded hover:text-ink"}`}
+                  className={`flex min-h-11 items-center border-b-[3px] px-3 font-semibold whitespace-nowrap md:h-14 ${current ? "border-agent text-ink" : "border-transparent text-faded hover:text-ink"}`}
                 >
                   {item.label}
                 </Link>
@@ -69,7 +45,6 @@ export function AppNav() {
         <span data-testid="demo-data" className="rounded-full border border-line px-3 py-0.5 font-semibold whitespace-nowrap text-faded">
           Demo data
         </span>
-        <ThemeToggle />
         <form action={logOutAction}>
           <button type="submit" data-testid="log-out" className="min-h-11 cursor-pointer rounded-control px-3 font-semibold whitespace-nowrap hover:bg-paper">
             Log out

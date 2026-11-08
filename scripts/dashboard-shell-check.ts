@@ -24,7 +24,6 @@ const seeText = (page: Page, testId: string, text: string) =>
   page.getByTestId(testId).filter({ hasText: text }).waitFor({ state: "attached", timeout: 5000 });
 
 // Browser code goes in as strings, because the root tsconfig has no DOM types and this is the only file that wants them.
-const CURRENT_THEME = "document.documentElement.dataset.theme";
 const MEASURE_PAGE = `(() => {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   const found = [];
@@ -84,19 +83,6 @@ async function checkLiveUpdates(page: Page) {
   assert.equal(await page.evaluate("window.notReloaded"), true, "values must change with no page refresh");
   await page.waitForTimeout(800); // Let the drum finish rolling for the screenshot.
   await shot(page, "light-approved");
-}
-
-async function checkDarkTheme(page: Page) {
-  await page.getByTestId("theme-toggle").click();
-  assert.equal(await page.evaluate(CURRENT_THEME), "dark");
-  await checkFitsOneScreen(page, "dark");
-  await shot(page, "dark-approved");
-
-  await page.reload();
-  await seeText(page, "customer", "Golden Gate Noodle Co.");
-  assert.equal(await page.evaluate(CURRENT_THEME), "dark", "dark theme must survive a reload");
-  await page.getByTestId("theme-toggle").click();
-  assert.equal(await page.evaluate(CURRENT_THEME), undefined);
 }
 
 async function checkConnectionLoss(page: Page) {
@@ -259,7 +245,6 @@ const browser = await chromium.launch();
 try {
   const page = await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage();
   await checkLiveUpdates(page);
-  await checkDarkTheme(page);
   await checkConnectionLoss(page);
 
   const fresh = await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage();

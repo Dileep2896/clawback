@@ -96,7 +96,7 @@ export default function Landing() {
 
         {/* The product on a dark canvas, running past the fold. */}
         <div className={WIDTH}>
-          <div className="canvas rounded-[16px] bg-band p-3 sm:p-6 lg:p-10">
+          <div className="canvas rounded-[16px] border border-line bg-paper p-3 sm:p-6 lg:p-10">
             <LiveRun />
           </div>
         </div>
@@ -194,12 +194,12 @@ export default function Landing() {
           </div>
         </section>
 
-        <section aria-labelledby="cta" className="band canvas bg-band text-band-text">
+        <section aria-labelledby="cta" className="canvas border-y border-line bg-sheet">
           <div className={`${WIDTH} flex flex-wrap items-center justify-between gap-8 py-20 lg:py-28`}>
             <h2 id="cta" className="max-w-[22ch] text-[clamp(2rem,3.4vw,3rem)] leading-[1.1] font-semibold tracking-[-0.02em]">
               You only pay from what comes back.
             </h2>
-            <ButtonLink href="/signup" className="min-h-12 bg-band-money! px-5 text-band! hover:brightness-110">
+            <ButtonLink href="/signup" className="min-h-12 px-5">
               Start my audit
             </ButtonLink>
           </div>
