@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countsInLedger, customerKeepsCents, feeCents, splitFee } from "./fee.ts";
+import { countsInLedger, customerKeepsCents, feeByLine, feeCents, splitFee } from "./fee.ts";
 
 describe("splitFee", () => {
   it("splits the real figures to the cent", () => {
@@ -42,6 +42,29 @@ describe("feeCents", () => {
 
   it.each([-1, 101, 12.5, Number.NaN])("refuses a share of %s", (sharePct) => {
     expect(() => feeCents({ refundCents: 100, annualSavingsCents: 0, sharePct })).toThrow("Invalid savings share");
+  });
+});
+
+describe("feeByLine", () => {
+  it("gives each line its own 30% and the recorded run's lines add up to its fee", () => {
+    const linesCents = [1_260_606, 1_071_037, 504_000, 256_895];
+    const fees = feeByLine({ linesCents, totalFeeCents: 927_761, sharePct: 30 });
+    expect(fees).toEqual([378_182, 321_311, 151_200, 77_068]);
+    expect(fees.reduce((sum, fee) => sum + fee, 0)).toBe(927_761);
+  });
+
+  it("puts the rounding remainder on the last line", () => {
+    // 5 + 5 cents at 30% is a fee of 3, while each 5 alone rounds to 2.
+    expect(feeByLine({ linesCents: [5, 5], totalFeeCents: 3, sharePct: 30 })).toEqual([2, 1]);
+  });
+
+  it("handles no lines and one line", () => {
+    expect(feeByLine({ linesCents: [], totalFeeCents: 0, sharePct: 30 })).toEqual([]);
+    expect(feeByLine({ linesCents: [1_000], totalFeeCents: 300, sharePct: 30 })).toEqual([300]);
+  });
+
+  it("refuses a total that is more than rounding away from the lines", () => {
+    expect(() => feeByLine({ linesCents: [1_000, 1_000], totalFeeCents: 700, sharePct: 30 })).toThrow("out of date");
   });
 });
 

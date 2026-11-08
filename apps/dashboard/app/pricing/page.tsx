@@ -1,6 +1,6 @@
 /* Hallmark · genre: modern-minimal (fintech) · macrostructure: intro → worked example (bar + statement) → when each part is due → counts / doesn't → FAQ
  * design-system: docs/plan/design.md */
-import { feeCents } from "@bill-fighter/core/money/fee";
+import { feeByLine, feeCents } from "@bill-fighter/core/money/fee";
 import type { Metadata } from "next";
 import { LABEL, MoreLink, PageIntro, SiteFrame, Statement, WIDTH } from "../../components/landing/chrome.tsx";
 import { KeepFeeBar, KeepFeeStatement } from "../../components/landing/keep-fee.tsx";
@@ -15,18 +15,14 @@ const SAVINGS_FEE = FEE_CENTS - REFUND_FEE;
 
 // The fee by finding, from the recorded run's ledger (the landing's Fig 5): each line is 30% of its own money, and the last
 // line takes the rounding cent, so the lines add up to the recorded fee and their savings to the first year's total.
-const FINDINGS = [
+const ROWS = [
   { label: "Fremont meter refund", part: "Refund", cents: REFUND_CENTS },
   { label: "Fremont meter fixed, first year", part: "Savings", cents: 1_071_037 },
   { label: "7 unused lines cancelled, first year", part: "Savings", cents: 504_000 },
   { label: "2 rate changes, first year", part: "Savings", cents: 256_895 },
-].map((row, i, rows) => ({
-  ...row,
-  fee:
-    i < rows.length - 1
-      ? feeCents({ refundCents: row.cents, annualSavingsCents: 0, sharePct: SHARE })
-      : FEE_CENTS - rows.slice(0, -1).reduce((sum, r) => sum + feeCents({ refundCents: r.cents, annualSavingsCents: 0, sharePct: SHARE }), 0),
-}));
+];
+const FEES = feeByLine({ linesCents: ROWS.map((row) => row.cents), totalFeeCents: FEE_CENTS, sharePct: SHARE });
+const FINDINGS = ROWS.map((row, i) => ({ ...row, fee: FEES[i] ?? 0 }));
 if (FINDINGS.filter((row) => row.part === "Savings").reduce((sum, row) => sum + row.cents, 0) !== YEARLY_CENTS)
   throw new Error("Pricing: the savings by finding no longer add up to the first year's savings");
 

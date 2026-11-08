@@ -21,5 +21,17 @@ export function splitFee({ totalFeeCents, wonCents, sharePct }: { totalFeeCents:
   return { dueNowCents, dueWhenGrantedCents: totalFeeCents - dueNowCents };
 }
 
+/** Each line's fee is its own share, and the last line takes the rounding remainder, so the fees add up to the recorded fee to the cent. */
+export function feeByLine({ linesCents, totalFeeCents, sharePct }: { linesCents: number[]; totalFeeCents: number; sharePct: number }) {
+  const fees = linesCents.map((cents) => feeCents({ refundCents: cents, annualSavingsCents: 0, sharePct }));
+  const own = fees.at(-1);
+  if (own === undefined) return fees;
+  const last = totalFeeCents - fees.slice(0, -1).reduce((sum, fee) => sum + fee, 0);
+  // Rounding each line moves the total by under a cent per line; more than that means the fee belongs to other lines.
+  if (Math.abs(last - own) >= fees.length) throw new Error(`Fee of ${totalFeeCents} cents does not match these lines, so the fee row is out of date`);
+  fees[fees.length - 1] = last;
+  return fees;
+}
+
 export const customerKeepsCents =({ refundCents, annualSavingsCents, feeCents: fee }: { refundCents: number; annualSavingsCents: number; feeCents: number }) =>
   refundCents + annualSavingsCents - fee;
