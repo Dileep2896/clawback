@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { agentRows, elapsed } from "./agents.ts";
+import { agentRows, ceoRow, elapsed, ROSTER } from "./agents.ts";
 
 type Input = Parameters<typeof agentRows>[0];
 
@@ -22,19 +22,40 @@ const input = {
   ],
 } as unknown as Input;
 
-it("gives each agent a row in the order it first acted, with no row for the CEO or the run card", () => {
+const view = (rows: ReturnType<typeof agentRows>) => rows.map((r) => [r.agent, r.state, r.action, r.elapsedSeconds]);
+
+it("lists every agent in run order, those still to come as next, with no row for the CEO or the run card", () => {
   const rows = agentRows(input);
-  expect(rows.map((r) => [r.agent, r.state, r.action, r.elapsedSeconds])).toEqual([
+  expect(rows.map((r) => r.agent)).toEqual(ROSTER);
+  expect(view(rows).slice(0, 3)).toEqual([
+    ["intake", "next", "", 0],
     ["collector", "done", "Download and store all bills and usage", 38],
-    ["finance", "queued", "Record savings and create invoice", 0],
     ["auditor", "working", "Parse bills and run audit", 22],
   ]);
-  expect(rows[0]!.calls.map((c) => c.tool)).toEqual(["download_bills", "portal_login"]);
+  // A card still to do is not a start.
+  expect(rows.find((r) => r.agent === "finance")).toMatchObject({ state: "next", action: "" });
+  expect(rows[1]!.calls.map((c) => c.tool)).toEqual(["download_bills", "portal_login"]);
 });
 
-it("falls back to the newest tool when an agent has no card", () => {
-  const rows = agentRows({ boardCards: [], auditLog: [call("x", "negotiator", "place_call", "2026-11-08T01:29:11Z")] } as unknown as Input);
-  expect(rows[0]).toMatchObject({ agent: "negotiator", state: "done", action: "place_call", elapsedSeconds: 0 });
+it("puts an agent outside the roster after it, and says what its newest tool did when it has no card", () => {
+  const rows = agentRows({ boardCards: [], auditLog: [call("x", "scout", "portal_login", "2026-11-08T01:29:11Z")] } as unknown as Input);
+  expect(rows.at(-1)).toMatchObject({ agent: "scout", state: "done", action: "Logged in to the provider's portal", elapsedSeconds: 0 });
+});
+
+it("shows the approver waiting on the owner while the approval is pending", () => {
+  const approving = { boardCards: [card("p", "approver", "doing", "Request owner approval", "2026-11-08T01:27:00Z")], auditLog: [] } as unknown as Input;
+  expect(agentRows({ ...approving, approvalPending: true }).find((r) => r.agent === "approver")!.state).toBe("waiting");
+  expect(agentRows(approving).find((r) => r.agent === "approver")!.state).toBe("working");
+});
+
+it("marks blocked agents, and agents left working by a stopped run, as failed", () => {
+  const blocked = { boardCards: [card("b", "negotiator", "blocked", "Call provider", "2026-11-08T01:27:00Z")], auditLog: [] } as unknown as Input;
+  expect(agentRows(blocked).find((r) => r.agent === "negotiator")!.state).toBe("failed");
+  expect(agentRows({ ...input, runActive: false }).find((r) => r.agent === "auditor")!.state).toBe("failed");
+});
+
+it("gives the CEO its own row from its own calls", () => {
+  expect(ceoRow(input)).toMatchObject({ agent: "ceo", state: "done", action: "Updated the plan" });
 });
 
 it("formats elapsed seconds as m:ss", () => {
