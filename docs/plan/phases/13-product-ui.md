@@ -451,3 +451,40 @@ Orchestrator decisions:
 ## Demo video re-record notes (human, 2026-11-08)
 - "I am happy with the UI too. Once everything is done, re-record our demo video and finalize it too." One live take on the final UI, reusing the nine voice clips; keep the old render as `~/Desktop/clawback-video/demo-final-v1.mp4`.
 - "in the demo we can just add the motion design text of we also use emails." The take stays a phone call. Add one short motion-graphic text overlay, no voiceover change: when the call scene ends (around scene 7 to 8), a small card animates in over the footage: an envelope icon and "Prefer email? Clawback can email the provider instead." in the theme fonts, lime or blue accent, ease-out 300–500 ms in, held about 3 s, out. Do not imply the email path ran in this take.
+
+### `presentation`
+
+**Goal:** A 4-minute stage deck in vanilla HTML, CSS and JS (no framework, no build step, no network), driven from the keyboard or a clicker, that a top company would be happy to present. Human, 2026-11-08: "let's create a presentation, Using HTML, CSS (vanilla html) where we can show presentation in about 4 minutes. I want to be any professional presentation where top companies uses. Like when I click next on my keyboard it should animate text, numbers and same with demo. We will show recorded demo, but by spiliting it (no extra edits, just the platform) we should start by US pay about 500 B in utilities where this much is missed and stuff then problem then introduce clawback then demo explanation and clouser."
+
+Human, 2026-11-08: "you don't need to run any review for this just build it and I will review it and tell you with any updates/changes." So: no fleet review rounds; build, self-check, then ask in questions.md for the human's look.
+
+Orchestrator decisions:
+- **Where:** `presentation/` at the repo root: `index.html`, `deck.css`, `deck.js`, `notes.md` (the spoken script), `make-clips.sh`, `README.md`. Clips go to `presentation/media/` (gitignored, made by the script). Copy the finished folder, clips included, to `~/Desktop/clawback-presentation/` so it runs offline: open `index.html` by double-click (file://), no server. Fonts are local files (the app's own fonts, licence permitting) or a system stack; nothing loads from the internet.
+- **Stage:** a fixed 1920×1080 stage scaled to fit any screen (letterboxed), dark theme tokens from `docs/plan/phases/13-product-ui.md` (bg #0B0F14, cards #141A21, borders #263040, text #E8EDF2, muted #8A96A6, lime #C6F432 money, blue #3BA7FF agents, coral #FF5C5C errors, amber #FFB547 pending). Big Samsung screens at the venue, so large type: nothing under 28px on the stage.
+- **Keys:** → Space PageDown Enter = next build step; ← PageUp = back; Home/End; F = fullscreen; S = presenter view (separate window: current and next step, notes, elapsed timer against 4:00); B = black screen; number + Enter = jump to slide. Clickers send PageDown/PageUp, so those must work. The URL hash keeps the slide and step so a reload resumes.
+- **Builds:** each Next reveals the next element with a short, calm animation (fade and rise, 300 to 500 ms, ease-out); numbers count up (for example $0 → $572B); diagram nodes appear in order. Back steps undo cleanly. Honour prefers-reduced-motion. Use the hallmark skill for the design pass; it should feel like a polished keynote, not a template.
+- **Demo, no extra edits:** cut the live take's raw platform recording `~/Desktop/clawback-video/raw-take-2026-11-08/footage-master.mp4` (3840×2160, 292 s, platform only, no captions, cards or voice; `events.json` and `scenes.json` beside it give the timestamps) into segments with `make-clips.sh` (ffmpeg, trim only, 1920×1080 H.264, no overlays). Next starts a clip; a clip can stop at pause points so the presenter talks over a still, and Next resumes. Long waits may play faster through `playbackRate` with a small visible "2×" tag (never hidden). The call segment plays a short excerpt of the real call audio (`call.wav`, transcript in `call.transcript.json`): the AI disclosure line and the cancellation confirmed, about 15 s in total; every other clip is muted.
+- **Story, about 4:00 (timings are a guide):**
+  1. Title: Clawback, "Built at the naïve x YC Autonomous Company Hackathon, November 7, 2026". (0:10)
+  2. Market: $572B a year US businesses pay for electricity, gas and phone; $5.7B to $17.2B of it billed wrong or on the wrong plan (1 to 3%). Figures and the source line come only from `apps/dashboard/components/landing/market.ts`, labelled Estimate. (0:25)
+  3. Problem: nobody checks; bills spread across providers; real kinds of error from our audit rules (doubled meter multiplier, unused phone lines, expired promotions, wrong rate plan); checking takes hours the owner doesn't have. (0:25)
+  4. Clawback: nine agents (CEO, Intake, Collector, Auditor, Filer, Approver, Negotiator, Finance, Monitor) built one by one, one approval from the owner. (0:25)
+  5. Demo in segments with one line each: sign-up and upload; Collector and Auditor with the kWh chart (the Fremont doubled meter); the approval card, one tap (Call or Email); the live call (with the audio excerpt); findings (7 lines cancelled, 3 expired promos flagged, the Rule 17.1 claim filed); Overview: $12,606.06 refund claimed, $18,319.32 a year saved. (about 2:00)
+  6. Business model: 30% of what we recover, nothing up front, nothing if nothing comes back; up to $1.7B to $5.1B a year at 30%, "ceiling, not a forecast". (0:15)
+  7. Runs on naïve: nine agents as one naïve team, every action gated and audited, $2 cap a run; try it: https://clawback-sandbox-2e3cr9qffcxs.vercel.app (a naïve App). Do not imply the recorded call ran on naïve. (0:10)
+  8. Close: "One approval. Everything else ran on its own." Clawback, the link, the GitHub repo. (0:10)
+- **Honesty:** demo data is labelled as demo data; "claimed" is never shown as "granted"; no invented numbers or logos; every figure traces to market.ts or the recorded run.
+- **Notes:** `notes.md` holds the full spoken script (about 140 words a minute, 4:00 total, about 560 words), split per build step; the presenter view shows the same text.
+- No spend: no model calls, no voice, no network. Browser muted for any automated checks.
+
+**Acceptance checks (self-checked, no fleet review):**
+- Opens offline from `~/Desktop/clawback-presentation/index.html` (file://) in Chrome; every clip plays.
+- A Playwright script steps through the whole deck at 1920×1080 and saves a screenshot per build step to `~/Desktop/clawback-presentation/steps/`; look at every one. Also check 1280×720 and 2560×1440 scale correctly.
+- Back from any step gives the same screen as reaching it forwards; reload keeps the place; PageDown/PageUp work.
+- A small check confirms every figure matches market.ts and the recorded run, and notes.md reads in 3:45 to 4:15 at 140 words a minute.
+
+**Estimate:** 2.5 hours
+
+**depends on:** demo-video (raw take copied to `~/Desktop/clawback-video/raw-take-2026-11-08/`)
+
+**parallel with:** demo-video

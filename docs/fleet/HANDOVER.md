@@ -44,3 +44,8 @@ Picked up 2026-11-06, still running 2026-11-07 about 02:30.
 - Before the live call, ask the human with credit stated. After it, report real cost and remaining credit.
 - Telegram MCP failed to connect this session; the human needs `/mcp` for updates there.
 - Known open: a SIGKILLed run reads running until demo:reset; a run can overshoot the budget by up to about $0.81; card_pay has no approval wording (naive lanes).
+
+## 2026-11-08 later
+- email-negotiator shipped (8963a1d), pushed to GitHub. Human ran pnpm sandbox:redeploy; two-judge check passed (desktop + phone, both success, $12,606.06 / $18,319.32 / $9,277.61), Call/Email choice live.
+- Human on the rough cut: "what i am telling and what needs to be highlighted/boxed is not done properly" -> demo-video re-times every highlight to Whisper word timings of V1-V9.
+- Human, terminal: "Go ahead with one live call." Passed to demo-video: one dial only, no redial on failure.
