@@ -87,10 +87,12 @@ function Feed({ t }: { t: number }) {
               {entry.detail && (
                 // The full line holds its space invisibly, so streaming it never moves the rows below.
                 <span className="mt-1 grid text-[14px]">
-                  <span className="invisible col-start-1 row-start-1">{entry.detail}</span>
+                  <span className="invisible col-start-1 row-start-1">{entry.quote ? `“${entry.detail}”` : entry.detail}</span>
                   <span className={`col-start-1 row-start-1 ${entry.found ? "text-alert" : ""}`}>
+                    {entry.quote && "“"}
                     {entry.detail.slice(0, shown)}
                     {on && shown < entry.detail.length && <span className="live-caret">▍</span>}
+                    {entry.quote && "”"}
                   </span>
                 </span>
               )}
@@ -111,7 +113,7 @@ export function LiveRun() {
       <figcaption className="sr-only">
         The Clawback Overview for the demo customer after one audit: a refund of {dollars(REFUND_CENTS)} claimed, {dollars(YEARLY_CENTS)} a year in
         savings, a fee of {dollars(FEE_CENTS)} and {dollars(KEEP_CENTS)} for the owner to keep. Beside it, the agents’ log from the recorded run:
-        {FEED.map((entry) => ` ${entry.at}, ${entry.agent}: ${entry.text}.${entry.detail ? ` ${entry.detail}` : ""}`).join("")}
+        {FEED.map((entry) => ` ${entry.at}, ${entry.agent}: ${entry.text}.${entry.detail ? (entry.quote ? ` “${entry.detail}”` : ` ${entry.detail}`) : ""}`).join("")}
       </figcaption>
 
       {/* The app's top bar: a breadcrumb, and Pause for the replay (WCAG 2.2.2). */}
@@ -169,11 +171,14 @@ export function LiveRun() {
             </div>
           </div>
 
-          {/* The one loud card: the approval, with the approval colour's rule. */}
-          <div className="rounded-[10px] border border-line border-l-4 border-l-warn p-4">
+          {/* The approval: a plain card, its status marked by the approval colour's dot. */}
+          <div className="rounded-[10px] border border-line p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="font-semibold">Approval</p>
-              <p className="rounded-full border border-line px-2.5 text-[13px] font-semibold">Approved by Linda Park, by SMS</p>
+              <p className="flex items-center gap-1.5 rounded-full border border-line px-2.5 text-[13px] font-semibold">
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-warn" />
+                Approved by Linda Park, by SMS
+              </p>
             </div>
             <ul className="mt-2 grid gap-0.5 text-[14px] text-faded">
               <li>We will file 1 Rule 17.1 refund claim.</li>

@@ -46,9 +46,9 @@ export default function Landing() {
 
   return (
     <div className="min-h-dvh overflow-x-clip">
-      <header className="sticky top-0 z-10 border-b border-line/70 bg-paper/80 backdrop-blur-md">
-        <div className={`${WIDTH} flex min-h-16 flex-wrap items-center gap-x-4 gap-y-2 py-2 sm:gap-x-8`}>
-          <a href="#top" className="shrink-0 rounded-control text-[1.25rem] sm:text-[1.375rem]">
+      <header className="sticky top-0 z-10 bg-paper/80 backdrop-blur-md">
+        <div className={`${WIDTH} flex h-16 items-center gap-x-2 min-[360px]:gap-x-4 sm:gap-x-8`}>
+          <a href="#top" className="shrink-0 rounded-control text-[1.125rem] min-[360px]:text-[1.25rem] sm:text-[1.375rem]">
             <Wordmark />
           </a>
           <nav aria-label="Sections" className="hidden md:block">
@@ -63,11 +63,15 @@ export default function Landing() {
             </ul>
           </nav>
           <nav aria-label="Account" className="ml-auto flex items-center gap-1">
-            <ButtonLink href="/login" variant="ghost" className="px-2 text-[15px] font-normal text-faded hover:text-ink sm:px-4" data-testid="log-in">
+            <ButtonLink href="/login" variant="ghost" className="text-[15px] font-normal text-faded hover:text-ink max-[360px]:px-1.5 min-[360px]:px-2 sm:px-4" data-testid="log-in">
               Log in
             </ButtonLink>
-            <ButtonLink href="/signup" className="px-3 text-[15px] sm:px-4" data-testid="get-started">
-              Start my audit
+            <ButtonLink href="/signup" className="text-[15px] max-[360px]:px-2.5" data-testid="get-started">
+              {/* Under 360px the header keeps one row: a shorter CTA, a smaller wordmark, tighter gaps. One span, so the
+                  button's flex gap doesn't split the words. */}
+              <span>
+                Start <span className="max-[360px]:hidden">my </span>audit
+              </span>
             </ButtonLink>
           </nav>
         </div>
@@ -215,7 +219,7 @@ export default function Landing() {
           </p>
         </div>
         <nav aria-label="Product" className="lg:col-span-3">
-          <p className={`${LABEL} text-faded`}>Product</p>
+          <p className="text-[15px] font-semibold">Product</p>
           <ul className="mt-4 grid gap-2">
             {SECTIONS.map((link) => (
               <li key={link.href}>
@@ -227,7 +231,7 @@ export default function Landing() {
           </ul>
         </nav>
         <nav aria-label="Your account" className="lg:col-span-3">
-          <p className={`${LABEL} text-faded`}>Account</p>
+          <p className="text-[15px] font-semibold">Account</p>
           <ul className="mt-4 grid gap-2">
             <li>
               <Link href="/signup" className="hover:underline">

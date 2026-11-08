@@ -2,14 +2,14 @@
 // Every value is from the recorded demo run (data/replay/run.jsonl, 4 min 28 s); the landing-live lane notes list the row behind each.
 
 /** The agent feed in the hero's app frame, in the run's order, stamped with the run's own clock (m:ss from the start). */
-export type FeedEntry = { at: string; agent: string; text: string; detail?: string; found?: boolean };
+export type FeedEntry = { at: string; agent: string; text: string; detail?: string; found?: boolean; quote?: boolean };
 
 export const FEED: FeedEntry[] = [
   { at: "0:17", agent: "Collector", text: "Downloaded and stored bills and usage" },
   { at: "1:03", agent: "Auditor", text: "Fremont meter billed 2x since September 2025", detail: "Sep 2025: billed 4,611 kWh, the meter read 2,305", found: true },
   { at: "1:41", agent: "Approver", text: "Asked Linda Park to approve by SMS", detail: "Refund to claim: $12,606.06. Yearly savings: $18,319.32." },
   { at: "1:57", agent: "Approver", text: "Linda Park replied YES" },
-  { at: "1:59", agent: "Negotiator", text: "Calling BayTel to cancel 7 unused lines", detail: "“Please cancel phone line (415) 555-0102 on account BT-7001.”" },
+  { at: "1:59", agent: "Negotiator", text: "Calling BayTel to cancel 7 unused lines", detail: "Please cancel phone line (415) 555-0102 on account BT-7001.", quote: true },
   { at: "4:01", agent: "Filer", text: "Filed the Rule 17.1 refund claim and 2 rate changes" },
   { at: "4:03", agent: "Finance", text: "Recorded the $12,606.06 refund, due only when granted" },
 ];

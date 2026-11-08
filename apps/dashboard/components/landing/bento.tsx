@@ -33,8 +33,6 @@ const WAVE = [3, 5, 8, 6, 9, 12, 7, 4, 6, 10, 14, 11, 7, 5, 8, 12, 9, 6, 4, 7, 1
 const CALL = [
   { who: "Clawback", text: "Please cancel phone line (415) 555-0102 on account BT-7001." },
   { who: "BayTel", text: "Yes, that is cancelled." },
-  { who: "Clawback", text: "Please cancel phone line (415) 555-0106 on account BT-7003." },
-  { who: "BayTel", text: "Yes, that is cancelled." },
 ];
 
 const ACTIVITY = [
