@@ -36,7 +36,7 @@ describe("drawer navigation (Findings page)", () => {
   it("maps J to next and K to prev, and ignores modifiers and typing in a field", () => {
     const calls: string[] = [];
     const nav = { index: 1, count: 3, prev: () => calls.push("prev"), next: () => calls.push("next") };
-    const key = (k: string, extra: object = {}) => navKey({ key: k, metaKey: false, ctrlKey: false, altKey: false, target: null, ...extra }, nav);
+    const key = (k: string, extra: object = {}) => navKey({ key: k, metaKey: false, ctrlKey: false, altKey: false, target: {} as EventTarget, ...extra }, nav);
     key("j");
     key("k");
     key("j", { metaKey: true });
