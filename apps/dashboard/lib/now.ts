@@ -1,4 +1,5 @@
 import { ROSTER } from "./agents.ts";
+import { money } from "./evidence.ts";
 import type { Snapshot } from "./snapshot.ts";
 
 /** What the Now pane shows: the bills being read, the findings, the approval, the call, the money, or the steps of an agent with none of those. */
@@ -45,3 +46,7 @@ export function nowMoment(s: Snapshot, picked: string | null = null, openId: str
   if (s.bills.length) return "bills";
   return "steps";
 }
+
+/** A finding's money: the refund and the yearly savings, each when nonzero, or "To check". */
+export const amountOf = (f: Pick<Snapshot["findings"][number], "refundCents" | "annualSavingsCents">) =>
+  [f.refundCents > 0 && `${money(f.refundCents)} refund`, f.annualSavingsCents > 0 && `${money(f.annualSavingsCents)} a year`].filter(Boolean).join(" · ") || "To check";

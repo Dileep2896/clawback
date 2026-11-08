@@ -3,7 +3,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { type AgentRow, agentName } from "../../lib/agents.ts";
 import { money, monthLabel, parseEvidence } from "../../lib/evidence.ts";
-import { type Moment, nowMoment } from "../../lib/now.ts";
+import { amountOf, type Moment, nowMoment } from "../../lib/now.ts";
 import { replayOf } from "../../lib/replay.ts";
 import type { Snapshot } from "../../lib/snapshot.ts";
 import { toolWords } from "../../lib/tool-words.ts";
@@ -46,9 +46,6 @@ function Bills({ bills }: { bills: Snapshot["bills"] }) {
     </div>
   );
 }
-
-const amountOf = (f: Snapshot["findings"][number]) =>
-  f.refundCents > 0 ? `${money(f.refundCents)} refund` : f.annualSavingsCents > 0 ? `${money(f.annualSavingsCents)} a year` : "To check";
 
 /** The biggest finding at full size with its evidence, then the rest. Any finding opens its evidence. */
 function Findings({ snapshot, openId, setOpenId }: { snapshot: Snapshot; openId: string | null; setOpenId: (id: string | null) => void }) {

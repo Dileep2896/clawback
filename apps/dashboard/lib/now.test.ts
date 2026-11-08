@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { nowMoment } from "./now.ts";
+import { amountOf, nowMoment } from "./now.ts";
 import type { Snapshot } from "./snapshot.ts";
 
 const T0 = "2026-11-07T12:00:00.000Z";
@@ -71,4 +71,11 @@ it("shows a picked agent's own moment, or its steps when it has none yet", () =>
   expect(nowMoment(s, "finance")).toBe("ledger");
   expect(nowMoment(at({}), "negotiator")).toBe("steps");
   expect(nowMoment(s, "ceo")).toBe("steps");
+});
+
+it("shows a finding's refund and its yearly savings together", () => {
+  expect(amountOf({ refundCents: 1_260_000, annualSavingsCents: 1_080_000 })).toBe("$12,600.00 refund · $10,800.00 a year");
+  expect(amountOf({ refundCents: 1_260_000, annualSavingsCents: 0 })).toBe("$12,600.00 refund");
+  expect(amountOf({ refundCents: 0, annualSavingsCents: 1_080_000 })).toBe("$10,800.00 a year");
+  expect(amountOf({ refundCents: 0, annualSavingsCents: 0 })).toBe("To check");
 });
