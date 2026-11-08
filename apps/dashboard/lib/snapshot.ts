@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, max, min, or, sql } from "drizzle-orm";
 import type { Db } from "@bill-fighter/db/client";
 import {
   accounts,
@@ -15,6 +15,7 @@ import {
   runs,
   scheduledChecks,
   smsMessages,
+  usageIntervals,
 } from "@bill-fighter/db/schema";
 
 // Enough for a scrolling log on one screen, and it keeps every poll small when a run has thousands of rows.
@@ -41,6 +42,12 @@ export type LiveData = {
   auditLog: Pick<Row<typeof auditLog>, "id" | "agent" | "tool" | "costUsd" | "createdAt">[];
   auditTotal: number;
   scheduledChecks: Row<typeof scheduledChecks>[];
+  /** Picked from this run's tool rows, never a whole input or output: the sender and subject Intake read. A replay has none. */
+  email: { from: string; subject: string } | null;
+  /** The wording Filer drafted, by finding id, from its successful draft_letter calls. A replay has none. */
+  letterWording: Record<string, string>;
+  /** The usage on file per account: what the collector stored. */
+  usage: { accountId: string; meterNumber: string | null; intervals: number; from: Date | null; to: Date | null }[];
 };
 
 type BillRow = Pick<Row<typeof bills>, "id" | "periodStart" | "periodEnd" | "totalCents" | "parseConfidence"> &
@@ -66,6 +73,9 @@ const NO_RUN: LiveData = {
   auditLog: [],
   auditTotal: 0,
   scheduledChecks: [],
+  email: null,
+  letterWording: {},
+  usage: [],
 };
 
 /** One customer's bills with their account and site, ordered by site then account. Also the Bills page for a customer with no run yet. */
@@ -127,7 +137,7 @@ export async function liveSnapshot(db: Db, customerId?: string): Promise<LiveDat
 
   const siteAccountIds = customerFindings.flatMap((f) => f.accountId ?? []);
 
-  const [sites, humanActions, cards, runCalls, ledgerRows, billRows, sms, audit, auditTotal, checks] = await Promise.all([
+  const [sites, humanActions, cards, runCalls, ledgerRows, billRows, sms, audit, auditTotal, checks, picks, usage] = await Promise.all([
     db
       .select({ accountId: accounts.id, name: locations.name })
       .from(accounts)
@@ -150,7 +160,29 @@ export async function liveSnapshot(db: Db, customerId?: string): Promise<LiveDat
       .limit(AUDIT_ROW_LIMIT),
     db.$count(auditLog, eq(auditLog.runId, run.id)),
     db.select().from(scheduledChecks).where(eq(scheduledChecks.customerId, run.customerId)).orderBy(asc(scheduledChecks.runAt)),
+    // Only these fields leave the database: other tool rows can hold vault names and raw email bodies.
+    db
+      .select({
+        tool: auditLog.tool,
+        from: sql<string | null>`${auditLog.outputJson}->>'from'`,
+        subject: sql<string | null>`${auditLog.outputJson}->>'subject'`,
+        letters: sql<{ findingId: string; wording: string }[] | null>`case when jsonb_typeof(${auditLog.outputJson}) = 'array' then ${auditLog.inputJson}->'letters' end`,
+      })
+      .from(auditLog)
+      .where(and(eq(auditLog.runId, run.id), inArray(auditLog.tool, ["parse_inbound_email", "draft_letter"])))
+      .orderBy(asc(auditLog.createdAt), asc(auditLog.id)),
+    db
+      .select({ accountId: accounts.id, meterNumber: accounts.meterNumber, intervals: count(), from: min(usageIntervals.ts), to: max(usageIntervals.ts) })
+      .from(usageIntervals)
+      .innerJoin(accounts, eq(usageIntervals.accountId, accounts.id))
+      .innerJoin(locations, eq(accounts.locationId, locations.id))
+      .where(eq(locations.customerId, run.customerId))
+      .groupBy(accounts.id)
+      .orderBy(asc(accounts.id)),
   ]);
+  const read = picks.findLast((p) => p.tool === "parse_inbound_email" && p.from && p.subject);
+  // Oldest first, so a redraft's wording wins.
+  const letterWording = Object.fromEntries(picks.flatMap((p) => (Array.isArray(p.letters) ? p.letters.map((l) => [l.findingId, l.wording]) : [])));
 
   return {
     run,
@@ -168,5 +200,8 @@ export async function liveSnapshot(db: Db, customerId?: string): Promise<LiveDat
     auditLog: audit,
     auditTotal,
     scheduledChecks: checks,
+    email: read ? { from: read.from!, subject: read.subject! } : null,
+    letterWording,
+    usage,
   };
 }

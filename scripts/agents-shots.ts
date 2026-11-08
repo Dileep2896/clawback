@@ -1,12 +1,14 @@
 /// <reference lib="dom" />
 // Screenshots /agents at five moments of the recorded run (start, finding, approval, call, done) at 1920x1080, 1440x900 and 390x844, and checks each:
-// no "No … yet" text, no horizontal scroll, no clipped agent action, the call at its newest line. Replays data/replay/run.jsonl into DATABASE_URL, so point it at your own database.
+// no "No … yet" text, no horizontal scroll, no clipped agent action, the call at its newest line. Then, on the finished run at 1440, picks
+// each agent in turn (pick-<agent>-1440.png, and pick-follow-1440.png) and checks every pick shows a view of its own. Replays data/replay/run.jsonl into DATABASE_URL, so point it at your own database.
 // pnpm dev:dashboard must be running. No model, voice or network cost.
 // pnpm exec tsx --env-file-if-exists=.env scripts/agents-shots.ts <folder> [--speed N] [--no-check]
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium, type Page } from "playwright";
+import { ROSTER } from "../apps/dashboard/lib/agents.ts";
 import { viewOf } from "../apps/dashboard/lib/calls.ts";
 import type { Snapshot } from "../apps/dashboard/lib/snapshot.ts";
 import { db } from "@bill-fighter/db/client";
@@ -105,6 +107,24 @@ try {
     }
     await pages[0]!.page.waitForTimeout(300);
   }
+
+  // Each agent's pick on the finished run: its own view and its own content, never another agent's.
+  const { page } = pages.find(({ viewport }) => viewport.name === "1440")!;
+  const seen = new Map<string, string>();
+  for (const agent of [...ROSTER, "follow"]) {
+    if (agent === "follow") await page.getByRole("button", { name: "Follow live" }).click();
+    else await page.locator(`[data-agent-row="${agent}"]`).click();
+    await page.waitForTimeout(400);
+    const now = page.locator("[data-moment]");
+    const view = `${await now.getAttribute("data-moment")}\n${await now.innerText()}`;
+    const same = [...seen].find(([, other]) => other === view);
+    if (same) failures.push(`pick ${agent} shows the same view as ${same[0]}`);
+    if (agent !== "follow" && !view.includes(`What ${agent.charAt(0).toUpperCase()}${agent.slice(1)} did`)) failures.push(`pick ${agent} has no "What … did" line`);
+    seen.set(agent, view);
+    await page.screenshot({ path: join(folder, `pick-${agent}-1440.png`) });
+    if (check) for (const problem of await problems(page)) failures.push(`pick ${agent}: ${problem}`);
+  }
+  console.info("shot the picks");
 } finally {
   replay.kill();
   await browser.close();

@@ -62,10 +62,10 @@ async function checkFits(page: Page, where: string) {
 
 // The filer's timeline row follows its card: todo is up next, doing is working, blocked is stopped, done is done.
 const seeFilerAs = (page: Page, state: string) => page.locator(`[data-agent-row="filer"][data-state="${state}"]`).waitFor({ state: "attached", timeout: 5000 });
-// The sample waits on its approval; pinning the auditor's row puts the findings in the Now pane.
+// The sample waits on its approval; pinning the auditor's row puts its audit, findings included, in the Now pane.
 const showFindings = async (page: Page) => {
   await page.locator('[data-agent-row="auditor"]').click();
-  await page.locator('[data-moment="findings"]').waitFor({ timeout: 5000 });
+  await page.locator('[data-moment="auditor"] [data-finding]').first().waitFor({ timeout: 5000 });
 };
 
 async function checkTimelineMovesLive(page: Page) {

@@ -13,6 +13,7 @@ import { EvidenceDrawer } from "../evidence/drawer.tsx";
 import { KwhChart } from "../evidence/kwh-chart.tsx";
 import { RateTable } from "../evidence/rate-table.tsx";
 import { PROVIDERS } from "../savings/common.tsx";
+import { AuditChecks, CollectorView, FilerView, IntakeView, Invoice, MonitorView } from "./agent-views.tsx";
 import { Approval } from "./approval.tsx";
 import { Call } from "./call.tsx";
 import { Ledger } from "./ledger.tsx";
@@ -127,6 +128,11 @@ const TITLES: Record<Moment, (s: Snapshot, row: AgentRow | undefined) => string>
   call: (s) => (s.calls.some((c) => !c.endedAt) ? "Calling the provider" : "The call"),
   ledger: () => "The money",
   steps: (s, row) => (row ? agentName(row.agent) : "Starting"),
+  intake: () => "The bill email",
+  collector: () => "What it gathered",
+  auditor: () => "The audit",
+  filer: () => "The documents",
+  monitor: () => "The next check",
 };
 
 /** One moment of the run at real size, chosen by lib/now.ts. Scrolls inside itself, so the page never does at desktop width. */
@@ -156,8 +162,23 @@ export function NowPane({ rows, picked, speech }: { rows: AgentRow[]; picked: st
     findings: () => <Findings snapshot={snapshot} openId={openId} setOpenId={setOpenId} />,
     approval: () => <Approval />,
     call: () => <Call {...speech} />,
-    ledger: () => <Ledger />,
+    ledger: () => (
+      <div className="grid gap-6">
+        {picked === "finance" && <Invoice snapshot={snapshot} />}
+        <Ledger />
+      </div>
+    ),
     steps: () => <Steps row={row} />,
+    intake: () => <IntakeView snapshot={snapshot} />,
+    collector: () => <CollectorView snapshot={snapshot} />,
+    auditor: () => (
+      <div className="grid gap-6">
+        <AuditChecks snapshot={snapshot} />
+        <Findings snapshot={snapshot} openId={openId} setOpenId={setOpenId} />
+      </div>
+    ),
+    filer: () => <FilerView snapshot={snapshot} />,
+    monitor: () => <MonitorView snapshot={snapshot} />,
   };
 
   return (
@@ -174,8 +195,15 @@ export function NowPane({ rows, picked, speech }: { rows: AgentRow[]; picked: st
       </div>
       {/* role="group" is what useFollow scrolls, so a streaming transcript stays at its newest line. Focusable for keyboard scrolling. */}
       <div ref={body} role="group" tabIndex={0} aria-labelledby="now-title" className="relative min-h-0 flex-1 overflow-y-auto p-6">
-        <div key={moment} className={entered === "changed" ? "now-enter" : undefined}>
-          {views[moment]()}
+        <div key={`${picked}/${moment}`} className={`grid gap-6 ${entered === "changed" ? "now-enter" : ""}`}>
+          {/* A picked agent's view opens with what it did, in plain words, then its own work. */}
+          {picked && (
+            <section aria-label={`What ${agentName(picked)} did`} className="grid gap-2">
+              <h3 className="text-label text-faded">What {agentName(picked)} did</h3>
+              <Steps row={rows.find((r) => r.agent === picked)} />
+            </section>
+          )}
+          {!(picked && moment === "steps") && views[moment]()}
         </div>
       </div>
     </section>
