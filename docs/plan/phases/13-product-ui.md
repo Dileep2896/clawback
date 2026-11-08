@@ -304,6 +304,13 @@ Orchestrator decisions:
 - **How it works:** the five agents step by step (Collector, Auditor, Approver, Negotiator, Finance) with the human's one approval, each step an illustration plus real data from the recorded run; scroll-driven sequence (agent graph lights up, bill → finding → call waveform → ledger).
 - **Illustrations and motion:** hand-built SVG and CSS in the theme colours (lime money, blue agents, coral wrong numbers, amber pending), no stock art, no AI images, no emoji. Motion ease-out, 200–600 ms, plays when on screen, finished state under prefers-reduced-motion. Every page looks complete at t=0.
 - Run the Hallmark slop test and the design study's anti-patterns list on each page.
+- **Fifth page, `/naive` ("Built on naïve"), added by the human on 2026-11-07: "Add a page how we used naive in our project in the landing page."** Linked from the landing footer and the How it works page (not a top nav link unless it fits cleanly). Honest and specific, sourced from `docs/plan/naive-notes.md`, `docs/plan/naive-endpoints.md` and `docs/plan/naive-rehearsal-notes.md` (on main once `naive-runtime-cost` ships; read it from branch `fleet/naive-runtime-cost` until then):
+  - What runs on naïve: each agent as a naïve agent (`clawback-<agent>`) with a CEO coordinator delegating to members, our tools served to it over MCP, gated tools set to `ask` so one human approval releases the bundle, audit and budget caps per run, every session cancelled on stop. Draw it as an architecture diagram (naïve side vs our side, the tunnel between them).
+  - What we measured: the full audit run on naïve (19 of 19 actions, success, 13:33, $1.70) next to the local run, and what we learned about paused tool calls (the flag probe). Real numbers only.
+  - What stays on our side and why: voice calls (Retell and Vapi; naïve has no voice), the virtual card (naïve card issuing returned 501), outbound SMS (501), the provider portal and its browser login. Say it plainly.
+  - One switch: the same agents run with `PLATFORM=naive` or `PLATFORM=local`; the stage demo uses local because a naïve run takes about 13 minutes.
+  - Same theme, motion and illustration rules as the other pages; no naïve logo unless their brand page allows it (link to usenaive.ai instead).
+- Footer line on the landing: "Agents run on naïve or locally." linking to `/naive`.
 
 **Acceptance checks:**
 - Four routes render with no console errors and link from the landing nav and footer.
@@ -311,7 +318,7 @@ Orchestrator decisions:
 - Every competitor claim has a source link; every figure comes from the recorded run, the TAM derivation, or is labelled an estimate.
 - `pnpm test`, lint, typecheck pass.
 
-**Estimate:** 2.5 hours
+**Estimate:** 3.5 hours
 
 **depends on:** landing-live
 
