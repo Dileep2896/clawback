@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { currentCalls, duration, isDisclosure, nextToSpeak, type Row, viewOf } from "../../lib/calls.ts";
+import { currentCalls, duration, emailViewOf, isDisclosure, nextToSpeak, type Row, viewOf } from "../../lib/calls.ts";
 import { recordedNow, replayOf, type ReplayInfo, speechRate } from "../../lib/replay.ts";
 import type { Snapshot } from "../../lib/snapshot.ts";
 import { useFollow } from "../../lib/use-follow.ts";
@@ -92,6 +92,50 @@ function TranscriptRow({ row }: { row: Row }) {
   );
 }
 
+function Envelope() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="size-5 shrink-0 text-agent" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="2.5" y="4.5" width="15" height="11" rx="1.5" />
+      <path d="m3 5.5 7 5.5 7-5.5" />
+    </svg>
+  );
+}
+
+function EmailMessage({ row, label }: { row: Row; label: string }) {
+  const agent = row.role === "agent";
+  return (
+    <li data-email-row={agent ? "sent" : "reply"} className={`grid gap-1.5 rounded-control border px-4 py-3 ${agent ? "border-agent/40" : "border-line"}`}>
+      <span className={`text-label ${agent ? "text-agent" : "text-faded"}`}>{label}</span>
+      <span className="whitespace-pre-line break-words">{row.content}</span>
+    </li>
+  );
+}
+
+/** The provider step by email: what was sent and BayTel's reply. Nothing here says a line was cancelled; the reply does. */
+function EmailThread({ call }: { call: Snapshot["calls"][number] }) {
+  const view = emailViewOf(call);
+  return (
+    <article data-call={call.id} data-testid="email-thread" className="grid gap-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Envelope />
+        <span className="text-faded">{view.reply ? "BayTel replied" : view.waiting ? "Waiting for BayTel's reply" : "Email thread"}</span>
+        <span data-testid="call-mode" className="ml-auto rounded-full border border-line px-2.5 text-caption text-faded">
+          Email
+        </span>
+      </div>
+      {view.notice && (
+        <p data-testid="email-notice" className="rounded-control border border-alert/50 px-3 py-2 text-alert">
+          {view.notice}
+        </p>
+      )}
+      <ol data-testid="email-messages" className="grid max-w-[72ch] gap-3">
+        {view.sent && <EmailMessage row={view.sent} label={`Sent to ${view.to}`} />}
+        {view.reply && <EmailMessage row={view.reply} label="Reply from BayTel" />}
+      </ol>
+    </article>
+  );
+}
+
 function CallView({ call, replay }: { call: Snapshot["calls"][number]; replay: ReplayInfo | null }) {
   const view = viewOf(call);
   return (
@@ -172,9 +216,7 @@ export function Call({ speechFailed, silent }: { speechFailed: boolean; silent: 
           Sound off above 2× speed. Transcript only.
         </p>
       )}
-      {calls.map((call) => (
-        <CallView key={call.id} call={call} replay={replay} />
-      ))}
+      {calls.map((call) => (call.mode === "email" ? <EmailThread key={call.id} call={call} /> : <CallView key={call.id} call={call} replay={replay} />))}
     </div>
   );
 }

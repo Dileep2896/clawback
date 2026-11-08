@@ -1,6 +1,7 @@
 // Each agent tool as a step in the owner's words, for the timeline and the audit log. Audit rows carry no tool input or
 // outcome, and denied, refused and failed attempts are logged too, so the words name the step and never claim it worked.
 export const TOOL_WORDS: Record<string, string> = {
+  approve: "Approve the plan",
   attach_evidence: "Attach the evidence to the findings",
   board_update: "Update the plan",
   call_provider: "Call the provider",
@@ -27,5 +28,6 @@ export const TOOL_WORDS: Record<string, string> = {
   submit_claim: "File the refund claim",
 };
 
-/** "portal_login" → "Log in to the provider's portal". A tool with no words yet reads as a sentence, never a raw name. */
-export const toolWords = (tool: string) => TOOL_WORDS[tool] ?? `${tool.charAt(0).toUpperCase()}${tool.slice(1).replaceAll("_", " ")}`;
+/** "portal_login" → "Log in to the provider's portal". A tool with no words yet reads as a sentence, never a raw name. The owner's contact choice decides call or email. */
+export const toolWords = (tool: string, contact?: string | null) =>
+  tool === "call_provider" && contact === "email" ? "Email the provider" : (TOOL_WORDS[tool] ?? `${tool.charAt(0).toUpperCase()}${tool.slice(1).replaceAll("_", " ")}`);

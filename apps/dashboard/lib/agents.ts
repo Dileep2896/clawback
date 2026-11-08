@@ -19,14 +19,15 @@ export type AgentRow = {
 // The order a run goes in: the filer drafts letters before the approval and files after it. An agent not listed goes last.
 export const ROSTER = ["intake", "collector", "auditor", "filer", "approver", "negotiator", "finance", "monitor"];
 // The CEO coordinates the others and heads the timeline; the run card is the run itself.
-const NOT_A_ROW = new Set([RUN_CARD_AGENT, "ceo"]);
+// "owner" is the approval click in the audit log (approveRun), a person, not an agent.
+const NOT_A_ROW = new Set([RUN_CARD_AGENT, "ceo", "owner"]);
 
 const ms = (iso: string) => new Date(iso).getTime();
 const rank = (agent: string) => (ROSTER.includes(agent) ? ROSTER.indexOf(agent) : ROSTER.length);
 
-type Input = Pick<Snapshot, "boardCards" | "auditLog"> & { approvalPending?: boolean; runActive?: boolean };
+type Input = Pick<Snapshot, "boardCards" | "auditLog"> & { approvalPending?: boolean; runActive?: boolean; contact?: string | null };
 
-function rowOf(agent: string, { boardCards, auditLog, approvalPending = false, runActive = true }: Input): AgentRow {
+function rowOf(agent: string, { boardCards, auditLog, approvalPending = false, runActive = true, contact = null }: Input): AgentRow {
   const cards = boardCards.filter((card) => card.agent === agent);
   const calls = auditLog.filter((row) => row.agent === agent); // the snapshot sends audit rows newest first
   const stamps = [...cards.map((c) => ms(c.updatedAt)), ...calls.map((c) => ms(c.createdAt))];
@@ -47,7 +48,7 @@ function rowOf(agent: string, { boardCards, auditLog, approvalPending = false, r
   return {
     agent,
     state,
-    action: state === "next" ? "" : (active?.title ?? latestCard?.title ?? (calls[0] ? toolWords(calls[0].tool) : "")),
+    action: state === "next" ? "" : (active?.title ?? latestCard?.title ?? (calls[0] ? toolWords(calls[0].tool, contact) : "")),
     elapsedSeconds: stamps.length > 1 ? Math.round((Math.max(...stamps) - Math.min(...stamps)) / 1000) : 0,
     calls: calls.map(({ id, tool, createdAt }) => ({ id, tool, createdAt })),
   };

@@ -73,7 +73,7 @@ function ApprovalCard() {
           <p className="mt-1 text-faded">{count}. Nothing is sent to a provider until you approve.</p>
         </div>
         {canApprove && (
-          <Button data-testid="overview-approve" disabled={busy} onClick={approve} className="min-h-14 px-10 text-title">
+          <Button data-testid="overview-approve" disabled={busy} onClick={() => approve()} className="min-h-14 px-10 text-title">
             {busy ? "Approving" : "Approve"}
           </Button>
         )}

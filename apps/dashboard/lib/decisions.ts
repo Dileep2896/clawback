@@ -1,9 +1,9 @@
 import { decideApproval } from "@bill-fighter/db/approvals";
 import type { Db } from "@bill-fighter/db/client";
-import { approvals, customers, runs, smsMessages } from "@bill-fighter/db/schema";
+import { approvals, auditLog, customers, runs, smsMessages } from "@bill-fighter/db/schema";
 import { and, desc, eq, gte } from "drizzle-orm";
 import { z } from "zod";
-import { isStopped, STOPPED_TEXT } from "./run-state.ts";
+import { EMAIL_INSTEAD, isStopped, STOPPED_TEXT } from "./run-state.ts";
 
 /** A refusal the caller can understand, as opposed to a failure. */
 class Refused extends Error {
@@ -28,16 +28,25 @@ async function runOf(db: Db, runId: string) {
   return found;
 }
 
-const bundleOf = async (db: Db, runId: string) => (await db.select({ id: approvals.id }).from(approvals).where(eq(approvals.runId, runId)))[0];
+const bundleOf = async (db: Db, runId: string) => (await db.select({ id: approvals.id, status: approvals.status }).from(approvals).where(eq(approvals.runId, runId)))[0];
 
 /** The backup path in both platform modes, so it touches only the run, its customer and its bundle. Never SMS. */
-export async function approveRun(db: Db, runId: string, customerId?: string) {
-  const { approver, customerId: owner } = await runOf(db, runId);
+export async function approveRun(db: Db, runId: string, customerId?: string, contact: "call" | "email" = "call") {
+  const { approver, customerId: owner, platform } = await runOf(db, runId);
   // The signed-in customer's own runs only: one customer never releases another's bundle. Same answer as a missing run.
   if (customerId !== undefined && owner !== customerId) throw new Refused(`Run ${runId} does not exist`, 404);
-  if (!(await bundleOf(db, runId))) throw new Refused(`Run ${runId} has no approval request`, 404);
+  const bundle = await bundleOf(db, runId);
+  if (!bundle) throw new Refused(`Run ${runId} has no approval request`, 404);
+  // Email goes through local Mailpit only (orchestrator, 2026-11-08), so a naïve run keeps the call.
+  if (contact === "email" && platform !== "local") throw new Refused("Email to the provider works on local runs only", 409);
   // The approver is the customer's contact, and the channel shows it was the button.
-  return decideApproval(db, { runId, status: "approved", channel: "dashboard", approvedBy: approver });
+  const decided = await decideApproval(db, { runId, status: "approved", channel: "dashboard", approvedBy: approver, contact });
+  // Only the click that decided it is logged, so a second click records nothing.
+  if (decided.status === "approved" && bundle.status === "pending") {
+    const note = decided.contact === "email" ? EMAIL_INSTEAD : "We will call BayTel.";
+    await db.insert(auditLog).values({ runId, agent: "owner", tool: "approve", inputJson: { contact: decided.contact }, outputJson: { approvedBy: approver, note } });
+  }
+  return decided;
 }
 
 // The whole reply, because "Yes, but not the alarm line" must not release the bundle.

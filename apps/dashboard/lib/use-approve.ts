@@ -19,11 +19,11 @@ export function useApprove() {
   const stopped = !replay && isStopped(snapshot?.run?.status);
   const pending = approval?.status === "pending";
 
-  async function approve() {
+  async function approve(contact: "call" | "email" = "call") {
     if (!approval) return;
     setBusy(true);
     setFailed(false);
-    const ok = await post("/api/approve", { runId: approval.runId });
+    const ok = await post("/api/approve", { runId: approval.runId, contact });
     if (ok) await refresh();
     else setFailed(true);
     setBusy(false);
