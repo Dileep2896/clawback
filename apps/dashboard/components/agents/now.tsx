@@ -138,6 +138,10 @@ export function NowPane({ rows, picked, speech }: { rows: AgentRow[]; picked: st
   const { snapshot } = useLive();
   const body = useRef<HTMLDivElement>(null);
   const moment = snapshot?.run ? nowMoment(snapshot, picked) : null;
+  // The first moment is there on arrival; only a change of moment fades in (render-time state, so the same commit).
+  const [entered, setEntered] = useState<Moment | "changed" | null>(null);
+  if (moment && entered === null) setEntered(moment);
+  else if (moment && entered !== "changed" && entered !== moment) setEntered("changed");
   // A new moment starts at its top; only the call follows its newest line (useFollow).
   useEffect(() => {
     if (body.current) body.current.scrollTop = 0;
@@ -170,7 +174,7 @@ export function NowPane({ rows, picked, speech }: { rows: AgentRow[]; picked: st
       </div>
       {/* role="group" is what useFollow scrolls, so a streaming transcript stays at its newest line. Focusable for keyboard scrolling. */}
       <div ref={body} role="group" tabIndex={0} aria-labelledby="now-title" className="relative min-h-0 flex-1 overflow-y-auto p-6">
-        <div key={moment} className="now-enter">
+        <div key={moment} className={entered === "changed" ? "now-enter" : undefined}>
           {views[moment]()}
         </div>
       </div>
