@@ -53,6 +53,20 @@ describe("liveSnapshot", () => {
     });
   });
 
+  it("counts the audit done only for a run_audit row that worked (review: failed audits looked passed)", async () => {
+    await withTestDb("dash_audit_done", async (db) => {
+      await seedRun(db, "r1");
+      await db.insert(auditLog).values([
+        { runId: "r1", agent: "auditor", tool: "run_audit", outputJson: { error: "run_audit saved nothing: no parsed bills" } },
+        { runId: "r1", agent: "auditor", tool: "run_audit", outputJson: { denied: true } },
+      ]);
+      expect((await liveSnapshot(db)).auditDone).toBe(false);
+
+      await db.insert(auditLog).values({ runId: "r1", agent: "auditor", tool: "run_audit", outputJson: { refundCents: 0, annualSavingsCents: 0 } });
+      expect((await liveSnapshot(db)).auditDone).toBe(true);
+    });
+  });
+
   it("counts one human action however many channels approve", async () => {
     await withTestDb("dash_human", async (db) => {
       await seedRun(db, "r1");
