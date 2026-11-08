@@ -14,7 +14,7 @@ const config: NextConfig = {
   transpilePackages: ["@bill-fighter/core", "@bill-fighter/db", "@bill-fighter/shared"],
   serverExternalPackages: ["pg"],
   // The judge sandbox reads the recording at runtime (lib/sandbox.ts). The hosted bundle carries it at ./data (scripts/sandbox-bundle.ts).
-  outputFileTracingIncludes: { "/**": ["./data/replay/run.jsonl"] },
+  outputFileTracingIncludes: { "/**": ["./data/replay/run.jsonl", "./data/replay/run-email.jsonl"] },
 };
 
 export default config;

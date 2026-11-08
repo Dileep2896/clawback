@@ -1,7 +1,6 @@
 import { db as sharedDb, type Db } from "@bill-fighter/db/client";
 import { accounts, actions, approvals, calls, findings, phoneLines } from "@bill-fighter/db/schema";
 import { getPlatform } from "@bill-fighter/platform/factory";
-import { createMail } from "@bill-fighter/platform/local/mail";
 import { createMailpit } from "@bill-fighter/platform/local/mailpit";
 import type { Budget } from "@bill-fighter/platform/types";
 import { runEmail } from "@bill-fighter/voice/email/engine";
@@ -170,7 +169,7 @@ export function negotiatorTools({ db, budget, sim, live, email }: NegotiatorDeps
 }
 
 // Everything that can fail waits for a handler, so importing this file never throws.
-export default negotiatorTools({
+export const DEFAULT_DEPS: NegotiatorDeps = {
   db: sharedDb,
   budget: () => getPlatform().budget(),
   sim: async (call) => runSimCall({ db: sharedDb, llm: retryingCallLlm(await getPlatform().llm()), ...call }),
@@ -178,6 +177,8 @@ export default negotiatorTools({
   async email({ actionId, plan, runId }) {
     // Mailpit only (orchestrator, 2026-11-08): the local adapter itself refuses any SMTP host but localhost.
     if ((process.env.PLATFORM || "local") !== "local") throw new Error("Email to the provider works on local runs only");
+    // First, so the sandbox's refusal (platform factory) comes before anything is read.
+    const mail = await getPlatform().mail();
     // The Filer's drafted cancellation letters go along when their files are there.
     const letters = await sharedDb
       .select({ payload: actions.payloadJson })
@@ -187,6 +188,7 @@ export default negotiatorTools({
       const path = (payload as { letterPath?: string } | null)?.letterPath;
       return path && existsSync(resolve(REPO_ROOT, path)) ? [{ filename: basename(path), path: resolve(REPO_ROOT, path) }] : [];
     });
-    return runEmail({ db: sharedDb, mail: createMail(), mailpit: createMailpit(), actionId, plan, attachments });
+    return runEmail({ db: sharedDb, mail, mailpit: createMailpit(), actionId, plan, attachments });
   },
-});
+};
+export default negotiatorTools(DEFAULT_DEPS);

@@ -21,6 +21,7 @@ import {
   SANDBOX_SPEED,
   type SandboxSignUp,
   SIGNUPS_PER_IP_PER_MINUTE,
+  sandboxEmailPlan,
   sandboxPlan,
   sandboxRunId,
   startSandboxRun,
@@ -176,7 +177,7 @@ describe("the judge sandbox", { timeout: 180_000 }, () => {
       await advanceSandbox(db, customerId, at(plan.approvalT));
 
       const tap = at(plan.approvalT) + 45_000;
-      const [first, second] = await Promise.all([approveSandbox(db, customerId, runId, "Judge", tap), approveSandbox(db, customerId, runId, "Judge", tap + 1)]);
+      const [first, second] = await Promise.all([approveSandbox(db, customerId, runId, "Judge", "call", tap), approveSandbox(db, customerId, runId, "Judge", "call", tap + 1)]);
       expect(first).toMatchObject({ status: "approved", channel: "dashboard", approvedBy: "Judge" });
       expect(second.approvedAt).toEqual(first.approvedAt);
 
@@ -207,6 +208,42 @@ describe("the judge sandbox", { timeout: 180_000 }, () => {
       expect(run!.finishedAt!.getTime()).toBeLessThanOrEqual(at(END, tap - plan.approvalT / SANDBOX_SPEED) + 1);
     }));
 
+  it("plays each judge the contact they chose: one Call, one Email, the same numbers", () =>
+    withTestDb("sandbox_contact", async (db) => {
+      await loadSeed(db, generateSeed());
+      const email = sandboxEmailPlan();
+      expect(email.events[0]!.id).toBe(plan.events[0]!.id);
+      const [a, b] = ["sandbox-call", "sandbox-email"];
+      const [runA, runB] = [await judge(db, a), await judge(db, b)];
+      await advanceSandbox(db, a, at(plan.approvalT));
+      await advanceSandbox(db, b, at(plan.approvalT));
+
+      const tap = at(plan.approvalT) + 10_000;
+      expect(await approveSandbox(db, a, runA, "Judge A", "call", tap)).toMatchObject({ status: "approved", contact: "call" });
+      const [first, second] = await Promise.all([approveSandbox(db, b, runB, "Judge B", "email", tap), approveSandbox(db, b, runB, "Judge B", "call", tap + 1)]);
+      expect(first).toMatchObject({ status: "approved", approvedBy: "Judge B", contact: "email" });
+      expect(second).toEqual(first);
+      // The email run's rows up to the approval took the place of the call run's, on the same run id.
+      expect(await db.$count(runs, sql`starts_with(${runs.id}, ${`${b}:`})`)).toBe(1);
+
+      const end = tap + 10 * 60_000;
+      await advanceSandbox(db, a, end);
+      await advanceSandbox(db, b, end);
+      for (const [customerId, runId, mode, events] of [[a, runA, "sim", plan.events.length], [b, runB, "email", email.events.length]] as const) {
+        const [run] = await db.select().from(runs).where(eq(runs.id, runId));
+        expect(run!.status).toBe("success");
+        expect(run!.replay).toMatchObject({ cursor: events, approvedAt: new Date(tap).toISOString() });
+        expect(await totals(db, customerId)).toMatchObject({ refund: 1_260_606, savings: 1_831_932, fee: 927_761 });
+        const own = await db.select({ mode: calls.mode, startedAt: calls.startedAt }).from(calls).where(sql`starts_with(${calls.id}, ${`${customerId}:`})`);
+        expect(own.map((call) => call.mode)).toEqual([mode]);
+        expect(own[0]!.startedAt.getTime()).toBeGreaterThan(tap);
+        expect((await db.select().from(approvals).where(eq(approvals.runId, runId)))[0]).toMatchObject({ status: "approved", contact: mode === "email" ? "email" : "call" });
+      }
+      // Watch it again starts over as a call.
+      await restartSandbox(db, b, end);
+      expect((await db.select().from(runs).where(eq(runs.id, runB)))[0]!.replay).not.toHaveProperty("contact");
+    }));
+
   it("takes a tap before playback reaches the approval without moving the clock back or dating anything after its write", () =>
     withTestDb("sandbox_approve_early", async (db) => {
       await loadSeed(db, generateSeed());
@@ -219,7 +256,7 @@ describe("the judge sandbox", { timeout: 180_000 }, () => {
 
       const tap = at(askT) + 100;
       expect(tap).toBeLessThan(at(plan.approvalT));
-      await approveSandbox(db, customerId, runId, "Judge", tap);
+      await approveSandbox(db, customerId, runId, "Judge", "call", tap);
       expect((await db.select().from(runs).where(eq(runs.id, runId)))[0]!.replay).toMatchObject({ pausedMs: 0, startedAt: new Date(START).toISOString() });
 
       // The next poll jumps to the approval: the text plays at once, dated no later than the tap.
