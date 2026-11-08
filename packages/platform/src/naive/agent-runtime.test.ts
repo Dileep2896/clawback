@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import type { Approval, ApprovalGate, Audit, Budget, RunEvent, RunSpec, ToolDef } from "../types.ts";
+// The real audit wrapper, so the test sees how a tool fails when only its audit row cannot be written.
+import { defineTool, wrapTool } from "../../../agents/src/tool-wrapper.ts";
+import type { Approval, ApprovalGate, Audit, Board, BoardCard, Budget, RunEvent, RunSpec, ToolDef } from "../types.ts";
 import { cancelAll, createAgentRuntime, MAX_RUN_USD, pickModel, toolsetFor } from "./agent-runtime.ts";
 import { type NaiveApi, NaiveError, type NaiveRequest } from "./runtime-http.ts";
 
@@ -109,8 +111,9 @@ async function collect(events: AsyncIterable<RunEvent>) {
 }
 
 const parked = (id: string, actionId?: string) => ({ kind: "tool", tool_call_id: id, name: "clawback.submit_claim", args: actionId ? { actionId } : {} });
-const runtime = (api: NaiveApi, gate: ApprovalGate, budget: Budget, audit: Audit) =>
-  createAgentRuntime(async () => ({ api, gate, budget, audit, publicUrl: "https://tunnel.test", port: 0, pollMs: 1, idleMs: 5000 }));
+const noCards: Board = { create: async () => ({}) as BoardCard, move: async () => ({}) as BoardCard, list: async () => [] };
+const runtime = (api: NaiveApi, gate: ApprovalGate, budget: Budget, audit: Audit, board = noCards) =>
+  createAgentRuntime(async () => ({ api, gate, budget, audit, board, publicUrl: "https://tunnel.test", port: 0, pollMs: 1, idleMs: 5000 }));
 
 describe("naïve runtime", () => {
   it("releases every gated call of the run from one approval, on member sessions, and logs the approver", async () => {
@@ -476,6 +479,60 @@ describe("naïve runtime cost", () => {
     });
     expect(never.moves).toEqual([]);
     expect(never.result).toMatchObject({ status: "error", reason: expect.stringContaining('"File F-1" (not created)') });
+  });
+
+  it("takes the card a failed creation already wrote instead of making a second one", async () => {
+    // A board_update whose card is inserted but whose audit row fails once, through the real wrapper.
+    const cards: BoardCard[] = [];
+    const store: Board = {
+      create: async (card) => (cards.push({ ...card, id: `card${cards.length + 1}`, status: card.status ?? "todo" } as BoardCard), cards.at(-1)!),
+      move: async (id, status) => Object.assign(cards.find((c) => c.id === id)!, { status }),
+      list: async (runId) => cards.filter((c) => c.runId === runId),
+    };
+    let audits = 0;
+    const audit: Audit = {
+      record: async () => {
+        if (++audits === 1) throw new Error("audit down");
+      },
+      list: async () => [],
+    };
+    const board = wrapTool(
+      defineTool({
+        ...tool("board_update"),
+        targets: () => [],
+        handler: async (input: unknown) => {
+          const { cardId, agent, title, status } = input as { cardId?: string; agent: string; title: string; status: BoardCard["status"] };
+          if (!cardId) return { cardId: (await store.create({ runId: "run-1", agent, title, status })).id };
+          return store.move(cardId, status);
+        },
+      }),
+      { audit, allowlist: { callNumbers: [], emailDomains: [], portalOrigins: [] } },
+    );
+    const { api } = fakeNaive((sessions, tick) => {
+      const root = sessions.get("ses_root")!;
+      if (tick === 0)
+        Object.assign(root, {
+          status: "idle",
+          stop_reason: "awaiting_approval",
+          pending_actions: [{ kind: "tool", tool_call_id: "d1", name: "send_to_agent", args: { agent: "clawback-filer", message: "File F-1", wait: true } }],
+        });
+      if (tick === 1) {
+        root.events.push({ seq: 1, type: "thread.created", data: { thread_id: "ses_a", member: "clawback-filer" } });
+        Object.assign(root, { stop_reason: "awaiting_delegation", pending_actions: [] });
+        sessions.set("ses_a", { id: "ses_a", status: "running", stop_reason: null, pending_actions: [], consumed_micro_usd: 0, events: [] });
+      }
+      if (tick === 3) {
+        Object.assign(sessions.get("ses_a")!, { status: "idle", stop_reason: "end_turn" });
+        root.events.push({ seq: 2, type: "thread.idle", data: { thread_id: "ses_a" } });
+      }
+      if (tick === 5) root.stop_reason = "end_turn";
+    });
+    const events = await collect(
+      runtime(api, fakeGate({ status: "pending", actionIds: [] }).gate, fakeBudget(), fakeAudit().audit, store).run({ ...SPEC, tools: [board, tool("submit_claim")] }),
+    );
+    expect(audits).toBeGreaterThan(1);
+    expect(cards).toMatchObject([{ id: "card1", agent: "filer", title: "File F-1", status: "done" }]);
+    expect(events.find((e) => e.type === "result")).toMatchObject({ status: "success" });
   });
 
   it("still reads a member's last events and spend when its result folds back as it ends", async () => {

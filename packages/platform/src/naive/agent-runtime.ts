@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isGatedTool } from "@bill-fighter/shared/gated-tools";
 import { getPlatform } from "../factory.ts";
-import type { AgentDef, AgentRuntime, ApprovalGate, Audit, Budget, RunEvent, RunSpec } from "../types.ts";
+import type { AgentDef, AgentRuntime, ApprovalGate, Audit, Board, Budget, RunEvent, RunSpec } from "../types.ts";
 import { listAll, microUsd, type NaiveApi, naiveApi, NaiveError, usdFromMicro } from "./runtime-http.ts";
 import { releasedInRun, startToolServer, toolPath } from "./mcp-server.ts";
 
@@ -36,6 +36,8 @@ export type Deps = {
   gate: ApprovalGate;
   budget: Budget;
   audit: Audit;
+  /** Read only, to find a card whose creation reported failure after it was written. Without it the coordinator keeps its own board. */
+  board?: Board;
   api?: NaiveApi;
   publicUrl?: string;
   port?: number;
@@ -128,10 +130,20 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
   // never lands. The first outcome wins (thread.idle then thread.terminated stays done).
   const creating = new Map<string, { agent: string; title: string }>();
   const closing = new Map<string, "done" | "blocked">();
+  const triedCreating = new Set<string>();
+  const ourCards = new Set<string>();
   const flushCards = async () => {
     for (const [threadId, card] of creating) {
       try {
-        const { cardId } = (await boardTool!.handler({ ...card, status: "doing" }, { runId: spec.runId, agent: main })) as { cardId: string };
+        // A failed creation may still have written the card (wrapTool throws when only its audit row fails), so a retry
+        // first takes that card instead of making a second one.
+        const made = triedCreating.has(threadId)
+          ? (await deps!.board!.list(spec.runId)).find((c) => c.agent === card.agent && c.title === card.title && !ourCards.has(c.id))?.id
+          : undefined;
+        triedCreating.add(threadId);
+        const cardId =
+          made ?? ((await boardTool!.handler({ ...card, status: "doing" }, { runId: spec.runId, agent: main })) as { cardId: string }).cardId;
+        ourCards.add(cardId);
         cardOfThread.set(threadId, cardId);
         creating.delete(threadId);
       } catch (error) {
@@ -186,7 +198,7 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     // Our tools, served for naïve behind a per-run bearer that only naïve's vault holds.
     const token = randomBytes(32).toString("base64url");
     // No members, nobody to make cards for: the coordinator then keeps its own board as before.
-    boardTool = spec.members.length > 0 && spec.main.tools.includes(BOARD_TOOL) ? spec.tools.find((t) => t.name === BOARD_TOOL) : undefined;
+    boardTool = deps.board && spec.members.length > 0 && spec.main.tools.includes(BOARD_TOOL) ? spec.tools.find((t) => t.name === BOARD_TOOL) : undefined;
     const mainDef: AgentDef = boardTool
       ? { ...spec.main, tools: spec.main.tools.filter((t) => t !== BOARD_TOOL), prompt: spec.main.prompt + BOARD_NOTE }
       : spec.main;
@@ -501,5 +513,5 @@ export async function cancelAll(api: NaiveApi, ids: string[], retryMs: number, g
 
 export default createAgentRuntime(async () => {
   const platform = getPlatform();
-  return { gate: await platform.approvalGate(), budget: await platform.budget(), audit: await platform.audit() };
+  return { gate: await platform.approvalGate(), budget: await platform.budget(), audit: await platform.audit(), board: await platform.board() };
 });
