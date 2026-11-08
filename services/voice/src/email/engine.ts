@@ -12,7 +12,7 @@ const message = (subject: string, text: string) => `Subject: ${subject}\n\n${tex
 
 /**
  * Sends one cancellation request to BayTel and waits for its reply, stored as a `calls` row with mode "email": the sent
- * mail, then the reply. Throws on no reply within `timeoutMs`, so the step is never done without one.
+ * mail, then the reply. Throws on no reply within `timeoutMs` (a reply read after it is too late), so the step is never done without one.
  */
 export async function runEmail(input: {
   db: Db;
@@ -41,18 +41,30 @@ export async function runEmail(input: {
     await appendRow(db, callId, transcriptRow("agent", "email", message(subject, text)));
 
     const deadline = Date.now() + timeoutMs;
-    let ours: string | undefined;
-    while (Date.now() < deadline) {
-      // Our own address, from the sent message, so only a reply to us counts.
-      ours ??= (await mailpit.search(`message-id:"${sentId}"`))[0]?.From.Address;
-      // Only a reply to our request: from BayTel, to us, In-Reply-To our Message-ID. The subject search just narrows it.
-      for (const candidate of ours ? await mailpit.search(`from:"${to}" subject:"${subject}"`) : []) {
-        const reply = await mailpit.read(candidate.ID);
-        if (reply.InReplyTo !== sentId || !reply.To?.some(({ Address }) => Address === ours)) continue;
-        await appendRow(db, callId, transcriptRow("provider", "email", message(reply.Subject, reply.Text)));
-        return { callId };
+    // Every Mailpit request is aborted at the deadline, so a hung request cannot hold the step past it.
+    const left = () => AbortSignal.timeout(Math.max(1, deadline - Date.now()));
+    const poll = async () => {
+      let ours: string | undefined;
+      while (Date.now() < deadline) {
+        // Our own address, from the sent message, so only a reply to us counts.
+        ours ??= (await mailpit.search(`message-id:"${sentId}"`, left()))[0]?.From.Address;
+        // Only a reply to our request: from BayTel, to us, In-Reply-To our Message-ID. The subject search just narrows it.
+        for (const candidate of ours ? await mailpit.search(`from:"${to}" subject:"${subject}"`, left()) : []) {
+          const reply = await mailpit.read(candidate.ID, left());
+          if (Date.now() >= deadline) return undefined; // read after the deadline: too late to count
+          if (reply.InReplyTo === sentId && reply.To?.some(({ Address }) => Address === ours)) return reply;
+        }
+        await sleep(Math.min(pollMs, Math.max(0, deadline - Date.now())));
       }
-      await sleep(pollMs);
+      return undefined;
+    };
+    const reply = await poll().catch((error: unknown) => {
+      if (error instanceof Error && error.name === "TimeoutError") return undefined;
+      throw error;
+    });
+    if (reply) {
+      await appendRow(db, callId, transcriptRow("provider", "email", message(reply.Subject, reply.Text)));
+      return { callId };
     }
     const notice = `No reply from BayTel within ${Math.round(timeoutMs / 1000)} seconds, so nothing was cancelled.`;
     await appendRow(db, callId, transcriptRow("system", "status", notice));

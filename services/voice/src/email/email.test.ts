@@ -156,6 +156,50 @@ describe("runEmail", () => {
     expect(row!.outcomeJson).toBeNull();
   });
 
+  withData("aborts a Mailpit request that hangs past the deadline, records the notice and closes the row", async (db) => {
+    const inbox = fakeInbox();
+    let aborted = false;
+    // Hangs like a stalled fetch, until its signal aborts it.
+    inbox.mailpit.search = (_query, signal) =>
+      new Promise((_resolve, reject) =>
+        signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(signal.reason);
+        }),
+      );
+    const started = Date.now();
+    await expect(runEmail({ db, mail: inbox.mail, mailpit: inbox.mailpit, actionId: ACTION, plan: PLAN, timeoutMs: 30, pollMs: 5 })).rejects.toThrow(/No reply from BayTel/);
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(aborted).toBe(true);
+    const [row] = await db.select().from(calls);
+    expect((row!.transcriptJson as TranscriptRow[]).map(({ role }) => role)).toEqual(["agent", "system"]);
+    expect(row!.endedAt).not.toBeNull();
+    expect(row!.outcomeJson).toBeNull();
+  });
+
+  withData("rejects a genuine reply that only arrives after the deadline", async (db) => {
+    const inbox = fakeInbox();
+    const send = inbox.mail.send;
+    // BayTel answers the moment the request lands, so the reply is waiting from the first search.
+    inbox.mail.send = async (email) => {
+      const sent = await send(email);
+      const text = acceptedReply("BT-7001", PLAN.cancelLines);
+      inbox.deliver({ from: "support@baytel.example", to: "bills@billfighter.local", subject: `Re: ${email.subject}`, text, inReplyTo: sent.id });
+      return sent;
+    };
+    const read = inbox.mailpit.read;
+    // Ignores the signal and answers late, as in the review's reproduction (105 ms against a 20 ms timeout).
+    inbox.mailpit.read = async (id) => {
+      const message = await read(id);
+      if (message.From.Address === "support@baytel.example") await new Promise((resolve) => setTimeout(resolve, 105));
+      return message;
+    };
+    await expect(runEmail({ db, mail: inbox.mail, mailpit: inbox.mailpit, actionId: ACTION, plan: PLAN, timeoutMs: 20, pollMs: 2 })).rejects.toThrow(/No reply from BayTel/);
+    const [row] = await db.select().from(calls);
+    expect((row!.transcriptJson as TranscriptRow[]).map(({ role }) => role)).toEqual(["agent", "system"]);
+    expect(row!.endedAt).not.toBeNull();
+  });
+
   withData("refuses an alarm line before any email", async (db) => {
     const inbox = fakeInbox();
     await expect(runEmail({ db, mail: inbox.mail, mailpit: inbox.mailpit, actionId: ACTION, plan: { ...PLAN, cancelLines: [ALARM_LINES[0]!] } })).rejects.toThrow(/alarm/);

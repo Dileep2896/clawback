@@ -12,8 +12,8 @@ export type MailpitMessage = z.infer<typeof Message> & { InReplyTo: string | nul
 
 export type Mailpit = {
   /** Mailpit search syntax, such as `to:"a@b.example" is:unread`. Newest first. */
-  search(query: string): Promise<z.infer<typeof Summary>[]>;
-  read(id: string): Promise<MailpitMessage>;
+  search(query: string, signal?: AbortSignal): Promise<z.infer<typeof Summary>[]>;
+  read(id: string, signal?: AbortSignal): Promise<MailpitMessage>;
   markRead(ids: string[]): Promise<void>;
 };
 
@@ -25,14 +25,14 @@ export function createMailpit(env: Record<string, string | undefined> = process.
     return response;
   };
   return {
-    async search(query) {
-      return Search.parse(await (await call(`/api/v1/search?limit=50&query=${encodeURIComponent(query)}`)).json()).messages ?? [];
+    async search(query, signal) {
+      return Search.parse(await (await call(`/api/v1/search?limit=50&query=${encodeURIComponent(query)}`, { signal })).json()).messages ?? [];
     },
-    async read(id) {
+    async read(id, signal) {
       const path = `/api/v1/message/${encodeURIComponent(id)}`;
-      const message = Message.parse(await (await call(path)).json());
+      const message = Message.parse(await (await call(path, { signal })).json());
       // The message JSON has no In-Reply-To, so it comes from the raw headers.
-      const header = Headers.parse(await (await call(`${path}/headers`)).json())["In-Reply-To"]?.[0];
+      const header = Headers.parse(await (await call(`${path}/headers`, { signal })).json())["In-Reply-To"]?.[0];
       return { ...message, InReplyTo: header ? header.trim().replace(/^<|>$/g, "") : null };
     },
     async markRead(ids) {
