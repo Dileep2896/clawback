@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { money, monthLabel } from "../../lib/evidence.ts";
 import { amountOf } from "../../lib/now.ts";
+import { isRunLetter } from "../../lib/replay.ts";
 import type { Snapshot } from "../../lib/snapshot.ts";
 import { PROVIDERS } from "../savings/common.tsx";
 import { RULE_LABEL } from "../savings/findings.tsx";
@@ -178,8 +179,9 @@ export function FilerView({ snapshot }: { snapshot: Snapshot }) {
   const findings = new Map(snapshot.findings.map((f) => [f.id, f]));
   const order = Object.keys(DOCUMENT_KIND);
   // Claims, then rate requests, then letters: the money first. A sort is stable, so each kind keeps its order.
+  // This run's letters only: the wording is this run's too, keyed by finding, and a finding gets one letter per run.
   const documents = snapshot.actions
-    .filter((a) => a.kind in DOCUMENT_KIND && a.findingId && findings.has(a.findingId))
+    .filter((a) => a.kind in DOCUMENT_KIND && snapshot.run && isRunLetter(snapshot.run, a) && findings.has(a.findingId!))
     .sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
   if (documents.length === 0) return null;
   return (
