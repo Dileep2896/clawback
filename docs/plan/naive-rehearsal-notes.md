@@ -68,3 +68,23 @@ What the events show:
 - The copy of our cards to naïve's board is gone. Cards that reached `done` or `blocked` there started the board-digest sessions.
 - When a run stops, every session it owns is cancelled (root and threads), not only the root. A cancel retries every 5 s for up to 5 min while naïve cannot be reached. `409 session_terminal` counts as done, and any session still open is printed by id.
 - Every run reports its parks (and how many of them were ungated), its sessions and its duration in the final cost line, and in an `audit_log` row (`naive_run_stats`).
+
+### Measurement run (live, Sonnet 5.5, cap $2)
+
+Run `e23702bd-8b22-4290-a998-a7e04de5c837`, 2026-11-07 17:33–17:46 PST. Own database `clawback_naive_cost`, Linda's `contact_email` set to the naïve Linda inbox (rehearsal-only, as for runs 1–2), portal from this worktree on 3031, `VOICE_MODE=sim`. Approved by `scripts/auto-approve.ts` (the run-local stand-in for the dashboard tap) through a temporary copy of `run-local` that allows naïve. The copy was not committed. Started from `executeRun` directly, so not through `demo:start`, which on naïve needs the webhook change on `fleet/naive-rehearsal`.
+
+| | Run 1 (before) | This run | Target |
+|---|---|---|---|
+| Result | `over_budget` (work done) | **`success`**, all 19 actions `done`, summary sent | |
+| naïve cost | $1.9743 | **$1.7044** (balance $248.7923 → $247.0864) | < $0.75 ✗ |
+| Duration | 13:13 | **13:33** (813 s) | < 7 min ✗ |
+| Parks | 68 (CEO 28) | **53**: 28 ungated, 12 gated, 13 delegations or coordinator copies (CEO 11) | |
+| Sessions | | 11 (root + 10 threads); all cancelled, `GET /v1/sessions` shows none open | |
+
+- **The board works without model calls.** There are 10 cards, one per delegated task, all `done`. The CEO made no `board_update` calls. Its 11 parks are its own `send_to_agent` delegations, which we set to `ask` so the loop can check `wait: true`; these park without a refusal.
+- **No board-digest session started** (no write to naïve's board).
+- **The targets were missed, because the member threads start flagged.** Every member MCP call parked, including each member's first one (intake 2 of 2, collector 11 for 10 calls, negotiator 9 for 8). The CEO had no MCP result before it delegated, so something other than our tool results flags a delegated thread from its start. Candidates: naïve flags every delegated thread, or a delegation message that carries the bill email does (the root's first message did not, per probe A). That was not tested: no further spend is approved. Each park costs the refusal plus a model re-issue, about 10–15 s per call, which is where the 13 minutes go.
+
+### Still open (needs a decision and spend)
+
+- One Haiku probe (~$0.01): does a delegated thread whose message holds no email park on its first MCP call? If yes, naïve flags every thread, and on naïve every member call costs a park whatever we do. The lever then is the model, not the parks: members on Haiku (`NAIVE_MODEL` is per run today, so this needs a per-agent model), or fewer member tool calls. If no, keep the bill email out of the delegated message.
