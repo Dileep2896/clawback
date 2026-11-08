@@ -21,8 +21,8 @@ export const RULE_LABEL: Record<string, string> = {
   thirdPartySupplier: "Third-party supplier",
 };
 
-// States where money is moving get the green dot; waiting and not acted on stay grey, so the approval card stays the one loud thing.
-const MOVING = new Set(["Approved, agents at work", "Filed with the provider", "Won"]);
+// Agents at work on it: blue. Won is money: lime. Waiting and not acted on stay grey, so the approval card stays the one loud thing.
+const MOVING = new Set(["Approved, agents at work", "Filed with the provider"]);
 
 export function FindingsList() {
   const { snapshot } = useLive();
@@ -68,7 +68,7 @@ export function FindingsList() {
                     data-finding={finding.id}
                     aria-haspopup="dialog"
                     onClick={() => setOpenId(finding.id)}
-                    className="cursor-pointer text-left font-semibold hover:underline hover:underline-offset-4"
+                    className="cursor-pointer text-left font-semibold decoration-agent decoration-2 underline-offset-4 hover:underline"
                   >
                     {finding.title}
                   </button>
@@ -77,7 +77,7 @@ export function FindingsList() {
                   <Chip>{RULE_LABEL[finding.type] ?? finding.type}</Chip>
                 </td>
                 <td>
-                  <StatusDot tone={MOVING.has(state) ? "money" : "plain"}>
+                  <StatusDot tone={MOVING.has(state) ? "agent" : state === "Won" ? "money" : "plain"}>
                     <span data-testid="finding-state">{state}</span>
                   </StatusDot>
                 </td>

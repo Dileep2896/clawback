@@ -72,9 +72,9 @@ export function Table({ head, children, caption, grouped }: { head: { label: str
   );
 }
 
-/** A small status: a dot and a word, never a filled badge. */
-export function StatusDot({ tone = "plain", children }: { tone?: "alert" | "money" | "plain" | "live"; children: ReactNode }) {
-  const dot = { alert: "bg-alert", money: "bg-money", plain: "bg-faded/50", live: "bg-money animate-pulse motion-reduce:animate-none" }[tone];
+/** A small status: a dot and a word, never a filled badge. alert = a wrong amount or error, money = money confirmed, agent/live = agents at work. */
+export function StatusDot({ tone = "plain", children }: { tone?: "alert" | "money" | "agent" | "plain" | "live"; children: ReactNode }) {
+  const dot = { alert: "bg-alert", money: "bg-money", agent: "bg-agent", plain: "bg-faded/50", live: "bg-agent animate-pulse motion-reduce:animate-none" }[tone];
   return (
     <span className={`inline-flex items-center gap-2 whitespace-nowrap ${tone === "alert" ? "font-semibold text-alert" : tone === "plain" ? "text-faded" : ""}`}>
       <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${dot}`} />

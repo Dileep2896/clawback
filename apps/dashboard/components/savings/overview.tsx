@@ -58,12 +58,12 @@ function ApprovalCard() {
     <section
       data-testid="overview-approval"
       aria-labelledby="approval-title"
-      className="rounded-card border border-alert bg-sheet p-6"
+      className="rounded-card border border-warn bg-sheet p-6"
     >
       <div className="flex flex-wrap items-center justify-between gap-6">
         <div className="min-w-0 flex-1">
-          <p className="inline-flex items-center gap-2 font-semibold text-alert">
-            <span aria-hidden="true" className="size-2 rounded-full bg-alert" />
+          <p className="inline-flex items-center gap-2 font-semibold text-warn">
+            <span aria-hidden="true" className="size-2 rounded-full bg-warn" />
             Needs you
           </p>
           <h2 id="approval-title" className="mt-1 text-[1.75rem] leading-tight font-semibold">
@@ -77,7 +77,7 @@ function ApprovalCard() {
           </Button>
         )}
       </div>
-      {replay && <p className="mt-3 font-semibold">Waiting for the recorded reply</p>}
+      {replay && <p className="mt-3 font-semibold text-warn">Waiting for the recorded reply</p>}
       {stopped && (
         <p role="alert" className="mt-3 font-semibold text-alert">
           {STOPPED_TEXT}
@@ -172,7 +172,7 @@ export function Overview() {
                 <div>
                   <dt className="text-faded">Status</dt>
                   <dd data-testid="overview-run-status" className="font-semibold">
-                    <StatusDot tone={run.status === "running" ? "live" : run.status === "success" ? "money" : "alert"}>{statusLabel(run.status)}</StatusDot>
+                    <StatusDot tone={run.status === "running" ? "live" : run.status === "success" ? "plain" : "alert"}>{statusLabel(run.status)}</StatusDot>
                   </dd>
                 </div>
                 <div>

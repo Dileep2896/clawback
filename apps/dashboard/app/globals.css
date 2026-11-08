@@ -4,54 +4,30 @@
 @import "@fontsource/atkinson-hyperlegible-next/700.css";
 @import "@fontsource/source-serif-4/600.css";
 
-/* docs/plan/design.md explains each token. lib/contrast.test.ts reads these two blocks and checks every text pair, including under projector wash-out. */
+/* docs/plan/design.md explains each token. Dark is the only theme. lib/contrast.test.ts reads this block and checks every text pair.
+   Each hue has one meaning: lime = money and the primary button, blue = agents working and links, coral = wrong numbers and
+   errors, amber = pending approval and warnings. */
 :root {
-  --paper: #edf1ee;
-  --sheet: #ffffff;
-  --ink: #13201b;
-  --faded: #3c4a44;
-  --line: #d3dcd6;
-  --money: #08573a;
-  --money-soft: #e5f3ea;
-  --action: #08573a;
-  --action-text: #ffffff;
-  --alert: #8e0c3e;
-  --alert-text: #ffffff;
-  --register: #13201b;
-  --register-text: #ffffff;
-  /* Chart bars only, never text. Run through the dataviz palette validator against white, including for colour blindness. */
-  --bar-billed: #c2185b;
-  --bar-real: #00889f;
-  /* The landing's dark ink band. Same in both themes; text colours are set for a lit room. */
-  --band: #0f1a15;
-  --band-text: #eef4f0;
-  --band-faded: #c3d1c9;
-  --band-line: #2c3e35;
-  --band-money: #8be6b9;
-}
-
-:root[data-theme="dark"] {
-  --paper: #0e1613;
-  --sheet: #16211c;
-  --ink: #e6eee9;
-  --faded: #a2b3aa;
-  --line: #2a3a33;
-  --money: #6fd9a6;
-  --money-soft: #173a2a;
-  --action: #4cc48c;
-  --action-text: #06140e;
-  --alert: #ff7ca8;
-  --alert-text: #1a0710;
-  /* Light drums here: dark ones disappear into the dark page, and this is the one thing the room must see. */
-  --register: #e6eee9;
-  --register-text: #0e1613;
-  --bar-billed: #e0528a;
-  --bar-real: #2aa5b8;
-  --band: #070d0a;
-  --band-text: #eef4f0;
-  --band-faded: #c3d1c9;
-  --band-line: #24352d;
-  --band-money: #8be6b9;
+  color-scheme: dark;
+  --paper: #0b0f14;
+  --sheet: #141a21;
+  --line: #263040;
+  --ink: #e8edf2;
+  --faded: #8a96a6;
+  --money: #c6f432;
+  --action: #c6f432;
+  --action-text: #0b0f14;
+  --agent: #3ba7ff;
+  --agent-text: #0b0f14;
+  --alert: #ff5c5c;
+  --alert-text: #0b0f14;
+  --warn: #ffb547;
+  --warn-text: #0b0f14;
+  /* Light drums: dark ones disappear into the dark page, and this is the one thing the room must see. */
+  --register: #e8edf2;
+  --register-text: #0b0f14;
+  /* The shadow at the top and bottom of a drum's window. Not a text colour. */
+  --drum-shade: rgb(0 0 0 / 0.35);
 }
 
 @theme inline {
@@ -65,18 +41,14 @@
   --color-faded: var(--faded);
   --color-line: var(--line);
   --color-money: var(--money);
-  --color-money-soft: var(--money-soft);
   --color-action: var(--action);
   --color-action-text: var(--action-text);
+  --color-agent: var(--agent);
+  --color-agent-text: var(--agent-text);
   --color-alert: var(--alert);
   --color-alert-text: var(--alert-text);
-  --color-bar-billed: var(--bar-billed);
-  --color-bar-real: var(--bar-real);
-  --color-band: var(--band);
-  --color-band-text: var(--band-text);
-  --color-band-faded: var(--band-faded);
-  --color-band-line: var(--band-line);
-  --color-band-money: var(--band-money);
+  --color-warn: var(--warn);
+  --color-warn-text: var(--warn-text);
 }
 
 body {
@@ -93,7 +65,7 @@ body {
 }
 
 :focus-visible {
-  outline: 3px solid var(--action);
+  outline: 3px solid var(--agent);
   outline-offset: 2px;
 }
 
@@ -112,12 +84,12 @@ body {
   line-height: 4rem;
   text-align: center;
   /* The shadow lines at the top and bottom of a real drum's window. */
-  box-shadow: inset 0 5px 0 rgb(0 0 0 / 0.35), inset 0 -5px 0 rgb(0 0 0 / 0.35);
+  box-shadow: inset 0 5px 0 var(--drum-shade), inset 0 -5px 0 var(--drum-shade);
 }
 
 .drum-strip {
   display: block;
-  transition: transform 700ms cubic-bezier(0.3, 1.25, 0.5, 1);
+  transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .drum-strip > span {
@@ -125,11 +97,11 @@ body {
   height: 4rem;
 }
 
-/* A card arriving in a row starts in the action colours, so the room's eye catches the move. */
+/* A card arriving in a row starts in the agent colours, so the room's eye catches the move. */
 @keyframes card-arrive {
   from {
-    background: var(--action);
-    color: var(--action-text);
+    background: var(--agent);
+    color: var(--agent-text);
   }
 }
 
@@ -148,38 +120,101 @@ body {
   }
 }
 
-/* Landing: on the dark band the green focus ring would vanish, so it takes the band's money green. */
-.band :focus-visible {
-  outline-color: var(--band-money);
+/* Landing: the canvas behind the app frame and under the closing band, with a faint dot grid. */
+.canvas {
+  background-image: radial-gradient(color-mix(in srgb, var(--ink) 7%, transparent) 1px, transparent 1px);
+  background-size: 18px 18px;
 }
 
-/* Landing statement: an auditor's strike drawn through each wrong amount. Static (already drawn) unless motion is welcome. */
-.strike {
-  position: relative;
-  white-space: nowrap;
-}
-
-.strike::after {
-  content: "";
-  position: absolute;
-  left: -2px;
-  right: -2px;
-  top: 52%;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--alert);
-  transform-origin: left center;
-}
-
+/* Landing motion. The hero's replay is clocked in components/landing/live-run.tsx; the rest plays once, when its
+   <Reveal> scrolls into view (data-reveal: done, the server's finished state → ready, unseen → play). */
 @media (prefers-reduced-motion: no-preference) {
-  .strike::after {
-    animation: strike-draw 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
-    animation-delay: calc(500ms + var(--strike-order, 0) * 350ms);
+  .live-pulse {
+    animation: live-pulse 1200ms cubic-bezier(0.65, 0, 0.35, 1) infinite alternate;
+  }
+
+  .live-caret {
+    animation: live-caret 900ms steps(1) infinite;
+  }
+
+  /* Pause stops everything in the frame, not just the clock. */
+  [data-paused] :is(.live-pulse, .live-caret) {
+    animation-play-state: paused;
+  }
+
+  [data-reveal="ready"] .reveal-draw {
+    clip-path: inset(0 100% 0 0);
+  }
+  [data-reveal="play"] .reveal-draw {
+    animation: reveal-draw 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  [data-reveal="ready"] :is(.reveal-fade, .reveal-line) {
+    opacity: 0;
+  }
+  [data-reveal="play"] .reveal-fade {
+    animation: reveal-fade 300ms ease-out 500ms both;
+  }
+  [data-reveal="play"] .reveal-line {
+    animation: reveal-line 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  [data-reveal="ready"] .reveal-grow {
+    transform: scaleX(0);
+  }
+  [data-reveal="play"] .reveal-grow {
+    transform-origin: left;
+    animation: reveal-grow 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* The call's waveform speaks while the transcript lines arrive, then rests: about 3 s, so no stop control is needed. */
+  [data-reveal="play"] .wave-bar {
+    animation: wave 420ms ease-in-out 7 alternate;
   }
 }
 
-@keyframes strike-draw {
+@keyframes live-pulse {
+  to {
+    opacity: 0.35;
+  }
+}
+
+@keyframes live-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes reveal-draw {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes reveal-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes reveal-line {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes reveal-grow {
   from {
     transform: scaleX(0);
+  }
+}
+
+@keyframes wave {
+  to {
+    transform: scaleY(0.3);
   }
 }

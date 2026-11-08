@@ -45,9 +45,9 @@ function PortalLogin({ demo, onConnected }: { demo: boolean; onConnected: (provi
           {PROVIDERS.map((p) => (
             <label
               key={p.id}
-              className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-control border px-4 py-2 ${provider === p.id ? "border-action bg-money-soft" : "border-line hover:bg-paper"}`}
+              className={`flex min-h-14 cursor-pointer items-center gap-3 rounded-control border px-4 py-2 ${provider === p.id ? "border-agent bg-agent/10" : "border-line hover:bg-paper"}`}
             >
-              <input type="radio" name="provider" value={p.id} checked={provider === p.id} onChange={() => setProvider(p.id)} className="size-4 accent-[var(--action)]" />
+              <input type="radio" name="provider" value={p.id} checked={provider === p.id} onChange={() => setProvider(p.id)} className="size-4 accent-[var(--agent)]" />
               <span>
                 <span className="block font-semibold">{p.name}</span>
                 <span className="block text-base text-faded">{p.service}</span>
@@ -116,7 +116,7 @@ function UploadBills({ onSaved }: { onSaved: () => void }) {
 
   return (
     <div className="grid gap-4">
-      <label className="grid cursor-pointer justify-items-center gap-2 rounded-card border-2 border-dashed border-faded/50 bg-paper px-6 py-10 text-center hover:border-action">
+      <label className="grid cursor-pointer justify-items-center gap-2 rounded-card border-2 border-dashed border-faded/50 bg-paper px-6 py-10 text-center hover:border-agent">
         <span className="text-[1.375rem] font-semibold">Choose bill PDFs</span>
         <span className="text-faded">Electricity, gas, phone or internet. Up to 5 MB each.</span>
         <input type="file" accept="application/pdf,.pdf" multiple className="sr-only" data-testid="upload-input" onChange={(event) => pick(event.target.files)} />
@@ -148,7 +148,7 @@ export function ConnectBills({ demo, queued: initiallyQueued, business }: { demo
   const ready = connected.length > 0 || billsAdded > 0;
 
   const tabClass = (id: typeof tab) =>
-    `min-h-11 cursor-pointer border-b-[3px] px-3 font-semibold ${tab === id ? "border-action text-ink" : "border-transparent text-faded hover:text-ink"}`;
+    `min-h-11 cursor-pointer border-b-[3px] px-3 font-semibold ${tab === id ? "border-agent text-ink" : "border-transparent text-faded hover:text-ink"}`;
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
@@ -171,7 +171,7 @@ export function ConnectBills({ demo, queued: initiallyQueued, business }: { demo
         {connected.length > 0 && (
           <ul className="mt-6 flex flex-wrap gap-2" data-testid="connected-list">
             {connected.map((p) => (
-              <li key={p} className="rounded-full bg-money-soft px-3 py-1 font-semibold text-money">
+              <li key={p} className="rounded-full border border-line px-3 py-1 font-semibold">
                 ✓ {nameOf(p)} connected
               </li>
             ))}

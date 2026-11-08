@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { logOutAction } from "../../app/(auth)/actions.ts";
 import { Wordmark } from "./kit.tsx";
 
@@ -32,38 +32,6 @@ function Icon({ children, className = "size-5" }: { children: ReactNode; classNa
 }
 
 const ITEM = "flex min-h-10 cursor-pointer items-center gap-3 rounded-[6px] px-3 font-semibold whitespace-nowrap";
-
-function ThemeToggle({ rail }: { rail: boolean }) {
-  const [dark, setDark] = useState(false);
-  useEffect(() => setDark(document.documentElement.dataset.theme === "dark"), []);
-  const label = dark ? "Light theme" : "Dark theme";
-
-  function toggle() {
-    const next = !dark;
-    setDark(next);
-    if (next) document.documentElement.dataset.theme = "dark";
-    else delete document.documentElement.dataset.theme;
-    try {
-      localStorage.setItem("theme", next ? "dark" : "light");
-    } catch {
-      // Storage can be blocked. The theme still changes for this visit.
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      data-testid="theme-toggle"
-      onClick={toggle}
-      aria-label={rail ? label : undefined}
-      title={rail ? label : undefined}
-      className={`${ITEM} text-faded hover:bg-sheet hover:text-ink ${rail ? "lg:justify-center lg:px-0" : ""}`}
-    >
-      <Icon>{dark ? <path d="M12 3v2M12 19v2M3 12h2M19 12h2M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8" /> : <path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5" />}</Icon>
-      <span className={rail ? "lg:hidden" : ""}>{label}</span>
-    </button>
-  );
-}
 
 /**
  * The signed-in sidebar: 240 px on paper beside the content sheet. On /agents, the projector screen, it shrinks to a
@@ -124,7 +92,6 @@ export function AppNav({ company }: { company?: string }) {
             Demo data
           </span>
         )}
-        <ThemeToggle rail={rail} />
         <form action={logOutAction}>
           <button
             type="submit"

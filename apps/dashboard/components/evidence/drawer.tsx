@@ -83,8 +83,8 @@ export function EvidenceDrawer({
       data-testid="evidence-drawer"
       className={
         app
-          ? "my-0 mr-0 ml-auto h-dvh max-h-none w-[min(720px,100vw)] max-w-none overflow-y-auto border-l border-line bg-sheet p-0 text-base text-ink backdrop:bg-paper/70"
-          : "my-0 mr-0 ml-auto h-dvh max-h-none w-[min(1280px,100vw)] max-w-none overflow-y-auto border-l border-line bg-sheet p-5 text-ink backdrop:bg-black/60"
+          ? "my-0 mr-0 ml-auto h-dvh max-h-none w-[min(720px,100vw)] max-w-none overflow-y-auto border-l border-line bg-sheet p-0 text-base text-ink backdrop:bg-paper/80"
+          : "my-0 mr-0 ml-auto h-dvh max-h-none w-[min(1280px,100vw)] max-w-none overflow-y-auto border-l border-line bg-sheet p-5 text-ink backdrop:bg-paper/80"
       }
     >
       {/* The modal sits above the page banner, so a replay repeats its label here, pinned while the drawer scrolls. */}
@@ -92,7 +92,7 @@ export function EvidenceDrawer({
         <p
           role="status"
           data-testid="drawer-replay-banner"
-          className={`sticky top-0 z-10 bg-ink px-4 py-1 text-center leading-tight font-bold text-sheet ${app ? "text-lg" : "mb-3 rounded-control text-[2.125rem]"}`}
+          className={`sticky top-0 z-10 bg-warn px-4 py-1 text-center leading-tight font-bold text-warn-text ${app ? "text-lg" : "mb-3 rounded-control text-[2.125rem]"}`}
         >
           {replayLabel(replay)}
         </p>

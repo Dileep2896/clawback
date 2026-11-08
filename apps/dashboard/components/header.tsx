@@ -25,7 +25,7 @@ export function ReplayBanner() {
   const replay = replayOf(snapshot?.run);
   if (!replay) return null;
   return (
-    <p role="status" data-testid="replay-banner" className="sticky top-0 z-10 m-3 mb-0 rounded-control bg-ink px-4 py-1 text-center text-[2.125rem] leading-tight font-bold text-sheet">
+    <p role="status" data-testid="replay-banner" className="sticky top-0 z-10 m-3 mb-0 rounded-control bg-warn px-4 py-1 text-center text-[2.125rem] leading-tight font-bold text-warn-text">
       {replayLabel(replay)}
     </p>
   );
@@ -59,7 +59,7 @@ export function Header() {
           {/* Run-stat chips: counts the snapshot already has, no spinners. The dot pulses only while the run is working. */}
           <p data-testid="run-stats" className="flex flex-wrap items-center gap-2 leading-tight">
             <span className="inline-flex items-center gap-2 rounded-full border border-line bg-sheet px-3 py-0.5 tabular-nums">
-              <span aria-hidden="true" className={`size-2.5 rounded-full ${run.status === "running" ? "animate-pulse bg-money motion-reduce:animate-none" : "bg-faded/50"}`} />
+              <span aria-hidden="true" className={`size-2.5 rounded-full ${run.status === "running" ? "animate-pulse bg-agent motion-reduce:animate-none" : "bg-faded/50"}`} />
               {snapshot.auditTotal} steps
             </span>
             <span className="rounded-full border border-line bg-sheet px-3 py-0.5 tabular-nums">

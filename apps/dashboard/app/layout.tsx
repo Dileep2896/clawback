@@ -7,16 +7,9 @@ export const metadata: Metadata = {
   description: "Clawback audits your business bills and gets overcharges back. Fictional demo data.",
 };
 
-// Runs before first paint, so a saved dark theme does not flash light. Storage can throw in a private window.
-const RESTORE_THEME = `try{if(localStorage.getItem("theme")==="dark")document.documentElement.dataset.theme="dark"}catch{}`;
-
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    // The script above changes data-theme before React hydrates.
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: RESTORE_THEME }} />
-      </head>
+    <html lang="en">
       <body className="font-sans">{children}</body>
     </html>
   );

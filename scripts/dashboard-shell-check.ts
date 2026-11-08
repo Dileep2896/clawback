@@ -24,7 +24,6 @@ const seeText = (page: Page, testId: string, text: string) =>
   page.getByTestId(testId).filter({ hasText: text }).waitFor({ state: "attached", timeout: 5000 });
 
 // Browser code goes in as strings, because the root tsconfig has no DOM types and this is the only file that wants them.
-const CURRENT_THEME = "document.documentElement.dataset.theme";
 const MEASURE_PAGE = `(() => {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   const found = [];
@@ -86,19 +85,6 @@ async function checkLiveUpdates(page: Page) {
   await shot(page, "light-approved");
 }
 
-async function checkDarkTheme(page: Page) {
-  await page.getByTestId("theme-toggle").click();
-  assert.equal(await page.evaluate(CURRENT_THEME), "dark");
-  await checkFitsOneScreen(page, "dark");
-  await shot(page, "dark-approved");
-
-  await page.reload();
-  await seeText(page, "customer", "Golden Gate Noodle Co.");
-  assert.equal(await page.evaluate(CURRENT_THEME), "dark", "dark theme must survive a reload");
-  await page.getByTestId("theme-toggle").click();
-  assert.equal(await page.evaluate(CURRENT_THEME), undefined);
-}
-
 async function checkConnectionLoss(page: Page) {
   await page.route("**/api/live", (route) => route.fulfill({ status: 500, body: "down" }));
   await seeText(page, "live-error", "Connection lost");
@@ -153,6 +139,79 @@ async function checkLanding(page: Page, name: string) {
   if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/landing-${name}.png`, fullPage: true });
 }
 
+// The hero: every piece of text in the app frame sits inside its own card, or the frame when it is in no card (the frame
+// clips with overflow-hidden). Text cut short on purpose with an ellipsis (the window bar's breadcrumb) is fine.
+const CLIPPED_IN_HERO = `(() => {
+  const figure = document.querySelector("figure");
+  const clipped = [];
+  const walker = document.createTreeWalker(figure, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const parent = node.parentElement;
+    if (!node.textContent.trim() || parent.closest(".sr-only") || getComputedStyle(parent).textOverflow === "ellipsis") continue;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const r = range.getBoundingClientRect();
+    if (!r.width && !r.height) continue; // not laid out: hidden at this width
+    const box = (parent.closest("figure [class*='rounded-[10px]']") ?? figure).getBoundingClientRect();
+    if (r.left < box.left - 0.5 || r.right > box.right + 0.5) clipped.push(node.textContent.trim());
+  }
+  return clipped;
+})()`;
+// Below the hero: every figure tile (the counter strip, the market figures) holds its whole value.
+const SPILLS_FROM_FIGURES = `[...document.querySelectorAll("main dl > div")].filter((cell) => {
+  const box = cell.getBoundingClientRect();
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    if (!walker.currentNode.textContent.trim() || walker.currentNode.parentElement.closest(".sr-only")) continue;
+    const range = document.createRange();
+    range.selectNodeContents(walker.currentNode);
+    const r = range.getBoundingClientRect();
+    if (r.left < box.left - 0.5 || r.right > box.right + 0.5) return true;
+  }
+  return false;
+}).map((cell) => cell.textContent.trim())`;
+async function checkLandingNarrowest(page: Page) {
+  await page.goto(BASE);
+  await page.getByText("Linda Park replied YES", { exact: true }).waitFor();
+  assert.deepEqual(await page.evaluate<string[]>(CLIPPED_IN_HERO), [], "landing 320: hero text clipped");
+  assert.deepEqual(await page.evaluate<string[]>(SPILLS_FROM_FIGURES), [], "landing 320: figure spills out of its tile");
+  const { scrollWidth, innerWidth } = await page.evaluate<PageMeasure>(MEASURE_PAGE);
+  assert.ok(scrollWidth <= innerWidth, `landing 320: page scrolls sideways, ${scrollWidth}px wide in ${innerWidth}px`);
+  for (const id of ["log-in", "get-started"]) {
+    const box = await page.getByTestId(id).boundingBox();
+    assert.ok(box && box.x >= 0 && box.x + box.width <= innerWidth, `landing 320: ${id} is cut off`);
+  }
+  if (screenshotDir) await page.screenshot({ path: `${screenshotDir}/landing-320.png` });
+}
+
+// The hero at 1024px, where the app frame shows its sidebar and agents beside a narrow Overview: no tile spills.
+async function checkLanding1024(page: Page) {
+  await page.goto(BASE);
+  await page.getByText("Linda Park replied YES", { exact: true }).waitFor();
+  assert.deepEqual(await page.evaluate<string[]>(CLIPPED_IN_HERO), [], "landing 1024: hero text spills out of its card");
+  if (screenshotDir) await page.locator("figure").screenshot({ path: `${screenshotDir}/landing-1024.png` });
+}
+
+// The hero's replay: it moves a cursor through the agents' feed; turning reduced motion on mid-replay stops it on the
+// finished feed (no cursor, every line whole) and takes the Pause button away.
+const FEED_STATE = `[document.querySelectorAll("figure .live-pulse").length, document.querySelector("figure ol").innerText]`;
+async function checkLandingReducedMotionChange(page: Page) {
+  await page.goto(BASE);
+  const finished = await page.evaluate<[number, string]>(FEED_STATE);
+  assert.equal(finished[0], 0, "landing: the hero does not start on the finished feed");
+  const pause = page.getByRole("button", { name: "Pause the agents’ replay" });
+  await pause.waitFor();
+  await page.locator("figure .live-pulse").waitFor({ timeout: 5000 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.locator("figure .live-pulse").waitFor({ state: "detached", timeout: 2000 });
+  assert.equal(await pause.isVisible(), false, "landing: Pause still shown under reduced motion");
+  const still = await page.evaluate<[number, string]>(FEED_STATE);
+  await page.waitForTimeout(1500);
+  assert.deepEqual(await page.evaluate<[number, string]>(FEED_STATE), still, "landing: the replay still moves under reduced motion");
+  assert.equal(still[1], finished[1], "landing: reduced motion does not show the finished feed");
+}
+
 // Every nav link reaches its page, and the current page is marked.
 async function checkNav(page: Page) {
   await page.goto(`${BASE}/agents`);
@@ -186,7 +245,6 @@ const browser = await chromium.launch();
 try {
   const page = await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage();
   await checkLiveUpdates(page);
-  await checkDarkTheme(page);
   await checkConnectionLoss(page);
 
   const fresh = await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage();
@@ -196,6 +254,9 @@ try {
   await checkNarrow(await (await signedInContext(browser, BASE, { viewport: { width: 390, height: 844 } })).newPage());
   await checkLanding(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage(), "1920");
   await checkLanding(await (await signedInContext(browser, BASE, { viewport: { width: 390, height: 844 } })).newPage(), "390");
+  await checkLandingNarrowest(await (await signedInContext(browser, BASE, { viewport: { width: 320, height: 640 } })).newPage());
+  await checkLanding1024(await (await signedInContext(browser, BASE, { viewport: { width: 1024, height: 768 } })).newPage());
+  await checkLandingReducedMotionChange(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage());
   await checkNav(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage());
   console.info("dashboard-shell check passed");
 } finally {

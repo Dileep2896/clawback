@@ -272,3 +272,72 @@ Human, verbatim: "see all the AI platform landing page and learn from it to make
 **depends on:** savings-views, signup-connect
 
 **parallel with:** landing-live, naive-rehearsal
+## New colour theme (human, 2026-11-07, from a screenshot; overrides earlier colour guidance in design-study.md and Design pass 2)
+
+| Role | Name | Hex |
+|---|---|---|
+| Background | Near black | #0B0F14 |
+| Cards / panels | Dark slate | #141A21 |
+| Borders | Steel | #263040 |
+| Main text | Soft white | #E8EDF2 |
+| Muted text | Gray blue | #8A96A6 |
+| Accent: savings, buttons, logo | Electric lime | #C6F432 |
+| Agent activity / links | Voltage blue | #3BA7FF |
+| Overcharges / errors | Coral red | #FF5C5C |
+| Warnings / pending approval | Amber | #FFB547 |
+
+Orchestrator decisions:
+- Applies to the whole product: landing page and every in-app page. Dark is the only theme; drop the light palette and the prefers-color-scheme switch.
+- Map onto the existing token names in apps/dashboard/app/globals.css (paper=#0B0F14, sheet=#141A21, line=#263040, ink=#E8EDF2, faded=#8A96A6, money and action=#C6F432 with near-black #0B0F14 text on lime, alert=#FF5C5C, a new warn/pending token=#FFB547, a new agent/link token=#3BA7FF; band tokens collapse onto these). Kwh chart: billed line coral, meter line voltage blue, gap shaded amber.
+- Each colour keeps one meaning: lime = money and the primary button only, blue = agents working and links, coral = wrong numbers and errors, amber = pending approval and warnings. No other hues; no hard-coded hex outside globals.css.
+- Check text contrast ≥ 4.5:1 for body and labels (muted #8A96A6 on #141A21 included) and fix by token, not per component. Update docs/plan/design.md with this table.
+
+### `landing-pages`
+
+**Goal:** Four public pages linked from the landing nav and footer: Pricing, Market, Why Clawback (how we differ from current players) and How it works. Human, 2026-11-07: "add more detailed pages about pricing, our market size, how we are different from all the current players and how it work with good motion design and illustrations."
+
+Orchestrator decisions:
+- Routes `/pricing`, `/market`, `/compare`, `/how-it-works`, sharing the landing's nav, footer, tokens and the new dark colour theme. Reuse the landing's components and motion helpers; the hero and bento stay on `/`.
+- **Pricing:** 30% of what is actually recovered (refund plus first-year savings), nothing up front, nothing if nothing comes back. A worked example from the recorded run ($12,606.06 refund, $18,319.32 a year, fee $9,277.61, you keep $21,647.77) with the stacked-bar animation, a "what counts / what doesn't" list (claimed is not granted; fee is charged only on granted money), and an FAQ. No invented plans or tiers.
+- **Market:** the TAM already on the landing (about $500B+ of US business utility and telecom spend, 1–3% recoverable, $5–16B a year, about $1.6–4.9B revenue at 30%), with how each number is derived and its sources, as a drawn funnel or nested-area graphic. Mark estimates as estimates.
+- **Why Clawback:** research the current players from their public pages and cite each claim with a link in the page or in `docs/plan/competitors.md`: utility and telecom bill auditors on contingency, energy and telecom expense management software (for example Tangoe, Calero, Urjanet/Arcadia, EnergyCAP, Cass), consumer bill negotiators (for example Rocket Money, BillShark, Trim) and manual consultants. Verify each one exists and what it does before naming it. Compare on who it serves, who does the work, how it's priced, whether it calls the provider and files the claim, and time to first refund. Fair and factual: no logos, no claims about them we can't link, no "10x" style figures.
+- **How it works:** the five agents step by step (Collector, Auditor, Approver, Negotiator, Finance) with the human's one approval, each step an illustration plus real data from the recorded run; scroll-driven sequence (agent graph lights up, bill → finding → call waveform → ledger).
+- **Illustrations and motion:** hand-built SVG and CSS in the theme colours (lime money, blue agents, coral wrong numbers, amber pending), no stock art, no AI images, no emoji. Motion ease-out, 200–600 ms, plays when on screen, finished state under prefers-reduced-motion. Every page looks complete at t=0.
+- Run the Hallmark slop test and the design study's anti-patterns list on each page.
+
+**Acceptance checks:**
+- Four routes render with no console errors and link from the landing nav and footer.
+- Screenshots at 1920x1080, 390x844 and 320x640 per page, no sideways scroll, reduced-motion frames.
+- Every competitor claim has a source link; every figure comes from the recorded run, the TAM derivation, or is labelled an estimate.
+- `pnpm test`, lint, typecheck pass.
+
+**Estimate:** 2.5 hours
+
+**depends on:** landing-live
+
+**parallel with:** product-polish, naive-runtime-cost
+
+### `demo-video`
+
+**Goal:** A 2:00 demo video for the hackathon submission, recorded from one real live run, edited in Remotion with zooms, cursor, callouts and captions, under the human's own voiceover. Research: `docs/plan/demo-video.md` (read it first; this section overrides it).
+
+Orchestrator decisions:
+- **One live run, approved by the human on 2026-11-07 in the terminal: "yes, plan one live run for the video".** Real Retell and Vapi call, expected about $0.23 Retell plus $0.17 Vapi plus about $0.40 Claude. Only one. Before dialing, ask the orchestrator in `questions.md` and wait for "go" (the orchestrator checks the credit floor: keep at least $3 Retell and $2 Vapi). If the take fails, stop and ask; never redial on your own. Allowlisted numbers only.
+- Not replay: no REPLAY banner, Linda taps Approve on screen. Follow the stage script in `docs/plan/rehearsal-notes.md` (sign up Mission Dumplings, upload the sample bill, Linda approves, /agents, end on Overview).
+- **Call audio:** after the run, fetch the call's recording from Retell (or Vapi) with a read-only API GET (free) and use it as the call audio. Never use the Mac's built-in speech. Keys stay in `.env`, never printed.
+- **Capture:** CDP `Page.startScreencast` at 1920x1080 (deviceScaleFactor 2), ffmpeg to a constant 60 fps ProRes master, browser muted; log `events.json` with `{t, kind, box}` for every step and click (approve button, finding, refund figure `overview-refund`, call panel). Footage and audio go in a gitignored `video/out/`; keep the master outside git.
+- **Edit:** `video/` folder at the repo root, outside the pnpm workspace (`pnpm install --ignore-workspace`), Remotion pinned to 4.0.528. About 6 scenes in about 1:50: problem (landing hero), sign-up and upload, agents at work, the call (real audio and transcript, sped up only if labelled), approval, money on Overview, close. `ZoomTo` driven by `events.json` (spring scale plus translate), drawn cursor, ring and count-up on $12,606.06, short title cards in the dark theme fonts and colours. Hard cap 3,600 frames at 30 fps.
+- **Voiceover:** render a silent rough cut with a scene timeline for the human to read against, then re-time scenes to their recording (`video/in/voiceover.wav`, supplied by the human). Captions from the voiceover via whisper.cpp only if time allows.
+- **Render:** H.264 CRF 16 for upload plus a ProRes HQ master; check for banding on the dark background (add light grain if needed).
+- Check before recording that the sample-bill upload uses the parse cache; if it would call a paid model, ask first.
+
+**Acceptance checks:**
+- One live run recorded end to end, with its cost (Retell, Vapi, Claude) written in `docs/plan/rehearsal-notes.md`.
+- Silent rough cut and timeline handed to the human; final render at 1920x1080, at most 2:00, real call audio, no Mac speech, no replay label.
+- No product code changes; `video/` is not part of the workspace and nothing in `video/out/` is committed.
+
+**Estimate:** 3 hours plus the human's voiceover
+
+**depends on:** product-polish (final look on screen)
+
+**parallel with:** landing-pages, naive-runtime-cost

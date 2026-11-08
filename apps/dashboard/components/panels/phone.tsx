@@ -55,7 +55,7 @@ export function Phone() {
               <li
                 key={message.id}
                 data-sms={message.direction}
-                className={`rounded-control px-3 py-1 leading-tight ${inbound ? "ml-6 border border-line bg-paper" : "mr-6 border border-line"}`}
+                className={`rounded-control px-3 py-1 leading-tight ${inbound ? "ml-6 bg-ink text-paper" : "mr-6 border border-line"}`}
               >
                 <span className="block font-semibold">{inbound ? contact : "Clawback"}</span>
                 {message.body}

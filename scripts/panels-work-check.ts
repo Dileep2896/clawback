@@ -186,19 +186,6 @@ async function checkDrawerStaysOpenOnLiveData(page: Page) {
   await page.locator(DRAWER).waitFor({ state: "detached" });
 }
 
-async function checkDark(page: Page) {
-  await page.getByTestId("theme-toggle").click();
-  await checkFits(page, "dark");
-  await shot(page, "dark");
-  await page.locator(`[data-finding="${METER}"]`).click();
-  await page.locator(DRAWER).waitFor({ timeout: 5000 });
-  await checkFits(page, "meter drawer, dark");
-  await shot(page, "drawer-meter-dark");
-  await page.keyboard.press("Escape");
-  await page.locator(DRAWER).waitFor({ state: "detached" });
-  await page.getByTestId("theme-toggle").click();
-}
-
 async function checkUnreadableEvidence(page: Page) {
   const live = (await (await page.request.get(`${BASE}/api/live`)).json()) as { findings: { id: string; evidenceJson: { detail: unknown } }[] };
   for (const finding of live.findings) finding.evidenceJson.detail = {};
@@ -237,7 +224,6 @@ try {
   await checkKeyboard(page);
   await insertSampleRun(db);
   await checkDrawerStaysOpenOnLiveData(page);
-  await checkDark(page);
 
   await checkUnreadableEvidence(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage());
   await checkEmpty(await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage());

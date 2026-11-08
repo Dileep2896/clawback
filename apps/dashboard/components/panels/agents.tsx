@@ -10,7 +10,7 @@ const name = (agent: string) => agent.charAt(0).toUpperCase() + agent.slice(1);
 
 // Calm: only a working agent's dot moves, and not under reduced motion.
 const DOT: Record<AgentState, string> = {
-  working: "bg-money animate-pulse motion-reduce:animate-none",
+  working: "bg-agent animate-pulse motion-reduce:animate-none",
   blocked: "bg-alert",
   queued: "border-2 border-faded/60",
   done: "bg-faded/50",

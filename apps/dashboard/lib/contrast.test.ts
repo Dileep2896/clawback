@@ -19,17 +19,15 @@ function luminance(hex: string) {
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 }
 
-/** The WCAG ratio, with room light added to both colours. Projected black can only be as dark as the lit screen. */
-function contrast(a: string, b: string, roomLight = 0) {
+/** The WCAG ratio. */
+function contrast(a: string, b: string) {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi! + 0.05 + roomLight) / (lo! + 0.05 + roomLight);
+  return (hi! + 0.05) / (lo! + 0.05);
 }
 
-// A projector in a lit room: the screen reflects 10% of the projected white everywhere, about 11:1 from white to black.
-// A model, not a measurement. The real judgement is the human one during rehearsal.
-const LIT_ROOM = 0.1;
 const MIN_TEXT = 4.5;
 
+// Every text colour on every ground it sits on. Dark is the only theme.
 const TEXT_PAIRS = [
   ["ink", "paper"],
   ["ink", "sheet"],
@@ -37,31 +35,24 @@ const TEXT_PAIRS = [
   ["faded", "sheet"],
   ["money", "paper"],
   ["money", "sheet"],
-  ["money", "money-soft"],
-  ["ink", "money-soft"],
-  ["action-text", "action"],
-  ["alert-text", "alert"],
+  ["agent", "paper"],
+  ["agent", "sheet"],
   ["alert", "paper"],
   ["alert", "sheet"],
+  ["warn", "paper"],
+  ["warn", "sheet"],
+  ["action-text", "action"],
+  ["agent-text", "agent"],
+  ["alert-text", "alert"],
+  ["warn-text", "warn"],
   ["register-text", "register"],
-  ["band-text", "band"],
-  ["band-faded", "band"],
-  ["band-money", "band"],
+  ["paper", "ink"],
 ] as const;
 
 describe("theme contrast", () => {
-  const light = tokens(":root");
-  const dark = tokens(':root[data-theme="dark"]');
+  const theme = tokens(":root");
 
-  it.each(TEXT_PAIRS)("light theme: %s on %s holds up on a projector in a lit room", (text, ground) => {
-    expect(contrast(light[text]!, light[ground]!, LIT_ROOM)).toBeGreaterThanOrEqual(MIN_TEXT);
-  });
-
-  it.each(TEXT_PAIRS)("light theme: %s on %s passes on a plain screen", (text, ground) => {
-    expect(contrast(light[text]!, light[ground]!)).toBeGreaterThanOrEqual(MIN_TEXT);
-  });
-
-  it.each(TEXT_PAIRS)("dark theme: %s on %s passes on a plain screen", (text, ground) => {
-    expect(contrast(dark[text]!, dark[ground]!)).toBeGreaterThanOrEqual(MIN_TEXT);
+  it.each(TEXT_PAIRS)("%s on %s passes on a plain screen", (text, ground) => {
+    expect(contrast(theme[text]!, theme[ground]!)).toBeGreaterThanOrEqual(MIN_TEXT);
   });
 });
