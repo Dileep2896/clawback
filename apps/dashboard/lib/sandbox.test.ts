@@ -110,6 +110,10 @@ describe("the judge sandbox", { timeout: 180_000 }, () => {
         expect(own.length).toBeGreaterThan(0);
         // Every finding points at this judge's own copy of an account.
         for (const { accountId } of own) if (accountId) expect(accountId.startsWith(`${customerId}:`)).toBe(true);
+        // The Collector view's meter readings (review: a judge's usage was empty), on their own accounts.
+        const { usage } = await liveSnapshot(db, customerId);
+        expect(usage).toHaveLength(12);
+        for (const u of usage) expect(u.accountId.startsWith(`${customerId}:`) && u.intervals > 0 && u.from && u.to).toBeTruthy();
       }
       expect(await db.$count(findings, eq(findings.customerId, a))).toBe(await db.$count(findings, eq(findings.customerId, b)));
       expect(await db.$count(runs, eq(runs.customerId, CUSTOMER.id))).toBe(0);

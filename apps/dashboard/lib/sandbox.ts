@@ -18,13 +18,25 @@ type Row = Record<string, unknown>;
 type Client = Pick<Db["$client"], "query">;
 
 // shortcut: read from disk next to the repo (next runs from apps/dashboard, tests from the root); bundle it as data if the host has no filesystem.
-function readText(name: string) {
+function readReplayFile(name: string): string {
   for (const dir of [process.cwd(), join(process.cwd(), "../..")]) {
     const file = join(dir, "data/replay", name);
     if (existsSync(file)) return readFileSync(file, "utf8");
   }
-  throw new Error(`No recording at data/replay/${name}`);
+  throw new Error(`No data/replay/${name}`);
 }
+const readRecording = (): Recording => parseRecording(readReplayFile("run.jsonl"));
+
+type UsageSummary = { accountId: string; meterNumber: string | null; intervals: number; from: string; to: string }[];
+let usageCache: UsageSummary | undefined;
+/** The demo customer's meter readings as the judge's own accounts. The sandbox database holds no intervals, so they come from usageSummary in the seed. */
+export const sandboxUsage = (customerId: string) =>
+  (usageCache ??= JSON.parse(readReplayFile("usage.json")) as UsageSummary).map((u) => ({
+    ...u,
+    accountId: sandboxId(customerId, u.accountId),
+    from: new Date(u.from),
+    to: new Date(u.to),
+  }));
 
 export type SandboxPlan = {
   recordedAt: string;
@@ -46,7 +58,7 @@ export function planOf(recording: Recording): SandboxPlan {
 }
 
 let cached: SandboxPlan | undefined;
-export const sandboxPlan = () => (cached ??= planOf(parseRecording(readText("run.jsonl"))));
+export const sandboxPlan = () => (cached ??= planOf(readRecording()));
 
 /** The run recorded with Email chosen. Its run id becomes the call recording's, so a judge has one run id whichever they pick. */
 export function emailPlanOf(text: string, runId: string) {
@@ -54,7 +66,7 @@ export function emailPlanOf(text: string, runId: string) {
   return planOf(parseRecording(text.replaceAll(recorded, runId)));
 }
 let cachedEmail: SandboxPlan | undefined;
-export const sandboxEmailPlan = () => (cachedEmail ??= emailPlanOf(readText("run-email.jsonl"), sandboxPlan().events[0]!.id));
+export const sandboxEmailPlan = () => (cachedEmail ??= emailPlanOf(readReplayFile("run-email.jsonl"), sandboxPlan().events[0]!.id));
 
 /** The recording this judge is watching: the call one until they approve with Email. */
 const planFor = (state: SandboxState) => (state.contact === "email" ? sandboxEmailPlan() : sandboxPlan());

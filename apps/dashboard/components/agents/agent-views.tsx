@@ -148,10 +148,9 @@ export function CollectorView({ snapshot }: { snapshot: Snapshot }) {
   );
 }
 
-/** Every rule the audit runs, passed or with the findings it produced. Shown once this run's audit has run. */
+/** Every rule the audit runs, passed or with the findings it produced. Shown only once this run's audit has worked, never for a failed or denied attempt. */
 export function AuditChecks({ snapshot }: { snapshot: Snapshot }) {
-  const ran = snapshot.auditLog.some((r) => r.tool === "run_audit") || snapshot.boardCards.some((c) => c.agent === "auditor" && c.status === "done");
-  if (!ran) return null;
+  if (!snapshot.auditDone) return null;
   return (
     <Section title="The checks it ran">
       <ul data-testid="audit-checks" className="grid sm:grid-cols-2 sm:gap-x-6">

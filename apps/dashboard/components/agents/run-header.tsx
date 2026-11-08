@@ -3,7 +3,7 @@
 import { findingTotals } from "@bill-fighter/core/rules/totals";
 import { useEffect, useState } from "react";
 import { elapsed } from "../../lib/agents.ts";
-import { recordedNow, replayOf } from "../../lib/replay.ts";
+import { replayOf, runSeconds } from "../../lib/replay.ts";
 import { runProblems, statusLabel } from "../../lib/run-state.ts";
 import { useLive } from "../../lib/use-live.tsx";
 import { SandboxPill } from "../sandbox-pill.tsx";
@@ -32,8 +32,7 @@ export function RunHeader() {
   // The approval's own sum (approver.ts): expired promos are flagged, not claimed, so they are not counted.
   const found = findingTotals((snapshot?.findings ?? []).filter((f) => f.type !== "promoExpiry"));
   const foundCents = found.refundCents + found.annualSavingsCents;
-  const end = run?.finishedAt ? new Date(run.finishedAt).getTime() : replay ? recordedNow(replay, now) : now;
-  const seconds = run ? Math.max(0, Math.round((end - new Date(run.startedAt).getTime()) / 1000)) : 0;
+  const seconds = run ? runSeconds(run, now) : 0;
   const humanActions = snapshot?.humanActions ?? 0;
   const problems = runProblems(snapshot?.boardCards ?? []);
 

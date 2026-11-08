@@ -1,5 +1,6 @@
 import { and, asc, count, desc, eq, gte, inArray, max, min, or, sql } from "drizzle-orm";
 import { isSandboxReplay, sandboxId } from "./replay.ts";
+import { sandboxUsage } from "./sandbox.ts";
 import type { Db } from "@bill-fighter/db/client";
 import {
   accounts,
@@ -42,6 +43,8 @@ export type LiveData = {
   // No input or output: those columns can hold tool data, so they never reach the browser.
   auditLog: Pick<Row<typeof auditLog>, "id" | "agent" | "tool" | "costUsd" | "createdAt">[];
   auditTotal: number;
+  /** A run_audit row that did its work: a failed or denied attempt also writes a row. */
+  auditDone: boolean;
   scheduledChecks: Row<typeof scheduledChecks>[];
   /** Picked from this run's tool rows, never a whole input or output: the sender and subject Intake read. A replay has none. */
   email: { from: string; subject: string } | null;
@@ -73,6 +76,7 @@ const NO_RUN: LiveData = {
   sms: [],
   auditLog: [],
   auditTotal: 0,
+  auditDone: false,
   scheduledChecks: [],
   email: null,
   letterWording: {},
@@ -138,7 +142,7 @@ export async function liveSnapshot(db: Db, customerId?: string): Promise<LiveDat
 
   const siteAccountIds = customerFindings.flatMap((f) => f.accountId ?? []);
 
-  const [sites, humanActions, cards, runCalls, ledgerRows, billRows, sms, audit, auditTotal, checks, picks, usage] = await Promise.all([
+  const [sites, humanActions, cards, runCalls, ledgerRows, billRows, sms, audit, auditTotal, auditDone, checks, picks, usage] = await Promise.all([
     db
       .select({ accountId: accounts.id, name: locations.name })
       .from(accounts)
@@ -165,6 +169,15 @@ export async function liveSnapshot(db: Db, customerId?: string): Promise<LiveDat
       .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
       .limit(AUDIT_ROW_LIMIT),
     db.$count(auditLog, eq(auditLog.runId, run.id)),
+    // The keys wrapTool and auditDenied write when a tool did not do its work (plan-check.ts didWork).
+    db.$count(
+      auditLog,
+      and(
+        eq(auditLog.runId, run.id),
+        eq(auditLog.tool, "run_audit"),
+        sql`not coalesce(jsonb_typeof(${auditLog.outputJson}) = 'object' and ${auditLog.outputJson} ?| array['error', 'refused', 'denied'], false)`,
+      ),
+    ),
     db.select().from(scheduledChecks).where(eq(scheduledChecks.customerId, run.customerId)).orderBy(asc(scheduledChecks.runAt)),
     // Only these fields leave the database: other tool rows can hold vault names and raw email bodies.
     db
@@ -205,9 +218,11 @@ export async function liveSnapshot(db: Db, customerId?: string): Promise<LiveDat
     sms,
     auditLog: audit,
     auditTotal,
+    auditDone: auditDone > 0,
     scheduledChecks: checks,
     email: read ? { from: read.from!, subject: read.subject! } : null,
     letterWording,
-    usage,
+    // A judge's copy has no readings of its own: its database is seeded without them.
+    usage: usage.length === 0 && isSandboxReplay(run.replay) ? sandboxUsage(run.customerId) : usage,
   };
 }

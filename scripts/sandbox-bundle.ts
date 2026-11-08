@@ -56,7 +56,7 @@ export function bundle(out: string) {
     });
   }
   mkdirSync(join(tree, "data", "replay"), { recursive: true });
-  for (const name of ["run.jsonl", "run-email.jsonl"]) cpSync(join(ROOT, "data/replay", name), join(tree, "data/replay", name));
+  for (const name of ["run.jsonl", "run-email.jsonl", "usage.json"]) cpSync(join(ROOT, "data/replay", name), join(tree, "data/replay", name));
   cpSync(join(ROOT, "tsconfig.base.json"), join(tree, "tsconfig.base.json"));
 
   const app = readJson("apps/dashboard/package.json");
