@@ -61,6 +61,6 @@ export function clicksIn(s: Scene, events: Ev[], kinds: string[]) {
 
 /** m:ss.s for the rough cut's timeline. */
 export const stamp = (frame: number) => {
-  const sec = frame / FPS;
-  return `${Math.floor(sec / 60)}:${(sec % 60).toFixed(1).padStart(4, "0")}`;
+  const tenths = Math.round((frame / FPS) * 10); // round first, so 59.97 s reads 1:00.0, not 0:60.0
+  return `${Math.floor(tenths / 600)}:${((tenths % 600) / 10).toFixed(1).padStart(4, "0")}`;
 };

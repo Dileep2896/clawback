@@ -37,8 +37,12 @@ export function Cursor({ clicks }: { clicks: { frame: number; x: number; y: numb
   const p = next === -1 ? 1 : interpolate(frame, [Math.max(from.frame, to.frame - MOVE), to.frame], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.bezier(0.65, 0, 0.35, 1) });
   const x = from.x + (to.x - from.x) * p;
   const y = from.y + (to.y - from.y) * p;
+  // Only there around the clicks: fades in before the first glide, out a second after the last click.
+  const first = clicks[0].frame - MOVE;
+  const last = clicks[clicks.length - 1].frame;
+  const opacity = interpolate(frame, [first - 30, first - 20, last + 25, last + 35], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
-    <AbsoluteFill style={{ pointerEvents: "none" }}>
+    <AbsoluteFill style={{ pointerEvents: "none", opacity }}>
       {clicks.map((c) => {
         const age = frame - c.frame;
         if (age < 0 || age > 16) return null;
@@ -94,7 +98,7 @@ export function CallCaptions({ transcript, fromSec }: { transcript: Utterance[];
     <div style={{ position: "absolute", left: 160, right: 160, bottom: 110, textAlign: "center", fontFamily: SANS, fontSize: 44, lineHeight: 1.3, color: C.ink }}>
       <span style={{ padding: "10px 22px", background: "rgb(11 15 20 / 0.88)", borderRadius: 14, boxDecorationBreak: "clone", WebkitBoxDecorationBreak: "clone" }}>
         <b style={{ color: u.role === "agent" ? C.agent : C.warn }}>{u.role === "agent" ? "Clawback" : "Provider"}: </b>
-        {u.words.filter((w) => w.start <= t).map((w) => w.word).join(" ")}
+        {u.words.filter((w) => w.start <= t).map((w) => w.word).join("")}
       </span>
     </div>
   );

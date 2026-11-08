@@ -11,7 +11,7 @@ About 270 words at a calm pace (about 140 words a minute), plus a 15-second gap 
 | 0:58–1:10 | Approval card, Linda taps Approve | Before anything leaves the building, the Approver asks the owner once. One tap. |
 | 1:10–1:14 | Call panel opens | Then the Negotiator picks up the phone. |
 | 1:14–1:29 | Real call audio plays, transcript scrolls (no voiceover) | *(silence: let the call be heard)* |
-| 1:29–1:42 | Call ends, Filer and ledger fill in | It cancels seven lines nobody uses, restores three expired promotions, and the Filer files the overbilling claim under the utility's own rule. |
+| 1:29–1:42 | Call ends, Filer and ledger fill in | It cancels seven lines nobody uses, flags three expired promotions and the Filer files the overbilling claim under the utility's own rule. |
 | 1:42–1:54 | Overview: $12,606.06 refund, $18,319.32 a year, zoom and count-up | Twelve thousand six hundred dollars back, and over eighteen thousand a year saved. We take thirty percent, only of money that actually comes back. |
 | 1:54–2:00 | Close card | One approval. Everything else ran without us. That's Clawback. |
 

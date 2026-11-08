@@ -9,11 +9,9 @@ Footage, voice and renders are gitignored: `out/`, `public/footage/`, `public/vo
 1. Own database and ports in this worktree's `.env` (`DATABASE_URL` → `clawback_video`, dashboard 3010, portal 3011, `WEBHOOK_PORT=3012`, `WEBHOOK_URL`). A fresh take needs no sign-ups in that database: recreate it (`CREATE DATABASE`, `pnpm db:migrate`, `pnpm seed`, `pnpm seed:portal`) rather than `pnpm demo:reset`, which also empties the shared Mailpit inbox.
 2. Start `next dev --port 3010 -H 127.0.0.1` (dashboard), `next dev --port 3011` (portal) and `pnpm dev:webhooks`, all with the same `VOICE_MODE`.
 3. `pnpm exec tsx --env-file-if-exists=.env video/record/record-demo.ts` (sim) or `VOICE_MODE=live … --live` (one real call, only with the orchestrator's go). It writes `video/out/frames/`, `frames.ffconcat` and `events.json`, and fails the take on a REPLAY banner, speech-unavailable text or wrong figures.
-4. Master and edit copy, from `video/out/`:
-   - `ffmpeg -f concat -safe 0 -i frames.ffconcat -vf fps=60 -c:v prores_ks -profile:v 3 -pix_fmt yuv422p10le footage-master.mov`
-   - `ffmpeg -i footage-master.mov -c:v libx264 -crf 14 -preset slow -pix_fmt yuv420p ../public/footage/footage.mp4`
-   - `cp events.json ../public/events.json`
-5. Call audio: `pnpm exec tsx --env-file=.env services/voice/src/live/caller/cli.ts readback <retell call id>` (read-only, free) prints the recording URL and cost; download it to `video/public/call.wav`.
+4. `cp video/out/events.json video/public/events.json`, then step 6 for the footage.
+5. Call audio: `pnpm exec tsx --env-file=.env video/record/call-audio.ts <retell call id>` (read-only GETs, free; the id is in the webhook log line `Live call <id>: …`) writes `video/public/call.wav` and the word-timed `call.transcript.json` the captions use. Hand-fix misheard names there (the 2026-11-07 take: "Basal"/"Baytel" → "BayTel"). `cli.ts readback <id>` gives the Retell and Vapi cost.
+6. Capture master (the ProRes HQ master is made only of the final edit, for disk): `ffmpeg -f concat -safe 0 -i frames.ffconcat -vf fps=60,format=yuv420p -c:v libx264 -crf 12 out/footage-master.mp4`, hard-linked as `public/footage/footage.mp4`. Delete `out/frames/` after the final render.
 
 ## Edit and render (from `video/`)
 

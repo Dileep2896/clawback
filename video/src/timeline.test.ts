@@ -30,5 +30,6 @@ describe("timeline", () => {
 
   it("stamps frames as m:ss.s", () => {
     expect(stamp(3555)).toBe("1:58.5");
+    expect(stamp(1799)).toBe("1:00.0");
   });
 });
