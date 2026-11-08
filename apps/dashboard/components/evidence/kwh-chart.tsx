@@ -42,7 +42,7 @@ export function KwhChart({ detail }: { detail: MeterDetail }) {
           {bills.map((bill, i) => (
             <div key={bill.billId} data-chart-month={bill.periodStart.slice(0, 7)} className="relative flex min-w-0 flex-1 items-end justify-center gap-0.5 px-0.5">
               {i === swapIndex && (
-                <div data-testid="swap-marker" className="absolute inset-y-0 left-0 border-l-4 border-dashed border-ink">
+                <div data-testid="swap-marker" className="absolute inset-y-0 left-0 border-l-2 border-dashed border-ink">
                   <span className="absolute top-0 left-2 font-semibold whitespace-nowrap">
                     Meter swap: {oldMeter} to {newMeter}
                   </span>

@@ -23,9 +23,9 @@ export function AreaChart({ points, className = "mt-6 h-40" }: { points: number[
   const W = 640;
   const H = 160;
   const max = Math.max(...points) || 1;
-  const xy = points.map((p, i) => [(i / (points.length - 1)) * W, H - (p / max) * (H - 8)] as const);
-  // A staircase: money lands at once, so each row is a step, not a slope.
-  const line = xy.map(([x, y], i) => (i === 0 ? `M${x},${y}` : `H${x}V${y}`)).join("");
+  const xy = points.map((p, i) => [(i / points.length) * W, H - (p / max) * (H - 8)] as const);
+  // A staircase: money lands at once, so each row is a step, not a slope. The last step runs on to the edge.
+  const line = `${xy.map(([x, y], i) => (i === 0 ? `M${x},${y}` : `H${x}V${y}`)).join("")}H${W}`;
   return (
     <svg aria-hidden="true" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className={`w-full overflow-visible ${className}`}>
       <path d={`${line}V${H}H0Z`} className="fill-money/10" />

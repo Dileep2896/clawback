@@ -58,7 +58,7 @@ function ApprovalCard() {
     <section
       data-testid="overview-approval"
       aria-labelledby="approval-title"
-      className="rounded-card border border-line border-l-4 border-l-alert bg-sheet p-6"
+      className="rounded-card border border-alert bg-sheet p-6"
     >
       <div className="flex flex-wrap items-center justify-between gap-6">
         <div className="min-w-0 flex-1">
@@ -184,7 +184,7 @@ export function Overview() {
                 {approval && approval.status !== "pending" && (
                   <div>
                     <dt className="text-faded">Approval</dt>
-                    <dd data-testid="overview-decision" className={`font-semibold ${approval.status === "approved" ? "text-money" : "text-alert"}`}>
+                    <dd data-testid="overview-decision" className={`font-semibold ${approval.status === "approved" ? "" : "text-alert"}`}>
                       {approval.status === "approved" ? "Approved" : "Denied"} by {approval.approvedBy}
                       {approval.channel && `, ${APPROVAL_CHANNELS[approval.channel]}`}
                     </dd>

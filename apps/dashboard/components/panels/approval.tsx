@@ -38,7 +38,7 @@ export function Approval() {
           {approval.status !== "pending" && (
             <p
               data-testid="approval-decision"
-              className={`rounded-control px-3 py-1 font-semibold ${approval.status === "approved" ? "bg-action text-action-text" : "border border-alert text-alert"}`}
+              className={`rounded-control px-3 py-1 font-semibold ${approval.status === "approved" ? "border border-line bg-paper" : "border border-alert text-alert"}`}
             >
               {approval.status === "approved" ? "Approved" : "Denied"} by {approval.approvedBy}
               {approval.channel && `, ${APPROVAL_CHANNELS[approval.channel]}`}

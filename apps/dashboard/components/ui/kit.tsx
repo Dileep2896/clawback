@@ -53,10 +53,11 @@ export function StatTile({ label, value, note, tone = "plain", testId }: { label
 /** grouped: children are whole <tbody> elements, one per group, instead of rows. */
 export function Table({ head, children, caption, grouped }: { head: { label: string; numeric?: boolean }[]; children: ReactNode; caption?: string; grouped?: boolean }) {
   return (
-    <div className="overflow-x-auto rounded-card border border-line bg-sheet">
+    // Horizontal scroll only under 1024 px: any overflow box at desktop would trap the sticky header inside it.
+    <div className="rounded-card border border-line bg-sheet max-lg:overflow-x-auto">
       <table className="w-full border-collapse text-left text-[15px] [&_td]:h-11 [&_td]:border-t [&_td]:border-line [&_td]:px-4 [&_td]:py-2 [&_tbody_tr]:hover:bg-paper/60">
         {caption && <caption className="px-4 pt-3 pb-1 text-left text-[13px] text-faded">{caption}</caption>}
-        <thead className="sticky top-0 bg-sheet">
+        <thead className="sticky top-0 z-[1] bg-sheet [&_th:first-child]:rounded-tl-card [&_th:last-child]:rounded-tr-card">
           <tr>
             {head.map((column) => (
               <th key={column.label} scope="col" className={`h-9 px-4 text-[13px] font-semibold text-faded ${column.numeric ? "text-right" : ""}`}>
@@ -97,16 +98,12 @@ export function EmptyState({ title, children, action }: { title: string; childre
   );
 }
 
-/** The in-content top bar: breadcrumb (the company), page title, one line of description, actions on the right. */
+/** The in-content top bar: the company above the page title, one line of description, actions on the right. */
 export function PageHeader({ title, description, actions, crumb }: { title: string; description?: string; actions?: ReactNode; crumb?: string }) {
   return (
     <div className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
       <div className="min-w-0">
-        {crumb && (
-          <p className="text-base text-faded">
-            {crumb} / {title}
-          </p>
-        )}
+        {crumb && <p className="text-base text-faded">{crumb}</p>}
         <h1 className="mt-1 text-[1.5rem] leading-tight font-semibold">{title}</h1>
         {description && <p className="mt-1 max-w-[70ch] text-base text-faded">{description}</p>}
       </div>

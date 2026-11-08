@@ -25,7 +25,7 @@ export function ReplayBanner() {
   const replay = replayOf(snapshot?.run);
   if (!replay) return null;
   return (
-    <p role="status" data-testid="replay-banner" className="sticky top-0 z-10 m-3 mb-0 rounded-control bg-alert px-4 py-1 text-center text-[2.125rem] leading-tight font-bold text-alert-text">
+    <p role="status" data-testid="replay-banner" className="sticky top-0 z-10 m-3 mb-0 rounded-control bg-ink px-4 py-1 text-center text-[2.125rem] leading-tight font-bold text-sheet">
       {replayLabel(replay)}
     </p>
   );
