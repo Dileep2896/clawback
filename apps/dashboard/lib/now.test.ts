@@ -4,7 +4,7 @@ import type { Snapshot } from "./snapshot.ts";
 
 const T0 = "2026-11-07T12:00:00.000Z";
 const LATER = "2026-11-07T12:04:00.000Z";
-const empty = { run: { startedAt: T0, status: "running" }, bills: [], findings: [], approval: null, calls: [], ledger: [], boardCards: [] };
+const empty = { run: { startedAt: T0, status: "running" }, bills: [], findings: [], approval: null, calls: [], ledger: [], boardCards: [], auditLog: [] };
 const at = (over: object) => ({ ...empty, ...over }) as unknown as Snapshot;
 const bills = [{ id: "b" }];
 const findings = [{ id: "f" }];
@@ -41,10 +41,25 @@ it("reaches the money on a repeat audit whose ledger rows were updated in place"
 
 it("keeps the findings while their evidence is open, with no agent picked", () => {
   const pending = at({ bills, findings, approval: { status: "pending" } });
-  expect(nowMoment(pending, null, true)).toBe("findings");
-  expect(nowMoment(at({ findings, calls: [{ endedAt: null }] }), null, true)).toBe("findings");
+  expect(nowMoment(pending, null, "f")).toBe("findings");
+  expect(nowMoment(at({ findings, calls: [{ endedAt: null }] }), null, "f")).toBe("findings");
   // Closed again: the run's moment comes back.
-  expect(nowMoment(pending, null, false)).toBe("approval");
+  expect(nowMoment(pending, null, null)).toBe("approval");
+});
+
+it("lets the run move on when an audit removed the finding whose evidence was open", () => {
+  // "f" is gone, "g" remains: the stale selection must not hold the findings over the approval.
+  const pending = at({ bills, findings: [{ id: "g" }], approval: { status: "pending" } });
+  expect(nowMoment(pending, null, "f")).toBe("approval");
+});
+
+it("shows the bills while a repeat audit collects, though an earlier audit's findings are there", () => {
+  const collector = [{ agent: "collector", status: "doing" }];
+  expect(nowMoment(at({ bills, findings, boardCards: collector }))).toBe("bills");
+  expect(nowMoment(at({ bills, findings, auditLog: [{ agent: "collector" }] }))).toBe("bills");
+  // The auditor starting this run is the run reaching the findings.
+  expect(nowMoment(at({ bills, findings, boardCards: [...collector, { agent: "auditor", status: "doing" }] }))).toBe("findings");
+  expect(nowMoment(at({ bills, findings, boardCards: collector, auditLog: [{ agent: "filer" }] }))).toBe("findings");
 });
 
 it("shows a picked agent's own moment, or its steps when it has none yet", () => {

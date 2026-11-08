@@ -138,7 +138,9 @@ export function NowPane({ rows, picked, speech }: { rows: AgentRow[]; picked: st
   const body = useRef<HTMLDivElement>(null);
   // Held here, not in Findings, so nowMoment can keep the findings up while their evidence is open.
   const [openId, setOpenId] = useState<string | null>(null);
-  const moment = snapshot?.run ? nowMoment(snapshot, picked, openId !== null) : null;
+  // An audit that removed the open finding closes its drawer, so the run's moments come back (render-time, same commit).
+  if (openId && snapshot && !snapshot.findings.some((f) => f.id === openId)) setOpenId(null);
+  const moment = snapshot?.run ? nowMoment(snapshot, picked, openId) : null;
   // The first moment is there on arrival; only a change of moment fades in (render-time state, so the same commit).
   const [entered, setEntered] = useState<Moment | "changed" | null>(null);
   if (moment && entered === null) setEntered(moment);
