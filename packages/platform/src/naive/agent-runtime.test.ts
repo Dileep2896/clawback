@@ -55,7 +55,8 @@ function fakeNaive(step: (sessions: Map<string, Ses>, tick: number) => void) {
         return ses;
       }
       if (m[1] === "ses_root") step(sessions, tick++);
-      return ses;
+      // A snapshot, as over HTTP: the runtime's copy goes stale when the fake moves the session on.
+      return structuredClone(ses);
     }
     return {};
   }) as NaiveApi;
@@ -419,6 +420,64 @@ describe("naïve runtime cost", () => {
     expect(ceo.mcp_servers).toEqual([]);
     // Nothing is written to naïve's board, so no digest session can start.
     expect(calls.some((c) => c.path.startsWith("/boards"))).toBe(false);
+  });
+
+  /** One delegated task; at tick 3 the member ends as `memberEnd` and the root reports thread.idle in the same round. */
+  const oneCard = async (memberEnd: Partial<Ses>, move: (attempt: number) => void) => {
+    const moves: unknown[] = [];
+    let attempt = 0;
+    const board: ToolDef = {
+      ...tool("board_update"),
+      handler: async (input) => {
+        const { cardId } = input as { cardId?: string };
+        if (!cardId) return { cardId: "card1" };
+        move(++attempt);
+        moves.push(input);
+        return input;
+      },
+    };
+    const { api } = fakeNaive((sessions, tick) => {
+      const root = sessions.get("ses_root")!;
+      if (tick === 0)
+        Object.assign(root, {
+          status: "idle",
+          stop_reason: "awaiting_approval",
+          pending_actions: [{ kind: "tool", tool_call_id: "d1", name: "send_to_agent", args: { agent: "clawback-filer", message: "File F-1", wait: true } }],
+        });
+      if (tick === 1) {
+        root.events.push({ seq: 1, type: "thread.created", data: { thread_id: "ses_a", member: "clawback-filer" } });
+        Object.assign(root, { stop_reason: "awaiting_delegation", pending_actions: [] });
+        sessions.set("ses_a", { id: "ses_a", status: "running", stop_reason: null, pending_actions: [], consumed_micro_usd: 0, events: [] });
+      }
+      // The root is read before the member in a round, so the loop's copy of ses_a is still "running" here.
+      if (tick === 3) {
+        Object.assign(sessions.get("ses_a")!, memberEnd);
+        root.events.push({ seq: 2, type: "thread.idle", data: { thread_id: "ses_a" } });
+      }
+      if (tick === 5) root.stop_reason = "end_turn";
+    });
+    const events = await collect(runtime(api, fakeGate({ status: "pending", actionIds: [] }).gate, fakeBudget(), fakeAudit().audit).run({ ...SPEC, tools: [board, tool("submit_claim")] }));
+    return { moves, result: events.find((e) => e.type === "result") };
+  };
+
+  it("reads a member's own state when its result folds back, so a failed member's card is blocked", async () => {
+    const { moves, result } = await oneCard({ status: "failed", stop_reason: null }, () => {});
+    expect(moves).toEqual([{ cardId: "card1", status: "blocked" }]);
+    expect(result).toMatchObject({ status: "success" });
+  });
+
+  it("retries a card move that failed to write, and fails the run if it never lands", async () => {
+    const done = { status: "idle", stop_reason: "end_turn" };
+    const retried = await oneCard(done, (attempt) => {
+      if (attempt === 1) throw new Error("db down");
+    });
+    expect(retried.moves).toEqual([{ cardId: "card1", status: "done" }]);
+    expect(retried.result).toMatchObject({ status: "success" });
+    const never = await oneCard(done, () => {
+      throw new Error("db down");
+    });
+    expect(never.moves).toEqual([]);
+    expect(never.result).toMatchObject({ status: "error", reason: expect.stringContaining("board cards not updated: card1") });
   });
 
   it("confirms a parked ungated call itself, counts parks, and cancels every session of the run on stop", async () => {

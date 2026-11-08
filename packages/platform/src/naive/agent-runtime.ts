@@ -18,9 +18,9 @@ const COORDINATOR_TOOLS = ["wait_for_agents", "list_agents"];
 // Asks so the loop sees its args: only wait: true (a thread on this run's budget) may run, never an independent handoff.
 const DELEGATE = "send_to_agent";
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
-// The runtime keeps the coordinator's board itself: an MCP result flags a naïve chat and every chat it delegates to,
-// after which each MCP call is refused once and re-issued by the model (seen live, flag-probe.ts). With no MCP call of
-// its own before the summary, the coordinator stays unflagged and so do the members it starts.
+// The runtime keeps the coordinator's board itself: an MCP result flags a naïve chat, after which each MCP call is
+// refused once and re-issued by the model (seen live, flag-probe.ts), and board_update was most of the CEO's calls.
+// Members still park on every call, their first included (Sonnet measurement run, naive-rehearsal-notes.md).
 const BOARD_TOOL = "board_update";
 const CANCEL_RETRY_MS = 5000;
 const CANCEL_GIVE_UP_MS = 5 * 60_000;
@@ -131,11 +131,24 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
       console.warn(`naïve board card: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
+  // A card's move is kept until it is written: a failed write is retried each round, and the run fails if it never lands.
+  // The first outcome wins (thread.idle then thread.terminated stays done).
+  const closing = new Map<string, "done" | "blocked">();
+  const flushCards = async () => {
+    for (const [threadId, status] of closing) {
+      try {
+        await boardTool!.handler({ cardId: cardOfThread.get(threadId), status }, { runId: spec.runId, agent: main });
+        closing.delete(threadId);
+        cardOfThread.delete(threadId);
+      } catch (error) {
+        console.warn(`naïve board card ${cardOfThread.get(threadId)}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  };
   const closeCard = async (threadId: string, status: "done" | "blocked") => {
-    const cardId = cardOfThread.get(threadId);
-    if (!cardId) return;
-    cardOfThread.delete(threadId);
-    await boardWrite({ cardId, status });
+    if (!cardOfThread.has(threadId) || closing.has(threadId)) return;
+    closing.set(threadId, status);
+    await flushCards();
   };
   /** Reports a session's new cumulative spend, and adds whatever Budget has not recorded yet; a failed write is retried next time. */
   const account = async (entry: Owned, consumed: number) => {
@@ -280,7 +293,9 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
             }
           } else if (event.type === "thread.idle" && typeof data.thread_id === "string") {
             // The member's result folded back; one that stopped on an error did not finish its step.
-            const thread = owned.get(data.thread_id)?.session;
+            // Read the thread now: the loop may not have polled it since it ended, or ever.
+            const entry = owned.get(data.thread_id);
+            const thread = entry ? (entry.session = await api<Session>(`/sessions/${data.thread_id}`)) : undefined;
             await closeCard(data.thread_id, thread && (thread.status === "failed" || STOPPED.has(thread.stop_reason ?? "")) ? "blocked" : "done");
           } else if (event.type === "thread.terminated" && typeof data.thread_id === "string") {
             await closeCard(data.thread_id, "blocked");
@@ -350,6 +365,7 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     for (;;) {
       let waitingOnOwner = false;
       const parkedRows: { sessionId: string; action: PendingAction }[] = [];
+      await flushCards();
       // Live iteration: a thread found in this round's events is polled in the same round.
       for (const [sessionId, entry] of owned) {
         if (entry.session && TERMINAL.has(entry.session.status)) continue;
@@ -418,7 +434,10 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     if (left.length > 0) console.warn(`naïve sessions still open, cancel them by hand (POST /v1/sessions/{id}/cancel): ${left.join(", ")}`);
     await Promise.all(inFlight);
     // A step that never reported did not finish.
-    for (const threadId of [...cardOfThread.keys()]) await closeCard(threadId, "blocked");
+    for (const threadId of cardOfThread.keys()) if (!closing.has(threadId)) closing.set(threadId, "blocked");
+    await flushCards();
+    if (closing.size > 0 && outcome.status === "success")
+      outcome = { status: "error", reason: `board cards not updated: ${[...closing.keys()].map((id) => cardOfThread.get(id)).join(", ")}` };
     // Reconcile: a cancelled in-flight call is still billed, so read every owned session's final cumulative spend.
     for (const [sessionId, entry] of owned) {
       const warn = (error: unknown) => console.warn(`naïve final usage for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
