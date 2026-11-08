@@ -26,8 +26,8 @@ export function feeByLine({ linesCents, totalFeeCents, sharePct }: { linesCents:
   feeCents({ refundCents: 0, annualSavingsCents: 0, sharePct }); // validates sharePct
   const fees = linesCents.map((cents) => Math.floor((cents * sharePct) / 100));
   const remainder = totalFeeCents - fees.reduce((sum, fee) => sum + fee, 0);
-  // Rounding down each line drops under a cent per line; anything else means the fee belongs to other lines.
-  if (remainder < 0 || (remainder > 0 && remainder >= fees.length)) throw new Error(`Fee of ${totalFeeCents} cents does not match these lines, so the fee row is out of date`);
+  // Rounding down drops under a cent per line, so the remainder is 0 to n cents; anything else means the fee belongs to other lines.
+  if (remainder < 0 || remainder > fees.length) throw new Error(`Fee of ${totalFeeCents} cents does not match these lines, so the fee row is out of date`);
   const byDropped = linesCents.map((cents, i) => ({ i, dropped: (cents * sharePct) % 100 })).sort((a, b) => b.dropped - a.dropped);
   for (const { i } of byDropped.slice(0, remainder)) fees[i]! += 1;
   return fees;

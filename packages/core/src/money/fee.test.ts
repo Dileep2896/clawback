@@ -65,6 +65,12 @@ describe("feeByLine", () => {
     expect(fees.every((fee) => fee >= 0)).toBe(true);
   });
 
+  it("takes a remainder of one cent per line, when every line rounds up", () => {
+    expect(feeByLine({ linesCents: [3], totalFeeCents: 1, sharePct: 30 })).toEqual([1]);
+    expect(feeByLine({ linesCents: [3, 3], totalFeeCents: 2, sharePct: 30 })).toEqual([1, 1]);
+    expect(() => feeByLine({ linesCents: [3, 3], totalFeeCents: 3, sharePct: 30 })).toThrow("out of date");
+  });
+
   it("handles no lines and one line", () => {
     expect(feeByLine({ linesCents: [], totalFeeCents: 0, sharePct: 30 })).toEqual([]);
     expect(() => feeByLine({ linesCents: [], totalFeeCents: 100, sharePct: 30 })).toThrow("out of date");

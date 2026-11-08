@@ -1,6 +1,6 @@
 /* Hallmark · genre: modern-minimal (fintech) · macrostructure: intro → worked example (bar + statement) → when each part is due → counts / doesn't → FAQ
  * design-system: docs/plan/design.md */
-import { feeByLine, feeCents } from "@bill-fighter/core/money/fee";
+import { feeByLine, splitFee } from "@bill-fighter/core/money/fee";
 import type { Metadata } from "next";
 import { LABEL, MoreLink, PageIntro, SiteFrame, Statement, WIDTH } from "../../components/landing/chrome.tsx";
 import { KeepFeeBar, KeepFeeStatement } from "../../components/landing/keep-fee.tsx";
@@ -9,12 +9,11 @@ import { dollars, FEE_CENTS, REFUND_CENTS, YEARLY_CENTS } from "../../components
 export const metadata: Metadata = { title: "Pricing" };
 
 const SHARE = 30;
-// The fee splits into its refund part and its savings part; the savings part is the remainder, so the two add up to the recorded fee to the cent.
-const REFUND_FEE = feeCents({ refundCents: REFUND_CENTS, annualSavingsCents: 0, sharePct: SHARE });
-const SAVINGS_FEE = FEE_CENTS - REFUND_FEE;
+// The fee splits into its refund part and its savings part (the rest of the recorded fee), so the two add up to it to the cent.
+const { dueNowCents: REFUND_FEE, dueWhenGrantedCents: SAVINGS_FEE } = splitFee({ totalFeeCents: FEE_CENTS, wonCents: REFUND_CENTS, sharePct: SHARE });
 
-// The fee by finding, from the recorded run's ledger (the landing's Fig 5): each line is 30% of its own money, and the last
-// line takes the rounding cent, so the lines add up to the recorded fee and their savings to the first year's total.
+// The fee by finding, from the recorded run's ledger (the landing's Fig 5): each line is 30% of its own money, and core's
+// feeByLine hands out the rounding cents, so the lines add up to the recorded fee and their savings to the first year's total.
 const ROWS = [
   { label: "Fremont meter refund", part: "Refund", cents: REFUND_CENTS },
   { label: "Fremont meter fixed, first year", part: "Savings", cents: 1_071_037 },
