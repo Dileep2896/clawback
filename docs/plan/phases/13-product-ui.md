@@ -424,3 +424,26 @@ Cause: `BY_AGENT` in `lib/now.ts` maps intake and collector to "bills", auditor 
 Do this together with merging main after judge-link ships (or now, if judge-link has not shipped by the time you start; merge after).
 ## Bug from the human (2026-11-08), screenshot in .fleet-lane/empty-scroll.png
 Human: "when I scrolling down I see this empty section below the agent page." On /agents (preview at 127.0.0.1:3020, finished run, desktop width) the page scrolls past its content into a full screen of empty background. Find the element that makes the document taller than the content (for example an h-screen inside a min-h-screen shell, a hidden dialog or drawer still in flow, the speech or audio element, or a 100vh panel plus the header) and fix it at the root. Add a check: at 1920x1080, 1440x900 and 390x844, for every Now moment and every picked agent, `document.scrollingElement.scrollHeight` is no more than the bottom of the last visible element plus the page padding. Check the other app pages (Overview, Bills, Findings, Money) the same way.
+
+### `email-negotiator`
+
+**Goal:** Let the owner choose email instead of a phone call for the provider step. Human, 2026-11-08: "we should also given an option on email instead of phone calling?"; chose "Build now, call stays default".
+
+Orchestrator decisions:
+- **Choice on the approval card:** "How should we contact BayTel? ● Call  ○ Email". Call is the default; one approval still releases the whole bundle with the chosen channel recorded on the approval (and in the audit log). The stage, the video and the judge sandbox keep the call.
+- **Email path:** the Negotiator sends one cancellation request email (built in code from the approved bundle: the account, the 7 unused lines, the authorisation by the owner with the approval date, the AI disclosure "sent by an AI assistant on behalf of …") to BayTel's support address on our replica (`support@baytel.example` or the replica's existing address), through the `Mail` adapter (Mailpit locally). Reuse the Filer's drafted cancellation letters where they fit. Recipients are allowlisted: only our replica provider domains; a real domain is refused in code with a test.
+- **Replica reply:** a small BayTel responder (in the webhooks service or the portal, wherever the replica lives) reads that inbox (Mailpit API locally), applies the same rules the phone rep follows (authorised owner named, account matches), and replies with a ticket number and the lines it cancelled; anything off-plan gets a refusal reply. The Negotiator waits for the reply (bounded, with a timeout that marks the step blocked, never done) and records the outcome exactly as the call path does (ticket, lines cancelled), so Finance and the ledger work unchanged.
+- **UI:** the Negotiator's view shows the email thread (sent and reply, with a small envelope icon) in place of the call; timeline action words cover email; nothing claims "sent" or "cancelled" without the recorded outcome. The approval card UI and the Negotiator view live on `fleet/agents-redesign`: merge that branch into yours first and again before you finish (it is not on main yet), and build the choice into its amber approval card.
+- No voice credit, no live calls, VOICE_MODE stays sim. One sim run with email chosen, browser muted.
+
+**Acceptance checks:**
+- Choosing Email: the request lands in the replica inbox, the reply returns a ticket, the 7 lines show cancelled from the reply, ledger and Overview totals match the call path ($12,606.06 / $18,319.32 / $9,277.61).
+- Choosing Call: unchanged; `scripts/rehearse-stage.ts` passes in sim.
+- Non-replica recipient refused in code; reply timeout leaves the step blocked; tests for both.
+- `pnpm test`, lint, typecheck (root and dashboard) pass. Screenshots at 1440: approval card with the choice, Negotiator email view, done.
+
+**Estimate:** 2.5 hours
+
+**depends on:** agents-redesign (branch, merged in)
+
+**parallel with:** agents-redesign
