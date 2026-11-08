@@ -7,7 +7,9 @@ import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { isDemoCustomer, startFirstRun } from "../../../lib/accounts.ts";
 import { requireUser } from "../../../lib/session.ts";
-import { callWebhook } from "../../../lib/webhook.ts";
+import { isSandbox } from "@bill-fighter/shared/sandbox";
+import { startSandboxRun } from "../../../lib/sandbox.ts";
+import { callWebhook, SANDBOX_TEXT } from "../../../lib/webhook.ts";
 
 export type ConnectState = { connected?: Provider; error?: string };
 export type StartState = { queued?: boolean; error?: string };
@@ -15,6 +17,7 @@ export type StartState = { queued?: boolean; error?: string };
 /** The vault write happens in the webhook service, after it checks the login opens the portal. Nothing here logs the password. */
 export async function connectPortalAction(_state: ConnectState, form: FormData): Promise<ConnectState> {
   const user = await requireUser();
+  if (isSandbox()) return { error: SANDBOX_TEXT };
   const provider = Provider.safeParse(form.get("provider"));
   if (!provider.success) return { error: "Choose your provider" };
 
@@ -36,6 +39,11 @@ export async function connectPortalAction(_state: ConnectState, form: FormData):
  */
 export async function startAuditAction(): Promise<StartState> {
   const user = await requireUser();
+  // The judge's own replay of the recorded run: no agents, and the same run again on a second click.
+  if (isSandbox()) {
+    await startSandboxRun(db, user.customerId);
+    redirect("/agents");
+  }
   if (!isDemoCustomer(user.customerId)) {
     await db.update(users).set({ auditRequestedAt: new Date() }).where(eq(users.id, user.id));
     return { queued: true };

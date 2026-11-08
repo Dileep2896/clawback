@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { currentCalls, duration, isDisclosure, nextToSpeak, type Row, viewOf } from "../../lib/calls.ts";
-import { recordedNow, replayOf, type ReplayInfo, speechRate } from "../../lib/replay.ts";
+import { isSandboxReplay, recordedNow, replayOf, type ReplayInfo, speechRate } from "../../lib/replay.ts";
 import type { Snapshot } from "../../lib/snapshot.ts";
 import { useFollow } from "../../lib/use-follow.ts";
 import { useLive } from "../../lib/use-live.tsx";
@@ -41,9 +41,13 @@ function Timer({ startedAt, endedAt, replay }: { startedAt: string; endedAt: str
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [endedAt]);
+  const sandbox = isSandboxReplay(replay);
+  const end = endedAt ? Date.parse(endedAt) : replay && !sandbox ? recordedNow(replay, now) : now;
+  // A sandbox's times are on the judge's clock, which runs at the replay's speed: scaled back, the call shows its true length.
+  const shown = sandbox ? Date.parse(startedAt) + (end - Date.parse(startedAt)) * replay.speed : end;
   return (
     <span data-testid="call-timer" className="text-[2.125rem] leading-none font-semibold tabular-nums">
-      {duration(startedAt, endedAt ?? (replay ? recordedNow(replay, now) : now))}
+      {duration(startedAt, shown)}
     </span>
   );
 }

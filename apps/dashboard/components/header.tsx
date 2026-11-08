@@ -1,6 +1,8 @@
 "use client";
 
-import { replayLabel, replayOf } from "../lib/replay.ts";
+import { useState } from "react";
+import { post } from "../lib/post.ts";
+import { isSandboxReplay, replayLabel, replayOf } from "../lib/replay.ts";
 import { runProblems, statusLabel } from "../lib/run-state.ts";
 import { useLive } from "../lib/use-live.tsx";
 import { MeterRegister } from "./meter-register.tsx";
@@ -21,12 +23,25 @@ function Fact({ label, testId, figure, children }: { label: string; testId: stri
 
 /** Above everything and pinned (sticky) so the stacked narrow layout cannot scroll it away. */
 export function ReplayBanner() {
-  const { snapshot } = useLive();
+  const { snapshot, refresh } = useLive();
+  const [busy, setBusy] = useState(false);
   const replay = replayOf(snapshot?.run);
   if (!replay) return null;
+  // A judge's finished replay can start over; it touches only their own rows.
+  const again = isSandboxReplay(replay) && snapshot?.run?.status !== "running";
+  async function restart() {
+    setBusy(true);
+    if (await post("/api/sandbox", { action: "restart" })) await refresh();
+    setBusy(false);
+  }
   return (
     <p role="status" data-testid="replay-banner" className="sticky top-0 z-10 m-3 mb-0 rounded-control bg-warn px-4 py-1 text-center text-[2.125rem] leading-tight font-bold text-warn-text">
       {replayLabel(replay)}
+      {again && (
+        <button type="button" data-testid="watch-again" disabled={busy} onClick={restart} className="ml-4 rounded-control border-2 border-current px-3 text-[1.25rem] align-middle">
+          Watch it again
+        </button>
+      )}
     </p>
   );
 }
