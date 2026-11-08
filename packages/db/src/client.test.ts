@@ -6,7 +6,7 @@ const CA = "-----BEGIN CERTIFICATE-----\nMIIBtest\n-----END CERTIFICATE-----";
 const HOSTED = "postgres://u:p@db.example.com:5432/app?sslmode=no-verify&application_name=clawback&connect_timeout=5";
 
 // What pg itself will use, after it has read the connection string: the config is only right if pg ends up verifying.
-const asPg = (config: ReturnType<typeof poolConfig>) => new Client(config).connectionParameters as unknown as { ssl: unknown; application_name: string; host: string };
+const asPg = (config: ReturnType<typeof poolConfig>) => (new Client(config) as unknown as { connectionParameters: unknown }).connectionParameters as { ssl: unknown; application_name: string; host: string };
 
 describe("poolConfig", () => {
   it("leaves a local database exactly as the URL says, with pg's own pool defaults", () => {
@@ -17,7 +17,8 @@ describe("poolConfig", () => {
   it("verifies a hosted database against PG_CA, whatever sslmode the URL carries", () => {
     for (const sslmode of ["no-verify", "disable", "require", "prefer"]) {
       const config = poolConfig(HOSTED.replace("no-verify", sslmode), { PG_CA: CA });
-      expect(config.ssl).toEqual({ ca: CA, rejectUnauthorized: true });
+      expect(config).toHaveProperty("ssl");
+      expect((config as { ssl?: unknown }).ssl).toEqual({ ca: CA, rejectUnauthorized: true });
       expect(new URL(config.connectionString).searchParams.has("sslmode")).toBe(false);
       expect(asPg(config).ssl).toEqual({ ca: CA, rejectUnauthorized: true });
     }
