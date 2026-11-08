@@ -138,11 +138,20 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
         // A failed creation may still have written the card (wrapTool throws when only its audit row fails), so a retry
         // first takes that card instead of making a second one.
         const made = triedCreating.has(threadId)
-          ? (await deps!.board!.list(spec.runId)).find((c) => c.agent === card.agent && c.title === card.title && !ourCards.has(c.id))?.id
+          ? (await deps!.board!.list(spec.runId)).find((c) => c.agent === card.agent && c.title === card.title && !ourCards.has(c.id))
           : undefined;
         triedCreating.add(threadId);
-        const cardId =
-          made ?? ((await boardTool!.handler({ ...card, status: "doing" }, { runId: spec.runId, agent: main })) as { cardId: string }).cardId;
+        const input = { ...card, status: "doing" };
+        // That card's audit row is the write that failed, so it is written here; if this fails too, the next round retries it.
+        if (made)
+          await deps!.audit.record({
+            runId: spec.runId,
+            agent: main,
+            tool: BOARD_TOOL,
+            input,
+            output: { cardId: made.id, agent: made.agent, title: made.title, status: made.status },
+          });
+        const cardId = made?.id ?? ((await boardTool!.handler(input, { runId: spec.runId, agent: main })) as { cardId: string }).cardId;
         ourCards.add(cardId);
         cardOfThread.set(threadId, cardId);
         creating.delete(threadId);

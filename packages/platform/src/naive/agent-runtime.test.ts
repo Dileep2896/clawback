@@ -490,9 +490,11 @@ describe("naïve runtime cost", () => {
       list: async (runId) => cards.filter((c) => c.runId === runId),
     };
     let audits = 0;
+    const rows: Parameters<Audit["record"]>[0][] = [];
     const audit: Audit = {
-      record: async () => {
+      record: async (row) => {
         if (++audits === 1) throw new Error("audit down");
+        rows.push(row);
       },
       list: async () => [],
     };
@@ -528,10 +530,15 @@ describe("naïve runtime cost", () => {
       if (tick === 5) root.stop_reason = "end_turn";
     });
     const events = await collect(
-      runtime(api, fakeGate({ status: "pending", actionIds: [] }).gate, fakeBudget(), fakeAudit().audit, store).run({ ...SPEC, tools: [board, tool("submit_claim")] }),
+      runtime(api, fakeGate({ status: "pending", actionIds: [] }).gate, fakeBudget(), audit, store).run({ ...SPEC, tools: [board, tool("submit_claim")] }),
     );
     expect(audits).toBeGreaterThan(1);
     expect(cards).toMatchObject([{ id: "card1", agent: "filer", title: "File F-1", status: "done" }]);
+    // The creation's audit row, lost in the failed attempt, is written on recovery, and the move's row too.
+    expect(rows.filter((r) => r.tool === "board_update")).toMatchObject([
+      { input: { agent: "filer", title: "File F-1", status: "doing" }, output: { cardId: "card1" } },
+      { input: { cardId: "card1", status: "done" } },
+    ]);
     expect(events.find((e) => e.type === "result")).toMatchObject({ status: "success" });
   });
 
