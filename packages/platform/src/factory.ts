@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { assertNotSandbox } from "@bill-fighter/shared/sandbox";
 import type { Interfaces, Platform } from "./types.ts";
 
 const PLATFORMS = ["local", "naive"] as const;
@@ -25,6 +26,9 @@ export const ADAPTER_FILES: { [K in keyof Interfaces]: string } = {
   vault: "vault",
 };
 
+// What reaches a model, a mailbox, a phone, a card, a browser or a timer that starts runs. The sandbox loads none of them.
+export const SANDBOX_REFUSED: (keyof Interfaces)[] = ["agentRuntime", "browser", "card", "llm", "mail", "scheduler", "sms"];
+
 export function platformName(): PlatformName {
   const name = process.env.PLATFORM || "local";
   if (!(PLATFORMS as readonly string[]).includes(name)) {
@@ -37,6 +41,7 @@ export function platformName(): PlatformName {
 // Postgres; upgrade to an explicit import map if a bundled app ever needs getPlatform().
 export function createPlatform(name: PlatformName, srcDir: string = SRC_DIR): Platform {
   const load = async <K extends keyof Interfaces>(key: K): Promise<Interfaces[K]> => {
+    if (SANDBOX_REFUSED.includes(key)) assertNotSandbox(`load the ${key} adapter`);
     const file = ADAPTER_FILES[key];
     const path = join(srcDir, name, `${file}.ts`);
     if (!existsSync(path)) {

@@ -1,3 +1,5 @@
+import { isSandbox } from "@bill-fighter/shared/sandbox";
+
 // The local webhook service does what Next.js cannot: vault, mail and the parser (services/webhooks/src/dashboard.ts).
 const BASE = process.env.WEBHOOK_URL || "http://127.0.0.1:3002";
 
@@ -5,7 +7,11 @@ export const WEBHOOK_DOWN = "The Clawback agents service is not running. Start i
 
 export type WebhookReply = { ok: boolean; status: number; body: Record<string, unknown> };
 
+export const SANDBOX_TEXT = "This is the sandbox: it replays a recorded audit, so it starts no real work.";
+
 export async function callWebhook(path: string, payload: unknown, timeoutMs = 15_000): Promise<WebhookReply> {
+  // Every run, parse and portal login goes through here. Refused before any request, whatever the page offered.
+  if (isSandbox()) return { ok: false, status: 403, body: { error: SANDBOX_TEXT } };
   let response: Response;
   try {
     response = await fetch(new URL(path, BASE), {

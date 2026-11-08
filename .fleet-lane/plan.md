@@ -110,3 +110,45 @@ Checks: `pnpm test` (1828 pass), `pnpm lint`, `pnpm typecheck`, dashboard `tsc -
 3. **Shell/panels checks lack the 20px ceiling and hero exception (scripts/dashboard-shell-check.ts:16)**: not fixed, by the orchestrator decision above. It is a known limit of a test script and does not change product behaviour.
 
 Checks: `pnpm test` (1829 pass, 1 skipped), `pnpm lint`, `pnpm typecheck`, dashboard `tsc --noEmit`. Browser suites not re-run.
+
+## Fix round 5 (human, 2026-11-08)
+
+1. **Each agent gets its own view when picked** (ar-peragent.md / phase 13): done (1660180). A pick always shows that agent's view, opening with "What <Agent> did" and its steps in tool words.
+   - Intake: arrival time, sender and subject of the email it read, the customer matched, the accounts and stores.
+   - Collector: the portals, bills per account (count, periods, total), usage per meter (readings, date range).
+   - Auditor: all six rules, Passed or N findings, then the findings with evidence.
+   - Filer: one card per claim, rate request and cancellation letter, with an excerpt of the drafted wording. "Filed" only for a claim or rate request whose action is done; letters stay "Drafted".
+   - Approver and Negotiator: the approval and the call, as before.
+   - Finance: the Stripe invoice as recorded ("Finalized in Stripe test mode, not sent"), then the ledger.
+   - Monitor: the next scheduled check.
+   - Snapshot additions, no schema change: `email` (sender and subject only) and `letterWording` (from successful `draft_letter` calls), picked field by field from this run's audit rows; `usage` per account from usage_intervals. A test proves the raw email body and other tool data stay out.
+   - Left out because no stored data has them: the email's attachment name and the pages per bill. The recording strips tool inputs and outputs and skips scheduled_checks, so on the recorded run Intake shows no sender or subject, Filer no excerpts, and Monitor only its step. A live run shows all three. To show them in the replay, the capture would have to keep these picked fields, and that needs a new recording.
+   - Tests: `lib/now.test.ts` (every pick gives a distinct view), `lib/snapshot.test.ts` (the picks, the usage). `scripts/agents-shots.ts` picks all eight agents plus "Follow live" on the recorded run, fails if two picks look the same, and writes `docs/plan/agents-redesign/after/picks/pick-*-1440.png`.
+2. **Empty screen below /agents** (bug in phase 13): fixed (d4b556f). The full log's scroller was not positioned, so each row's sr-only "No cost recorded" (absolute) escaped its clip and stretched the page (2122px on a 785px screen). The log and timeline scrollers are now `relative`. `agents-shots` now checks every moment, every pick (with the log open) and Overview, Bills, Findings and Money at 1920, 1440 and 390: the page ends where its content ends. That check also found Money scrolling sideways at 390 (753px): its grids' base column is now `minmax(0,1fr)`.
+3. **Merged main** after the build (dc568e1). judge-link had not shipped.
+
+Checks: `pnpm test` (1831 pass, 1 skipped), `pnpm lint`, `pnpm typecheck`, dashboard `tsc --noEmit`. Browser: agents-shots, panels-work-check (updated: the auditor pick is now `data-moment="auditor"`), panels-action-check, panels-money-check and replay-check all pass against this worktree's preview on :3020.
+
+Not done: HANDOVER.md (main, 2026-11-08) says this lane merges `fleet/judge-link` into its branch for a combined preview. My brief says never merge, and the instruction I was given says merge main after judge-link ships, so I left it for the orchestrator.
+
+## Fix round 6: judge-link merged in (orchestrator, 2026-11-08, ar-merge-jl.md)
+
+1. **Merged `fleet/judge-link` (e175016)** into this branch (2b0ad59). The six conflicts:
+   - `lib/replay.ts`: this lane's sentence label is kept. A judge's sandbox adds "Times shown are on your clock." The unused `SANDBOX_LABEL` is gone.
+   - `lib/snapshot.ts`: imports combined. judge-link's per-judge SMS filter is kept.
+   - `components/agents/call.tsx`: this lane's timer style, judge-link's sandbox clock scaling.
+   - `signup/page.tsx`: judge-link's server page plus `SignUpForm`, moved to the app type scale (20px title, body-size buttons).
+   - `header.tsx` and `panels/phone.tsx`: both stay deleted. Their sandbox parts moved into the new design:
+     - "Watch it again" is in the sandbox pill's popover, shown only for a judge's finished replay.
+     - The phone note ("In the sandbox the phone only shows the text…") is inside the amber approval card, under the Approve button that `useApprove` already offers in a sandbox.
+   - Sandbox start: the 22px "Sample bills on file" line is now at title size.
+   - Every SANDBOX=1 guard and test is unchanged: `test/sandbox-guards.test.ts`, `lib/sandbox.test.ts` and the rest pass.
+   - `scripts/sandbox-check.ts` now looks for the pill ("Sandbox replay") and opens it to reach "Watch it again".
+2. **Local sandbox for the review**: `NEXT_DIST_DIR` (next.config.ts, default `.next`) lets a second dev server run beside the preview. It runs as `SANDBOX=1 NEXT_DIST_DIR=.next/sandbox next dev --port 3021` from apps/dashboard, on this lane's database (migrated to 0005).
+3. **Screenshots**, in `docs/plan/agents-redesign/after/sandbox/`. All pages end where their content does and none scroll sideways.
+   - At 1440 and 390: sign-up, Try it now, approval, call, done, done with "Watch it again", Overview.
+   - At 1440 only: the nine picks on a judge's run.
+   - The nine picks on the normal preview, refreshed: `after/picks/`.
+
+Checks: `pnpm test` (1861 pass, 1 skipped), `pnpm lint`, `pnpm typecheck`, dashboard `tsc --noEmit`. Browser: sandbox-check against :3021 passed (two judges, desktop and phone, $12,606.06 / $18,319.32 / $9,277.61, about 2:15 each). agents-shots, panels-work, panels-action, panels-money and replay-check all passed against :3020.
+Note: `demo:replay --force` (used by agents-shots and replay-check) clears every run in the database, sandbox judges' runs included. Don't run it while someone is in the local sandbox.

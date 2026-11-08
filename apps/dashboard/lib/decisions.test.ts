@@ -63,8 +63,8 @@ describe("approveRun", () => {
   it("records the contact choice on the approval and once in the audit log, call by default", async () => {
     await withTestDb("approve_contact", async (db) => {
       await seedBundle(db);
-      await approveRun(db, "r1", undefined, "email");
-      await approveRun(db, "r1", undefined, "call");
+      await approveRun(db, "r1", undefined, undefined, "email");
+      await approveRun(db, "r1", undefined, undefined, "call");
       expect((await bundle(db)).contact).toBe("email");
       const rows = await db.select().from(auditLog).where(eq(auditLog.tool, "approve"));
       expect(rows.map(({ agent, inputJson, outputJson }) => ({ agent, inputJson, outputJson }))).toEqual([
@@ -77,7 +77,7 @@ describe("approveRun", () => {
     await withTestDb("approve_contact_naive", async (db) => {
       await seedBundle(db);
       await db.update(runs).set({ platform: "naive" }).where(eq(runs.id, "r1"));
-      await expect(approveRun(db, "r1", undefined, "email")).rejects.toMatchObject({ status: 409 });
+      await expect(approveRun(db, "r1", undefined, undefined, "email")).rejects.toMatchObject({ status: 409 });
       expect((await bundle(db)).status).toBe("pending");
       await approveRun(db, "r1");
       expect((await bundle(db)).contact).toBe("call");
@@ -253,6 +253,17 @@ describe("sameOrigin", () => {
     expect(sameOrigin(request({ origin: "http://localhost.evil.example:3000", host: "localhost.evil.example:3000" }))).toBe(false);
     expect(sameOrigin(request({ host: "localhost@evil.example" }))).toBe(false);
     expect(sameOrigin(request({}))).toBe(false);
+  });
+
+  it("allows the one PUBLIC_HOST a hosted deployment answers on, from its own page only", () => {
+    process.env.PUBLIC_HOST = "clawback.example";
+    try {
+      expect(sameOrigin(request({ origin: "https://clawback.example", host: "clawback.example" }))).toBe(true);
+      expect(sameOrigin(request({ origin: "https://evil.example", host: "clawback.example" }))).toBe(false);
+      expect(sameOrigin(request({ origin: "https://evil.example", host: "evil.example" }))).toBe(false);
+    } finally {
+      delete process.env.PUBLIC_HOST;
+    }
   });
 });
 

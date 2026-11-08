@@ -24,7 +24,8 @@ export function AuditLog() {
         <span className="group-open:hidden">Show the full log, {count.format(total)} entries</span>
         <span className="hidden group-open:inline">Hide the log</span>
       </summary>
-      <div className="max-h-[40dvh] overflow-y-auto border-t border-line px-5 pb-3">
+      {/* relative: the rows' sr-only text is absolutely positioned, and must stay inside this scroller or it stretches the page. */}
+      <div className="relative max-h-[40dvh] overflow-y-auto border-t border-line px-5 pb-3">
         {total > rows.length && (
           <p data-testid="audit-capped" className="pt-3 text-label text-faded">
             Newest {count.format(rows.length)} of {count.format(total)}

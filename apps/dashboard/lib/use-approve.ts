@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { post } from "./post.ts";
-import { replayOf } from "./replay.ts";
+import { isSandboxReplay, replayOf } from "./replay.ts";
 import { isStopped } from "./run-state.ts";
 import { useLive } from "./use-live.tsx";
 
@@ -14,9 +14,10 @@ export function useApprove() {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const approval = snapshot?.approval ?? null;
-  const replay = replayOf(snapshot?.run);
-  // A recording plays back its own decision, so its status never offers the stopped notice.
-  const stopped = !replay && isStopped(snapshot?.run?.status);
+  const info = replayOf(snapshot?.run);
+  // A recording plays back its own decision, so its status never offers the stopped notice. A judge's sandbox replay waits for their tap.
+  const replay = isSandboxReplay(info) ? null : info;
+  const stopped = !info && isStopped(snapshot?.run?.status);
   const pending = approval?.status === "pending";
 
   async function approve(contact: "call" | "email" = "call") {

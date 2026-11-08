@@ -40,8 +40,15 @@
     {
       "idx": 5,
       "version": "7",
-      "when": 1794145508877,
-      "tag": "0005_approval_contact",
+      "when": 1794110636214,
+      "tag": "0005_users_signup_ip",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794147669328,
+      "tag": "0006_approval_contact",
       "breakpoints": true
     }
   ]

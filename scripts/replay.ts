@@ -9,14 +9,15 @@ import { parseArgs } from "node:util";
 import { RUNS_DIR } from "@bill-fighter/agents/customer-data";
 import { databaseUrl, db, type Db } from "@bill-fighter/db/client";
 import type { Vault } from "@bill-fighter/platform/types";
+import { applyEvents, checkRecording, finalRows, isRow, parseRecording, type Recording, type ReplayEvent, type ScanRow, TABLES } from "@bill-fighter/db/replay";
 import { checkConnected, checkTarget, demoReset, RUN_TABLES } from "./demo-reset.ts";
 
+export { checkRecording, parseRecording, type Recording, type ReplayEvent };
+
 type Pool = Db["$client"];
+type Client = Pick<Pool, "query">;
 type Row = Record<string, unknown>;
 
-// What the dashboard shows, parents first. Every one has a text id.
-// Not scheduled_checks: no panel shows it, and a running scheduler fires any due pending row, which would start a real model run from a replay.
-const TABLES = ["runs", "findings", "actions", "approvals", "calls", "ledger", "board_cards", "audit_log", "sms_messages"];
 // One statement, so each read is one consistent view. Tool inputs and outputs never reach the browser, so they stay out of a committed file.
 const SCAN = TABLES.map((table) => `select '${table}' as tbl, x.id as id, to_jsonb(x)${table === "audit_log" ? " - 'input_json'::text - 'output_json'::text" : ""} as row from ${table} x`).join(" union all ");
 
@@ -25,12 +26,8 @@ const MIN_SPEED = 1;
 const MAX_SPEED = 8;
 const DEFAULT_FILE = fileURLToPath(new URL("../data/replay/run.jsonl", import.meta.url));
 
-export type ReplayEvent = { t: number; table: string; op: "upsert" | "delete"; id: string; row?: Row };
-export type Recording = { recordedAt: string; durationMs: number; events: ReplayEvent[] };
-type ScanRow = { tbl: string; id: string; row: Row };
 
 const scan = async (pool: Pool) => (await pool.query<ScanRow>(SCAN)).rows;
-const isRow = (rows: ScanRow[], table: string) => rows.filter(({ tbl }) => tbl === table).map(({ row }) => row);
 
 /** The changes since the last read, and what to compare the next read with. */
 export function diffRows(seen: Map<string, string>, rows: ScanRow[], t: number) {
@@ -50,15 +47,6 @@ export function diffRows(seen: Map<string, string>, rows: ScanRow[], t: number) 
   return { events, seen: now };
 }
 
-/** The rows as they stood when the recording ended. */
-function finalRows(events: ReplayEvent[]) {
-  const rows = new Map<string, ScanRow>();
-  for (const { table, op, id, row } of events) {
-    if (op === "delete") rows.delete(`${table}/${id}`);
-    else rows.set(`${table}/${id}`, { tbl: table, id, row: row! });
-  }
-  return [...rows.values()];
-}
 
 /** Why this recording must not become the demo's backup. Empty means it is good. */
 export function recordingProblems(recording: Recording, secrets: string[]) {
@@ -92,32 +80,7 @@ export function recordingProblems(recording: Recording, secrets: string[]) {
 }
 
 const serialize = ({ events, ...header }: Recording) => [header, ...events].map((line) => JSON.stringify(line)).join("\n") + "\n";
-const isIsoTime = (text: unknown) => typeof text === "string" && !Number.isNaN(Date.parse(text)) && new Date(text).toISOString() === text;
 
-/** Throws on a recording that cannot play as one labelled run. Called before anything is cleared. */
-export function checkRecording({ recordedAt, durationMs, events }: Recording) {
-  if (!isIsoTime(recordedAt) || !Number.isFinite(durationMs) || durationMs < 0) throw new Error("The recording has no valid header");
-  if (events.length === 0) throw new Error("The recording has no events");
-  let last = 0;
-  for (const { t, table, op, id, row } of events) {
-    // These names go into SQL. The file is committed, but a bad line must stop here rather than half way through a demo.
-    if (!Number.isFinite(t) || t < last || !TABLES.includes(table) || !["upsert", "delete"].includes(op) || typeof id !== "string") throw new Error(`The recording has a bad event: ${table} ${id} at ${t}`);
-    if (op === "upsert" && (!row || row.id !== id || !Object.keys(row).every((column) => /^\w+$/.test(column)))) throw new Error(`The recording has a bad row: ${table} ${id}`);
-    last = t;
-  }
-  // A cut-off file ends early, and its header still says how long the run was.
-  if (durationMs !== last) throw new Error(`The recording ends at ${last} ms but its header says ${durationMs} ms`);
-  // The run row carries the replay label, so it must be there from the first tick.
-  if (events.find(({ table, op }) => table === "runs" && op === "upsert")?.t !== 0) throw new Error("The recording does not start with its run");
-  if (isRow(finalRows(events), "runs").length !== 1) throw new Error("The recording does not end with exactly one run");
-}
-
-export function parseRecording(text: string): Recording {
-  const [header, ...events] = text.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
-  const recording = { recordedAt: header?.recordedAt, durationMs: header?.durationMs, events } as Recording;
-  checkRecording(recording);
-  return recording;
-}
 
 export type CaptureOptions = {
   pool: Pool;
@@ -212,22 +175,6 @@ export type ReplayOptions = {
 
 export function checkSpeed(speed: number) {
   if (!Number.isFinite(speed) || speed < MIN_SPEED || speed > MAX_SPEED) throw new Error(`--speed must be a number from ${MIN_SPEED} to ${MAX_SPEED}`);
-}
-
-type Client = Pick<Pool, "query">;
-
-async function applyEvents(client: Client, events: ReplayEvent[], label: Row) {
-  const order = (event: ReplayEvent) => TABLES.indexOf(event.table);
-  const deletes = events.filter(({ op }) => op === "delete").sort((a, b) => order(b) - order(a));
-  const upserts = events.filter(({ op }) => op === "upsert").sort((a, b) => order(a) - order(b));
-  for (const { table, id } of deletes) await client.query(`delete from ${table} where id = $1`, [id]);
-  for (const { table, row } of upserts) {
-    // On every run update, so no poll can ever read this run without its label.
-    // Recordings made before approvals.contact existed hold no choice, and those runs called.
-    const values = table === "runs" ? { ...row, replay: label } : table === "approvals" ? { contact: "call", ...row } : row!;
-    const sets = Object.keys(values).filter((column) => column !== "id").map((column) => `"${column}" = excluded."${column}"`);
-    await client.query(`insert into ${table} select * from jsonb_populate_record(null::${table}, $1::jsonb) on conflict (id) do update set ${sets.join(", ")}`, [JSON.stringify(values)]);
-  }
 }
 
 /** Plays every tick into an empty copy of the run tables and rolls it all back, so a row this database cannot hold (a missing field, a bad value, a seed row it lacks) fails before the reset clears the last run. */

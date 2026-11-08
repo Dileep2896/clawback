@@ -8,5 +8,5 @@ const Body = z.object({ runId: z.string().min(1), contact: z.enum(["call", "emai
 export async function POST(request: Request) {
   const session = await currentSession();
   if (!session) return Response.json({ error: "Log in first" }, { status: 401 });
-  return respond(request, Body, ({ runId, contact }) => approveRun(db, runId, session.cid, contact));
+  return respond(request, Body, ({ runId, contact }) => approveRun(db, runId, session.cid, session.uid, contact));
 }

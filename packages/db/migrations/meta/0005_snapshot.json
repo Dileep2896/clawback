@@ -1,5 +1,5 @@
 {
-  "id": "94f6ce19-9fb7-4ea2-ac46-ca403aa8245e",
+  "id": "348a8510-0e84-4000-ac17-645a3186f421",
   "prevId": "3dde5d5b-c74e-4e4c-9bd6-e100e85c0e2b",
   "version": "7",
   "dialect": "postgresql",
@@ -185,14 +185,6 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": false
-        },
-        "contact": {
-          "name": "contact",
-          "type": "contact_channel",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'call'"
         },
         "approved_by": {
           "name": "approved_by",
@@ -1440,6 +1432,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "signup_ip_hash": {
+          "name": "signup_ip_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1526,16 +1524,7 @@
       "schema": "public",
       "values": [
         "sim",
-        "live",
-        "email"
-      ]
-    },
-    "public.contact_channel": {
-      "name": "contact_channel",
-      "schema": "public",
-      "values": [
-        "call",
-        "email"
+        "live"
       ]
     },
     "public.finding_status": {

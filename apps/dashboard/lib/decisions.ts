@@ -1,9 +1,11 @@
 import { decideApproval } from "@bill-fighter/db/approvals";
 import type { Db } from "@bill-fighter/db/client";
-import { approvals, auditLog, customers, runs, smsMessages } from "@bill-fighter/db/schema";
+import { approvals, auditLog, customers, runs, smsMessages, users } from "@bill-fighter/db/schema";
 import { and, desc, eq, gte } from "drizzle-orm";
+import { isSandbox } from "@bill-fighter/shared/sandbox";
 import { z } from "zod";
 import { EMAIL_INSTEAD, isStopped, STOPPED_TEXT } from "./run-state.ts";
+import { approveSandbox, isSandboxReplay } from "./sandbox.ts";
 
 /** A refusal the caller can understand, as opposed to a failure. */
 class Refused extends Error {
@@ -22,7 +24,8 @@ async function runOf(db: Db, runId: string) {
     .innerJoin(customers, eq(runs.customerId, customers.id))
     .where(eq(runs.id, runId));
   if (!found) throw new Refused(`Run ${runId} does not exist`, 404);
-  if (found.replay) throw new Refused("This run is a recording, so nothing on it can be decided", 409);
+  // A judge's sandbox replay waits for the judge's own tap; any other recording plays back its own decision.
+  if (found.replay && !isSandboxReplay(found.replay)) throw new Refused("This run is a recording, so nothing on it can be decided", 409);
   // An approval here would count as a human action, and nothing is left to act on it.
   if (isStopped(found.status)) throw new Refused(STOPPED_TEXT, 409);
   return found;
@@ -31,14 +34,20 @@ async function runOf(db: Db, runId: string) {
 const bundleOf = async (db: Db, runId: string) => (await db.select({ id: approvals.id, status: approvals.status }).from(approvals).where(eq(approvals.runId, runId)))[0];
 
 /** The backup path in both platform modes, so it touches only the run, its customer and its bundle. Never SMS. */
-export async function approveRun(db: Db, runId: string, customerId?: string, contact: "call" | "email" = "call") {
-  const { approver, customerId: owner, platform } = await runOf(db, runId);
+export async function approveRun(db: Db, runId: string, customerId?: string, userId?: string, contact: "call" | "email" = "call") {
+  const { approver, customerId: owner, platform, replay } = await runOf(db, runId);
   // The signed-in customer's own runs only: one customer never releases another's bundle. Same answer as a missing run.
   if (customerId !== undefined && owner !== customerId) throw new Refused(`Run ${runId} does not exist`, 404);
   const bundle = await bundleOf(db, runId);
   if (!bundle) throw new Refused(`Run ${runId} has no approval request`, 404);
-  // Email goes through local Mailpit only (orchestrator, 2026-11-08), so a naïve run keeps the call.
-  if (contact === "email" && platform !== "local") throw new Refused("Email to the provider works on local runs only", 409);
+  // Email goes through local Mailpit only (orchestrator, 2026-11-08), so a naïve run keeps the call. A judge's sandbox plays recordings of either.
+  if (contact === "email" && platform !== "local" && !isSandboxReplay(replay)) throw new Refused("Email to the provider works on local runs only", 409);
+  if (isSandboxReplay(replay)) {
+    // The judge's copy keeps Linda Park as its contact, so the approver is the signed-in judge, by their own name.
+    const [judge] = userId ? await db.select({ name: users.name }).from(users).where(and(eq(users.id, userId), eq(users.customerId, owner))) : [];
+    if (!judge) throw new Refused(`Run ${runId} does not exist`, 404);
+    return approveSandbox(db, owner, runId, judge.name, contact);
+  }
   // The approver is the customer's contact, and the channel shows it was the button.
   const decided = await decideApproval(db, { runId, status: "approved", channel: "dashboard", approvedBy: approver, contact });
   // Only the click that decided it is logged, so a second click records nothing.
@@ -49,11 +58,14 @@ export async function approveRun(db: Db, runId: string, customerId?: string, con
   return decided;
 }
 
+export const SANDBOX_REPLY = "In the sandbox the phone only shows the text. Approve with the Approve button.";
+
 // The whole reply, because "Yes, but not the alarm line" must not release the bundle.
 export const isYes = (body: string) => /^yes[.!]*$/i.test(body.trim());
 
 /** A reply from the simulated phone: stored whatever it says, and it approves only as a plain YES. */
 export async function receiveSms(db: Db, { runId, body }: { runId: string; body: string }) {
+  if (isSandbox()) throw new Refused(SANDBOX_REPLY, 409);
   const { platform, startedAt, approver } = await runOf(db, runId);
   if (platform !== "local") throw new Refused("The simulated phone only works on local runs", 409);
 
@@ -84,7 +96,9 @@ export async function receiveSms(db: Db, { runId, body }: { runId: string; body:
  */
 export function sameOrigin(request: Request) {
   const host = `http://${request.headers.get("host")}`;
-  if (!URL.canParse(host) || !["localhost", "127.0.0.1"].includes(new URL(host).hostname)) return false;
+  // PUBLIC_HOST is the one public name a hosted deployment (the judge sandbox) answers on, set by whoever deploys it.
+  const hosts = ["localhost", "127.0.0.1", ...(process.env.PUBLIC_HOST ? [process.env.PUBLIC_HOST] : [])];
+  if (!URL.canParse(host) || !hosts.includes(new URL(host).hostname)) return false;
   const origin = request.headers.get("origin");
   if (origin === null) return true;
   return URL.canParse(origin) && new URL(origin).host === request.headers.get("host");

@@ -59,7 +59,7 @@ export function Timeline({ ceo, rows, picked, onPick }: { ceo: AgentRow; rows: A
           </button>
         )}
       </div>
-      <ol className="min-h-0 flex-1 overflow-y-auto p-2">
+      <ol className="relative min-h-0 flex-1 overflow-y-auto p-2">
         {rows.map((row) => (
           <Row key={row.agent} row={row} picked={row.agent === picked} onPick={() => onPick(row.agent === picked ? null : row.agent)} />
         ))}

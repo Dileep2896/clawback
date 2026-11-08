@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { ROSTER } from "./agents.ts";
 import { amountOf, nowMoment } from "./now.ts";
 import type { Snapshot } from "./snapshot.ts";
 
@@ -62,15 +63,16 @@ it("shows the bills while a repeat audit collects, though an earlier audit's fin
   expect(nowMoment(at({ bills, findings, boardCards: collector, auditLog: [{ agent: "filer" }] }))).toBe("findings");
 });
 
-it("shows a picked agent's own moment, or its steps when it has none yet", () => {
+it("gives every picked agent its own view, the approval and the call once they exist", () => {
   const s = at({ bills, findings, approval: { status: "approved" }, calls: [{ endedAt: LATER }], ledger: [{ createdAt: LATER }] });
-  expect(nowMoment(s, "collector")).toBe("bills");
-  expect(nowMoment(s, "auditor")).toBe("findings");
-  expect(nowMoment(s, "approver")).toBe("approval");
-  expect(nowMoment(s, "negotiator")).toBe("call");
-  expect(nowMoment(s, "finance")).toBe("ledger");
+  const views = ROSTER.map((agent) => nowMoment(s, agent));
+  expect(views).toEqual(["intake", "collector", "auditor", "filer", "approval", "call", "ledger", "monitor"]);
+  expect(new Set(views).size).toBe(ROSTER.length);
+  expect(nowMoment(at({}), "approver")).toBe("steps");
   expect(nowMoment(at({}), "negotiator")).toBe("steps");
   expect(nowMoment(s, "ceo")).toBe("steps");
+  // A pick holds while evidence is open: the auditor's view has the findings and their drawer.
+  expect(nowMoment(s, "auditor", "f")).toBe("auditor");
 });
 
 it("shows a finding's refund and its yearly savings together", () => {

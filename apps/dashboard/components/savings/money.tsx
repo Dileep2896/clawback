@@ -76,7 +76,7 @@ export function MoneyView({ snapshot }: { snapshot: Snapshot | null | undefined 
   return (
     <Page>
       <PageHeader title="Money" crumb={snapshot?.customer?.name} replay={replayOf(snapshot?.run)} description="Every amount in your ledger, Clawback's invoice and card payments." />
-      <div className="grid gap-8">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-8">
         {snapshot && view.rows.length === 0 && (
           <EmptyState title="Nothing in your ledger yet" action={<ButtonLink href="/agents">Watch your agents work</ButtonLink>}>
             Refunds, savings and Clawback&apos;s fee are recorded here once the agents file them.
@@ -84,7 +84,7 @@ export function MoneyView({ snapshot }: { snapshot: Snapshot | null | undefined 
         )}
         {view.rows.length > 0 && (
           <>
-            <div className="grid gap-6 min-[1000px]:grid-cols-[7fr_5fr]">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-6 min-[1000px]:grid-cols-[7fr_5fr]">
               <section aria-labelledby="keeps-title" className="rounded-card border border-line bg-sheet p-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 id="keeps-title" className="text-label text-faded">
@@ -143,7 +143,7 @@ export function MoneyView({ snapshot }: { snapshot: Snapshot | null | undefined 
           </>
         )}
 
-        <div className="grid gap-6 min-[1000px]:grid-cols-2">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 min-[1000px]:grid-cols-2">
         <Card title="Clawback's invoice">
           <p className="mb-4 inline-block rounded-full border border-line px-3 py-0.5 text-label text-faded">Stripe test mode</p>
           {invoice ? (

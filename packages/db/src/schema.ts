@@ -66,6 +66,8 @@ export const users = pgTable("users", {
   // True when sign-up made the customer row, so demo:reset deletes it; false when the email matched a seeded customer.
   createdCustomer: boolean("created_customer").notNull().default(false),
   auditRequestedAt: timestamptz("audit_requested_at"),
+  // Keyed hash of the sign-up's client address, for the sandbox's per-address rate limit. Never the address itself.
+  signupIpHash: text("signup_ip_hash"),
   createdAt: createdAt(),
 });
 

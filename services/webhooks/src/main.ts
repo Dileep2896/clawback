@@ -4,10 +4,13 @@ import { stopRunsOnSignal } from "@bill-fighter/agents/run";
 import { db } from "@bill-fighter/db/client";
 import { getPlatform, platformName } from "@bill-fighter/platform/factory";
 import { createMailpit } from "@bill-fighter/platform/local/mailpit";
+import { assertNotSandbox } from "@bill-fighter/shared/sandbox";
 import { startEmailRep } from "@bill-fighter/voice/email/rep";
 import { startScheduledRun } from "./scheduled.ts";
 import { createInboundServer, INBOUND_PATH, WEBHOOK_PORT } from "./server.ts";
 
+// Every endpoint here starts real work, so the judge sandbox never runs this service.
+assertNotSandbox("run the webhook service");
 stopRunsOnSignal(db);
 
 const platform = getPlatform();
