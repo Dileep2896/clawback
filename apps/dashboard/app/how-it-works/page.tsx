@@ -273,7 +273,10 @@ export default function HowItWorksPage() {
             <Statement id="around-title" lead="Around them.">
               Three more agents start the run, keep it moving, and come back next month.
             </Statement>
-            <MoreLink href="/pricing">What it costs</MoreLink>
+            <div className="flex flex-wrap gap-x-8 gap-y-3">
+              <MoreLink href="/pricing">What it costs</MoreLink>
+              <MoreLink href="/naive">How the agents run on naïve</MoreLink>
+            </div>
           </div>
           <ul className="grid content-start border-t border-line lg:col-span-7">
             {AROUND.map((agent) => (

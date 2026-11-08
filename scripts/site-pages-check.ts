@@ -43,6 +43,7 @@ async function checkPage(browser: Browser, path: string, viewport: (typeof VIEWP
     assert.ok((await page.evaluate<string[]>(hrefsIn("Product"))).includes(target), `${where}: footer has no link to ${target}`);
     if (viewport.width >= 768) assert.ok((await page.evaluate<string[]>(hrefsIn("Site"))).includes(target), `${where}: nav has no link to ${target}`);
   }
+  assert.equal(await page.locator('footer a[href="/naive"]').count(), 1, `${where}: footer has no link to /naive`);
   for (const id of ["log-in", "get-started"]) {
     const box = await page.getByTestId(id).boundingBox();
     assert.ok(box && box.x >= 0 && box.x + box.width <= innerWidth, `${where}: ${id} is cut off`);
@@ -58,7 +59,7 @@ async function checkPage(browser: Browser, path: string, viewport: (typeof VIEWP
 
 const browser = await chromium.launch({ args: ["--mute-audio"] });
 try {
-  for (const path of ["/", ...PAGES]) {
+  for (const path of ["/", ...PAGES, "/naive"]) {
     for (const viewport of VIEWPORTS) await checkPage(browser, path, viewport, false);
     await checkPage(browser, path, VIEWPORTS[0]!, true);
   }
