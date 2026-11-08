@@ -48,14 +48,18 @@ export async function approveRun(db: Db, runId: string, customerId?: string, use
     if (!judge) throw new Refused(`Run ${runId} does not exist`, 404);
     return approveSandbox(db, owner, runId, judge.name, contact);
   }
-  // The approver is the customer's contact, and the channel shows it was the button.
-  const decided = await decideApproval(db, { runId, status: "approved", channel: "dashboard", approvedBy: approver, contact });
-  // Only the click that decided it is logged, so a second click records nothing.
-  if (decided.status === "approved" && bundle.status === "pending") {
-    const note = decided.contact === "email" ? EMAIL_INSTEAD : "We will call BayTel.";
-    await db.insert(auditLog).values({ runId, agent: "owner", tool: "approve", inputJson: { contact: decided.contact }, outputJson: { approvedBy: approver, note } });
-  }
-  return decided;
+  // One transaction holding the bundle's row lock: a racing click waits, then sees it decided, and a failed audit write undoes the approval.
+  return db.transaction(async (tx) => {
+    const [locked] = await tx.select({ status: approvals.status }).from(approvals).where(eq(approvals.runId, runId)).for("update");
+    // The approver is the customer's contact, and the channel shows it was the button.
+    const decided = await decideApproval(tx, { runId, status: "approved", channel: "dashboard", approvedBy: approver, contact });
+    // Only the click that decided it is logged, so a second click records nothing.
+    if (decided.status === "approved" && locked?.status === "pending") {
+      const note = decided.contact === "email" ? EMAIL_INSTEAD : "We will call BayTel.";
+      await tx.insert(auditLog).values({ runId, agent: "owner", tool: "approve", inputJson: { contact: decided.contact }, outputJson: { approvedBy: approver, note } });
+    }
+    return decided;
+  });
 }
 
 export const SANDBOX_REPLY = "In the sandbox the phone only shows the text. Approve with the Approve button.";

@@ -15,7 +15,7 @@ export type ApprovalDecision = {
  * The first decision wins: later calls return the row as already decided. The only place a bundle gets decided, used
  * by the local ApprovalGate and by the dashboard routes, which go straight to Postgres.
  */
-export async function decideApproval(db: Db, { runId, status, channel, approvedBy, contact = "call" }: ApprovalDecision) {
+export async function decideApproval(db: Pick<Db, "select" | "update">, { runId, status, channel, approvedBy, contact = "call" }: ApprovalDecision) {
   // Routes pass user input here, and "pending" would satisfy the enum and stamp an approver on an undecided row.
   if (status !== "approved" && status !== "denied") throw new Error(`Invalid approval decision "${String(status)}"`);
   if (!approvedBy) throw new Error("An approval decision must record who made it");
