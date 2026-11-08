@@ -8,6 +8,8 @@ if (existsSync("../../.env")) process.loadEnvFile("../../.env");
 const config: NextConfig = {
   // The demo can run on next dev, and the badge would sit on a panel in front of the room.
   devIndicators: false,
+  // A second local server (the sandbox next to the normal preview) needs its own build folder, e.g. NEXT_DIST_DIR=.next/sandbox.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // Workspace packages export raw TypeScript.
   transpilePackages: ["@bill-fighter/core", "@bill-fighter/db", "@bill-fighter/shared"],
   serverExternalPackages: ["pg"],
