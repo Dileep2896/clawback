@@ -44,11 +44,11 @@ export function EvidenceDrawer({
       onClose={onClose}
       aria-labelledby="evidence-title"
       data-testid="evidence-drawer"
-      className="my-0 mr-0 ml-auto h-dvh max-h-none w-[min(1280px,100vw)] max-w-none overflow-y-auto border-l-4 border-action bg-sheet p-5 text-ink backdrop:bg-black/60"
+      className="my-0 mr-0 ml-auto h-dvh max-h-none w-[min(1280px,100vw)] max-w-none overflow-y-auto border-l-4 border-line bg-sheet p-5 text-ink backdrop:bg-black/60"
     >
       {/* The modal sits above the page banner, so a replay repeats its label here, pinned while the drawer scrolls. */}
       {replay && (
-        <p role="status" data-testid="drawer-replay-banner" className="sticky top-0 z-10 mb-3 rounded-control bg-alert px-4 py-1 text-center text-[2.125rem] leading-tight font-bold text-alert-text">
+        <p role="status" data-testid="drawer-replay-banner" className="sticky top-0 z-10 mb-3 rounded-control bg-warn px-4 py-1 text-center text-[2.125rem] leading-tight font-bold text-warn-text">
           {replayLabel(replay)}
         </p>
       )}

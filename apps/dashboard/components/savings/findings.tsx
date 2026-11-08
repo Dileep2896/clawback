@@ -45,7 +45,7 @@ export function FindingsList() {
                     data-finding={finding.id}
                     aria-haspopup="dialog"
                     onClick={() => setOpenId(finding.id)}
-                    className="cursor-pointer text-left font-semibold underline decoration-line decoration-2 underline-offset-4 hover:decoration-action"
+                    className="cursor-pointer text-left font-semibold underline decoration-line decoration-2 underline-offset-4 hover:decoration-agent"
                   >
                     {finding.title}
                   </button>

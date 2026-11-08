@@ -6,29 +6,28 @@ Written by `product-shell`, 2026-11-07. Every Clawback screen follows this. Toke
 
 Clawback reads a small business's utility and phone bills, finds what it was overcharged, and gets the money back. The customer is an owner, not an analyst: they want one number (what they got back) and one decision (approve). So the product looks like a calm, trustworthy statement of account, not a control room.
 
-- **Light first.** Cool sage page, white surfaces, near-black ink. Dark theme is a toggle, never the default.
-- **Green means money that is yours.** Recovered refunds, yearly savings, "you keep". Also the one primary action colour.
-- **Crimson means it needs you or it went wrong.** Approval needed, a stopped run, the replay banner. Used sparingly so it always gets noticed.
+- **Dark only.** Near-black page, dark slate surfaces, soft white text (human theme, 2026-11-07). No light theme, no toggle.
+- **One hue, one meaning.** Lime: money that is yours and the primary button. Blue: agents working and links (also the focus ring and the current nav item). Coral: wrong numbers on a bill and errors. Amber: pending approval and warnings (the replay banner). No other hues, and no hex outside `globals.css`.
 - **Money is set in a serif.** Every money figure that matters uses Source Serif 4 with lining tabular figures, like a printed statement. That is the one memorable thing; everything else stays quiet.
 - **Hairlines, not shadows.** Surfaces are separated by a 1 px line and the page colour. No drop shadows, no gradients.
 
 ## Colour
 
-| Token | Light | Dark | Use |
+| Role | Name | Hex | Token |
 |---|---|---|---|
-| `paper` | `#edf1ee` | `#0e1613` | Page background |
-| `sheet` | `#ffffff` | `#16211c` | Cards, panels, tables, top bar |
-| `ink` | `#13201b` | `#e6eee9` | Text |
-| `faded` | `#3c4a44` | `#a2b3aa` | Secondary text, labels, notes |
-| `line` | `#d3dcd6` | `#2a3a33` | Borders and dividers only, never text |
-| `money` | `#08573a` | `#6fd9a6` | Money figures that belong to the customer |
-| `money-soft` | `#e5f3ea` | `#173a2a` | Background tint behind a money highlight |
-| `action` / `action-text` | `#08573a` / `#ffffff` | `#4cc48c` / `#06140e` | Primary buttons, approved state, new-card flash |
-| `alert` / `alert-text` | `#8e0c3e` / `#ffffff` | `#ff7ca8` / `#1a0710` | Needs you, errors, replay banner |
-| `register` / `register-text` | `#13201b` / `#ffffff` | `#e6eee9` / `#0e1613` | The human-actions meter drums |
-| `bar-billed`, `bar-real` | `#c2185b`, `#00889f` | `#e0528a`, `#2aa5b8` | kWh chart bars only |
+| Background | Near black | `#0B0F14` | `paper`; also `action-text`, `agent-text`, `alert-text`, `warn-text`, `register-text` |
+| Cards / panels | Dark slate | `#141A21` | `sheet` |
+| Borders | Steel | `#263040` | `line` (borders only, never text) |
+| Main text | Soft white | `#E8EDF2` | `ink`; also `register` (the light meter drums) |
+| Muted text | Gray blue | `#8A96A6` | `faded` |
+| Accent: savings, buttons, logo | Electric lime | `#C6F432` | `money`, `action` |
+| Agent activity / links | Voltage blue | `#3BA7FF` | `agent` |
+| Overcharges / errors | Coral red | `#FF5C5C` | `alert` |
+| Warnings / pending approval | Amber | `#FFB547` | `warn` |
 
-`apps/dashboard/lib/contrast.test.ts` checks every text pair in both themes, and the light theme again for a projector in a lit room. Add a pair there when you add a text colour.
+Text on a filled colour (lime button, blue call row, coral or amber banner) is near black. kWh charts: billed in coral, meter in blue, the overcharge gap shaded amber.
+
+`apps/dashboard/lib/contrast.test.ts` checks every text pair at 4.5:1 or better (the weakest, muted on slate, is about 5.8:1). Add a pair there when you add a text colour; fix contrast in the token, never per component.
 
 ## Type
 
@@ -75,27 +74,20 @@ Stat figures are at least 48 px so the room can read them from the back. Sentenc
 
 ## Landing page (`/`)
 
-Added by `landing-redesign`, 2026-11-07. The landing is the one page allowed a darker voice than the app; it still uses the wordmark, the money green, both fonts and the app's own surfaces.
+Rebuilt by `landing-live` design pass 2, 2026-11-07, from `docs/plan/design-study.md` (Landing 1 to 8). The landing uses the app's own tokens; the old `band` tokens are gone (the frame canvas is `paper` with a dot grid, the CTA band is `sheet`).
 
-- **Idea: an audited statement.** The hero is a page of the demo customer's bills with each wrong amount struck through in crimson, the corrected amount in green serif beside it, an auditor's note under it, and the refund at the foot. Real product imagery, not icons.
-- **Two dark ink bands** (hero, market) alternate with the sage paper (the run, the result). The bands stay dark in both themes.
-- **Narrative structure:** hero statement → "One audit of one noodle shop" (four stages in a row under heavy 4 px ink rules, each with the static screen the run produced: kWh table, finding, call transcript, approval and ledger row) → the market → what the owner stands to keep (a statement total under a heavy rule) → footer with the demo-data line.
-- **Width:** up to 1320 px, wider than app pages, so the four stages sit in one row at 1920.
-- **Values are the recorded demo run's** (`data/replay/run.jsonl`); market figures are the landing-tam estimates with their source note.
+- **Colour:** the theme above. Lime only on the main button and on money; blue on the agent in progress and the call waveform; coral only for wrong bill numbers (the doubled kWh line); amber for the overcharge gap. No glows, no glass, no shadows: 1 px `line` borders.
+- **Structure:** sticky blurred nav, one row at every width with no bottom rule (How it works, Pricing, The market; Log in as text, Start my audit filled) → hero (72 px two-tone headline left, subcopy and CTA right, Harvey split) → a large framed app screen on the dotted `paper` canvas, running past the fold (sidebar, Overview with money tiles, the meter finding with its kWh lines, the approval card with an amber status dot, and an Agents panel streaming the run) → counter strip (five demo-run figures in a hairline grid, marked demo data) → "How it works" bento (5 cards, Fig 1 to 5: bills, findings, calls, approval, ledger; each a two-tone title and a crop of the app's surface bleeding off the card's right and bottom edges) → the market (slate `sheet` band, giant serif figures) → pricing (stacked keep/fee bar plus the statement) → CTA band (`sheet`) → footer (two link columns plus the demo-data pill).
+- **Type:** headline 72 px, weight 600, -0.03 em, two-tone (claim in ink, rest in `faded`); section intros are one 44 px two-tone sentence instead of h2 plus paragraph; body 18 px. Mono 12 px uppercase is for exactly two things: the figure captions (`Fig 1 · Bills`) and the counter strip label. Everything else, footer column heads included, is the sans. Inside the app frame and bento crops the text is app scale, 13 to 15 px: these depict the product, and the frame has a full-size screen-reader summary. Landing-only exception to the 16 px floor; the app pages keep it.
+- **Width:** content up to 1320 px, 12-column grid, about 140 px between sections at desktop.
+- **Values** are the recorded demo run's (`components/landing/timeline.ts`, sourced from `data/replay/run.jsonl`); market figures are the landing-tam estimates with their source note.
 
-| Token | Light | Dark | Use |
-|---|---|---|---|
-| `band` | `#0f1a15` | `#070d0a` | Landing dark band background |
-| `band-text` | `#eef4f0` | `#eef4f0` | Text on the band |
-| `band-faded` | `#c3d1c9` | `#c3d1c9` | Secondary text on the band |
-| `band-line` | `#2c3e35` | `#24352d` | Rules on the band, hover fill for band buttons |
-| `band-money` | `#8be6b9` | `#8be6b9` | Money figures, primary button and focus ring on the band |
-
-The band text pairs are in `lib/contrast.test.ts`, lit-room check included. On the band, `.band :focus-visible` switches the ring to `band-money`.
 
 ## Motion
 
-Only motion that shows a change: the meter drums rolling, a board card arriving, and on the landing the auditor's strike drawing through each wrong amount once on load. All are off under `prefers-reduced-motion` (the strike is then already drawn). No entrance animations on product pages.
+Only motion that shows a change: the meter drums rolling, a board card arriving. No entrance animations on product pages.
+
+On the landing, every frame looks finished at t=0: the server renders the final state, and motion only replays it. The hero's Agents panel moves a cursor through the recorded run and streams the active entry's line (pauses off-screen, Pause button for WCAG 2.2.2, never changes size). Below the fold, things play once as they scroll into view, 300 to 600 ms ease-out: the kWh lines draw left to right, the call's waveform speaks for about 3 s while the transcript lines arrive, the refund rolls up, the keep/fee bar fills. An element already on screen at load never resets. Under `prefers-reduced-motion` (checked live, not only on load) everything shows its finished state.
 
 ## Copy
 

@@ -13,7 +13,7 @@ export function Approval() {
       {approval && (
         <div className="grid gap-2">
           {/* First, so a long summary can never push it out of sight. */}
-          {approval.status === "pending" && replay && <p data-testid="approval-replay" className="font-semibold">Waiting for the recorded reply</p>}
+          {approval.status === "pending" && replay && <p data-testid="approval-replay" className="font-semibold text-warn">Waiting for the recorded reply</p>}
           {approval.status === "pending" && stopped && (
             <p role="alert" data-testid="approval-stopped" className="font-semibold text-alert">
               {STOPPED_TEXT}
@@ -38,7 +38,7 @@ export function Approval() {
           {approval.status !== "pending" && (
             <p
               data-testid="approval-decision"
-              className={`rounded-control px-3 py-1 font-semibold ${approval.status === "approved" ? "bg-action text-action-text" : "border border-alert text-alert"}`}
+              className={`rounded-control px-3 py-1 font-semibold ${approval.status === "approved" ? "border border-line" : "border border-alert text-alert"}`}
             >
               {approval.status === "approved" ? "Approved" : "Denied"} by {approval.approvedBy}
               {approval.channel && `, ${APPROVAL_CHANNELS[approval.channel]}`}

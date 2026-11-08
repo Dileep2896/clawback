@@ -51,7 +51,7 @@ function Timer({ startedAt, endedAt, replay }: { startedAt: string; endedAt: str
 function TranscriptRow({ row }: { row: Row }) {
   if (isDisclosure(row)) {
     return (
-      <li data-call-row="disclosure" className="rounded-control bg-action px-3 py-1 leading-tight text-action-text">
+      <li data-call-row="disclosure" className="rounded-control bg-agent px-3 py-1 leading-tight text-agent-text">
         <span className="block text-[1.625rem] font-semibold">Disclosure</span>
         {row.content}
       </li>
