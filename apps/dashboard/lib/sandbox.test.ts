@@ -7,6 +7,7 @@ import { withTestDb } from "@bill-fighter/db/test-db";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { approveRun } from "./decisions.ts";
+import { liveSnapshot } from "./snapshot.ts";
 import {
   advanceSandbox,
   approveSandbox,
@@ -114,6 +115,34 @@ describe("the judge sandbox", { timeout: 180_000 }, () => {
       expect(await db.$count(findings, eq(findings.customerId, CUSTOMER.id))).toBe(0);
       expect(await db.$count(locations, eq(locations.customerId, a))).toBe(await db.$count(locations, eq(locations.customerId, CUSTOMER.id)));
       expect(await db.$count(accounts)).toBe(3 * (await db.$count(accounts, sql`not ${accounts.id} like 'sandbox-%'`)));
+    }));
+
+  it("shows each judge only their own texts on the live dashboard, while their replays overlap and after a restart", () =>
+    withTestDb("sandbox_sms_isolation", async (db) => {
+      await loadSeed(db, generateSeed());
+      const [a, b] = ["sandbox-sa", "sandbox-sb"];
+      await cloneDemoCustomer(db.$client, a);
+      await cloneDemoCustomer(db.$client, b);
+      await startSandboxRun(db, a, START);
+      await startSandboxRun(db, b, START + 5_000);
+      const texts = async (customerId: string) => (await liveSnapshot(db, customerId)).sms.map(({ id }) => id);
+
+      const both = at(plan.approvalT, START + 5_000);
+      await Promise.all([advanceSandbox(db, a, both), advanceSandbox(db, b, both)]);
+      for (const customerId of [a, b]) {
+        const own = await texts(customerId);
+        expect(own).toHaveLength(1);
+        expect(own[0]!.startsWith(`${customerId}:`)).toBe(true);
+      }
+
+      // b watches it again while a's text is still there, and newer: b sees none until their own plays.
+      const again = both + 1_000;
+      await restartSandbox(db, b, again);
+      await advanceSandbox(db, b, again + 1);
+      expect(await texts(b)).toEqual([]);
+      await advanceSandbox(db, b, at(plan.approvalT, again));
+      expect(await texts(b)).toEqual([expect.stringMatching(new RegExp(`^${b}:`))]);
+      expect(await texts(a)).toEqual([expect.stringMatching(new RegExp(`^${a}:`))]);
     }));
 
   it("plays on from the judge's approval to the recorded numbers, and only once per decision", () =>
