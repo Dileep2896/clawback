@@ -39,6 +39,13 @@ function Activity({ entries }: { entries: ActivityEntry[] }) {
 
 export type DrawerNav = { index: number; count: number; prev: () => void; next: () => void };
 
+/** J moves on, K moves back; nothing while a modifier is held or the user is typing in a field. */
+export function navKey(event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "target">, nav: DrawerNav) {
+  if (event.metaKey || event.ctrlKey || event.altKey || (event.target as HTMLElement | null)?.closest?.("input, select, textarea")) return;
+  if (event.key === "j") nav.next();
+  if (event.key === "k") nav.prev();
+}
+
 /**
  * A native modal dialog: it traps focus, closes on Esc and hands focus back to the button that opened it.
  * Title and explanation are the finding's claim. Every figure in an evidence Section comes from evidence_json.
@@ -68,11 +75,7 @@ export function EvidenceDrawer({
   const app = nav !== undefined;
   const amount = finding.refundCents > 0 ? `${money(finding.refundCents)} refund` : finding.annualSavingsCents > 0 ? `${money(finding.annualSavingsCents)} a year` : null;
 
-  function onKeyDown(event: KeyboardEvent) {
-    if (!nav || event.metaKey || event.ctrlKey || event.altKey || (event.target as HTMLElement).closest("input, select, textarea")) return;
-    if (event.key === "j") nav.next();
-    if (event.key === "k") nav.prev();
-  }
+  const onKeyDown = (event: KeyboardEvent) => nav && navKey(event, nav);
 
   return (
     <dialog

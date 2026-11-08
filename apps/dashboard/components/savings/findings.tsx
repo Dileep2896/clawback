@@ -24,6 +24,11 @@ export const RULE_LABEL: Record<string, string> = {
 // Agents at work on it: blue. Won is money: lime. Waiting and not acted on stay grey, so the approval card stays the one loud thing.
 const MOVING = new Set(["Approved, agents at work", "Filed with the provider"]);
 
+/** The finding J/K or the chevrons move to: the next or previous id, or the same one at either end. */
+export function stepFinding(ids: string[], openId: string, step: number) {
+  return ids[ids.indexOf(openId) + step] ?? openId;
+}
+
 export function FindingsList() {
   const { snapshot } = useLive();
   // Only the id, so an open drawer follows live data and goes away if its finding does.
@@ -34,10 +39,7 @@ export function FindingsList() {
   const findings = [...(snapshot?.findings ?? [])].sort((a, b) => b.refundCents - a.refundCents || b.annualSavingsCents - a.annualSavingsCents);
   const index = findings.findIndex((f) => f.id === openId);
   const open = findings[index];
-  const move = (step: number) => {
-    const next = findings[index + step];
-    if (next) setOpenId(next.id);
-  };
+  const move = (step: number) => setOpenId((id) => id && stepFinding(findings.map((f) => f.id), id, step));
 
   return (
     <Page>
