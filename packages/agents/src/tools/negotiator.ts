@@ -10,7 +10,7 @@ import { LINE_NUMBER } from "@bill-fighter/voice/live/line/script";
 import { type CallOutcome, extractOutcome } from "@bill-fighter/voice/outcome";
 import { type CallPlan, lineKey, runSimCall } from "@bill-fighter/voice/sim/engine";
 import type { TranscriptRow } from "@bill-fighter/voice/transcript";
-import { and, arrayContains, eq, inArray, isNotNull, like } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, isNotNull } from "drizzle-orm";
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -168,6 +168,38 @@ export function negotiatorTools({ db, budget, sim, live, email }: NegotiatorDeps
   ];
 }
 
+/**
+ * The Filer's drafted cancellation letters, by exact id: only for cancellations in the approved bundle that holds this
+ * action, and only for lines the plan asks to cancel. A letter whose file is missing is left out.
+ */
+export async function letterAttachments(db: Db, runId: string, actionId: string, cancelLines: string[]) {
+  const [approval] = await db
+    .select({ actionIds: approvals.actionIds })
+    .from(approvals)
+    .where(and(eq(approvals.status, "approved"), arrayContains(approvals.actionIds, [actionId])));
+  if (!approval) return [];
+  const cancels = await db
+    .select({ findingId: findings.id, evidence: findings.evidenceJson })
+    .from(actions)
+    .innerJoin(findings, eq(actions.findingId, findings.id))
+    .where(and(inArray(actions.id, approval.actionIds), eq(actions.kind, "cancel"), eq(findings.type, "unusedLines")));
+  const lineIds = cancels.flatMap(({ evidence }) => (evidence as { phoneLineIds?: string[] } | null)?.phoneLineIds ?? []);
+  const lines = lineIds.length ? await db.select({ id: phoneLines.id, number: phoneLines.number }).from(phoneLines).where(inArray(phoneLines.id, lineIds)) : [];
+  const requested = new Set(lines.filter((line) => cancelLines.some((number) => lineKey(number) === lineKey(line.number))).map((line) => line.id));
+  const letterIds = cancels
+    .filter(({ evidence }) => ((evidence as { phoneLineIds?: string[] } | null)?.phoneLineIds ?? []).some((id) => requested.has(id)))
+    .map(({ findingId }) => letterActionId(runId, findingId));
+  if (letterIds.length === 0) return [];
+  const letters = await db
+    .select({ payload: actions.payloadJson })
+    .from(actions)
+    .where(and(inArray(actions.id, letterIds), eq(actions.kind, "letter")));
+  return letters.flatMap(({ payload }) => {
+    const path = (payload as { letterPath?: string } | null)?.letterPath;
+    return path && existsSync(resolve(REPO_ROOT, path)) ? [{ filename: basename(path), path: resolve(REPO_ROOT, path) }] : [];
+  });
+}
+
 // Everything that can fail waits for a handler, so importing this file never throws.
 export const DEFAULT_DEPS: NegotiatorDeps = {
   db: sharedDb,
@@ -179,15 +211,7 @@ export const DEFAULT_DEPS: NegotiatorDeps = {
     if ((process.env.PLATFORM || "local") !== "local") throw new Error("Email to the provider works on local runs only");
     // First, so the sandbox's refusal (platform factory) comes before anything is read.
     const mail = await getPlatform().mail();
-    // The Filer's drafted cancellation letters go along when their files are there.
-    const letters = await sharedDb
-      .select({ payload: actions.payloadJson })
-      .from(actions)
-      .where(and(like(actions.id, `letter-${runId}-%`), eq(actions.kind, "letter")));
-    const attachments = letters.flatMap(({ payload }) => {
-      const path = (payload as { letterPath?: string } | null)?.letterPath;
-      return path && existsSync(resolve(REPO_ROOT, path)) ? [{ filename: basename(path), path: resolve(REPO_ROOT, path) }] : [];
-    });
+    const attachments = await letterAttachments(sharedDb, runId, actionId, plan.cancelLines);
     return runEmail({ db: sharedDb, mail, mailpit: createMailpit(), actionId, plan, attachments });
   },
 };

@@ -17,12 +17,15 @@ import { runEmail } from "@bill-fighter/voice/email/engine";
 import { fakeInbox } from "@bill-fighter/voice/email/fixture";
 import { startEmailRep } from "@bill-fighter/voice/email/rep";
 import type { TranscriptRow } from "@bill-fighter/voice/transcript";
-import { eq } from "drizzle-orm";
+import { eq, notInArray } from "drizzle-orm";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadTools } from "../registry.ts";
 import { wrapTool } from "../tool-wrapper.ts";
 import { letterActionId } from "./filer.ts";
-import { negotiatorTools, type NegotiatorDeps } from "./negotiator.ts";
+import { letterAttachments, negotiatorTools, type NegotiatorDeps } from "./negotiator.ts";
 
 const CALL = "call-action";
 const CTX = { runId: "run-1", agent: "negotiator" };
@@ -576,6 +579,27 @@ describe("call_provider with email chosen", () => {
     } finally {
       stop();
     }
+  });
+
+  test("attaches only this run's letters for approved, requested cancellations, not a run whose id it prefixes", async (db) => {
+    const [unrequested] = await db.select().from(phoneLines).where(notInArray(phoneLines.number, SEED_PLAN.cancelLines));
+    await seedCancel(db, LINE, "cancel-1");
+    await seedCancel(db, SEED_PLAN.cancelLines[1]!, "cancel-2");
+    await seedCancel(db, unrequested!.number, "cancel-3");
+    // cancel-2 is requested but not in the approved bundle; cancel-3 is approved but not requested.
+    await db.update(approvals).set({ actionIds: [CALL, "cancel-1", "cancel-3"] });
+    const dir = mkdtempSync(join(tmpdir(), "letters-"));
+    const letter = (runId: string, findingId: string) => {
+      const id = letterActionId(runId, findingId);
+      writeFileSync(join(dir, `${id}.pdf`), "pdf");
+      return { id, findingId, kind: "letter" as const, status: "proposed", payloadJson: { letterPath: join(dir, `${id}.pdf`) } };
+    };
+    await db.insert(actions).values([letter(CTX.runId, "cancel-1"), letter(CTX.runId, "cancel-2"), letter(CTX.runId, "cancel-3"), letter(`${CTX.runId}-2`, "cancel-1")]);
+    const attached = await letterAttachments(db, CTX.runId, CALL, SEED_PLAN.cancelLines);
+    expect(attached.map((a) => a.filename)).toEqual([`${letterActionId(CTX.runId, "cancel-1")}.pdf`]);
+    // No approved bundle holds the action: nothing goes along.
+    await db.update(approvals).set({ status: "denied" });
+    expect(await letterAttachments(db, CTX.runId, CALL, SEED_PLAN.cancelLines)).toEqual([]);
   });
 
   test("refuses the email when BayTel's address is not on the allowlist, before anything is sent", async (db) => {
