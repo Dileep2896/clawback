@@ -53,7 +53,7 @@ export function Bento() {
   return (
     <ul className="grid gap-4 lg:grid-cols-12 lg:gap-5">
       <Card fig="Fig 1 · Bills" lead="It reads every bill." rest="And sets it next to the meter’s own readings." className="lg:col-span-7">
-        <Reveal className="grid gap-14">
+        <Reveal className="grid gap-8">
           <KwhLines />
           <table className="w-full text-left tabular-nums">
             <thead className="text-[13px] text-faded">

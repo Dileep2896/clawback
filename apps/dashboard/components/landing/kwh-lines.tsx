@@ -21,7 +21,7 @@ const label = (month: string) => MONTH.format(new Date(`${month}-01T00:00:00Z`))
 const TICKS = [0, FREMONT.length - 1];
 
 export function KwhLines({ compact = false }: { compact?: boolean }) {
-  return (
+  const chart = (
     <div className={`relative ${compact ? "h-24" : "h-56 border-b border-faded/40 sm:h-64"}`}>
       {!compact && (
         <>
@@ -45,15 +45,23 @@ export function KwhLines({ compact = false }: { compact?: boolean }) {
           <p className="reveal-fade absolute right-0 text-right text-[13px] leading-tight text-faded" style={{ top: `${y(2371) + 6}%` }}>
             What the meter read
           </p>
-          <div aria-hidden="true" className="absolute inset-x-0 -bottom-7 text-[13px] text-faded">
-            {TICKS.map((i) => (
-              <span key={i} className={`absolute whitespace-nowrap ${i === 0 ? "" : i === FREMONT.length - 1 ? "-translate-x-full" : "-translate-x-1/2"}`} style={{ left: `${x(i)}%` }}>
-                {label(FREMONT[i]!.month)}
-              </span>
-            ))}
-          </div>
         </>
       )}
+    </div>
+  );
+
+  if (compact) return chart;
+  // The x axis gets its own row under the chart, so nothing below can run into it.
+  return (
+    <div>
+      {chart}
+      <div aria-hidden="true" className="relative mt-2 h-5 text-[13px] text-faded">
+        {TICKS.map((i) => (
+          <span key={i} className={`absolute whitespace-nowrap ${i === 0 ? "" : i === FREMONT.length - 1 ? "-translate-x-full" : "-translate-x-1/2"}`} style={{ left: `${x(i)}%` }}>
+            {label(FREMONT[i]!.month)}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
