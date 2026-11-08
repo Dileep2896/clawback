@@ -1,10 +1,10 @@
 import { decideApproval } from "@bill-fighter/db/approvals";
 import type { Db } from "@bill-fighter/db/client";
-import { approvals, customers, runs, smsMessages, users } from "@bill-fighter/db/schema";
+import { approvals, auditLog, customers, runs, smsMessages, users } from "@bill-fighter/db/schema";
 import { and, desc, eq, gte } from "drizzle-orm";
 import { isSandbox } from "@bill-fighter/shared/sandbox";
 import { z } from "zod";
-import { isStopped, STOPPED_TEXT } from "./run-state.ts";
+import { EMAIL_INSTEAD, isStopped, STOPPED_TEXT } from "./run-state.ts";
 import { approveSandbox, isSandboxReplay } from "./sandbox.ts";
 
 /** A refusal the caller can understand, as opposed to a failure. */
@@ -31,22 +31,35 @@ async function runOf(db: Db, runId: string) {
   return found;
 }
 
-const bundleOf = async (db: Db, runId: string) => (await db.select({ id: approvals.id }).from(approvals).where(eq(approvals.runId, runId)))[0];
+const bundleOf = async (db: Db, runId: string) => (await db.select({ id: approvals.id, status: approvals.status }).from(approvals).where(eq(approvals.runId, runId)))[0];
 
 /** The backup path in both platform modes, so it touches only the run, its customer and its bundle. Never SMS. */
-export async function approveRun(db: Db, runId: string, customerId?: string, userId?: string) {
-  const { approver, customerId: owner, replay } = await runOf(db, runId);
+export async function approveRun(db: Db, runId: string, customerId?: string, userId?: string, contact: "call" | "email" = "call") {
+  const { approver, customerId: owner, platform, replay } = await runOf(db, runId);
   // The signed-in customer's own runs only: one customer never releases another's bundle. Same answer as a missing run.
   if (customerId !== undefined && owner !== customerId) throw new Refused(`Run ${runId} does not exist`, 404);
-  if (!(await bundleOf(db, runId))) throw new Refused(`Run ${runId} has no approval request`, 404);
+  const bundle = await bundleOf(db, runId);
+  if (!bundle) throw new Refused(`Run ${runId} has no approval request`, 404);
+  // Email goes through local Mailpit only (orchestrator, 2026-11-08), so a naïve run keeps the call. A judge's sandbox plays recordings of either.
+  if (contact === "email" && platform !== "local" && !isSandboxReplay(replay)) throw new Refused("Email to the provider works on local runs only", 409);
   if (isSandboxReplay(replay)) {
     // The judge's copy keeps Linda Park as its contact, so the approver is the signed-in judge, by their own name.
     const [judge] = userId ? await db.select({ name: users.name }).from(users).where(and(eq(users.id, userId), eq(users.customerId, owner))) : [];
     if (!judge) throw new Refused(`Run ${runId} does not exist`, 404);
-    return approveSandbox(db, owner, runId, judge.name);
+    return approveSandbox(db, owner, runId, judge.name, contact);
   }
-  // The approver is the customer's contact, and the channel shows it was the button.
-  return decideApproval(db, { runId, status: "approved", channel: "dashboard", approvedBy: approver });
+  // One transaction holding the bundle's row lock: a racing click waits, then sees it decided, and a failed audit write undoes the approval.
+  return db.transaction(async (tx) => {
+    const [locked] = await tx.select({ status: approvals.status }).from(approvals).where(eq(approvals.runId, runId)).for("update");
+    // The approver is the customer's contact, and the channel shows it was the button.
+    const decided = await decideApproval(tx, { runId, status: "approved", channel: "dashboard", approvedBy: approver, contact });
+    // Only the click that decided it is logged, so a second click records nothing.
+    if (decided.status === "approved" && locked?.status === "pending") {
+      const note = decided.contact === "email" ? EMAIL_INSTEAD : "We will call BayTel.";
+      await tx.insert(auditLog).values({ runId, agent: "owner", tool: "approve", inputJson: { contact: decided.contact }, outputJson: { approvedBy: approver, note } });
+    }
+    return decided;
+  });
 }
 
 export const SANDBOX_REPLY = "In the sandbox the phone only shows the text. Approve with the Approve button.";

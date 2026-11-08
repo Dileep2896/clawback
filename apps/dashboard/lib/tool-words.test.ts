@@ -28,3 +28,10 @@ it("names the step without claiming it worked, since denied and failed attempts 
   expect(toolWords("card_pay")).toBe("Charge the card on file");
   expect(toolWords("create_invoice")).toBe("Create Clawback's invoice");
 });
+
+it("says email for the provider step when the owner chose it, and call otherwise", () => {
+  expect(toolWords("call_provider")).toBe("Call the provider");
+  expect(toolWords("call_provider", "call")).toBe("Call the provider");
+  expect(toolWords("call_provider", "email")).toBe("Email the provider");
+  expect(toolWords("cancel_service", "email")).toBe("Cancel an unused line");
+});

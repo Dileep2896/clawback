@@ -5,6 +5,9 @@ export const isStopped = (status: string | undefined) => status !== undefined &&
 
 export const STOPPED_TEXT = "This run stopped, so nothing can be approved.";
 
+// Shown under the choice on the approval card and written in the approval's audit row (orchestrator, 2026-11-08).
+export const EMAIL_INSTEAD = "We will email BayTel instead of calling.";
+
 /** What the run itself reported as wrong, for the header. A card an agent marked blocked stays on the board only. */
 export const runProblems = (cards: { agent: string; status: string; title: string }[]) =>
   cards.filter((card) => card.agent === RUN_CARD_AGENT && card.status === "blocked").map((card) => card.title);

@@ -29,6 +29,9 @@ await withTestDb("voice_live_test", async (db) => {
     sim: async ({ fallbackReason }) => {
       throw new Error(`The live call failed, and this test runs no sim: ${fallbackReason}`);
     },
+    email: async () => {
+      throw new Error("This test places a call, never an email");
+    },
   });
   const tool = wrapTool(tools.find((candidate) => candidate.name === "call_provider")!, {
     audit: { record: async () => {}, list: async () => [] },

@@ -4,6 +4,7 @@
 // Run pnpm demo:reset first. Needs pnpm dev:dashboard, dev:portal and dev:webhooks with VOICE_MODE=sim. Starts one real sim run (Claude Code login usage).
 // pnpm exec tsx --env-file-if-exists=.env scripts/rehearse-stage.ts [screenshot-folder] [--hand] [--live]
 // --hand types and clicks at a person's pace. --live allows VOICE_MODE=live, which the webhook process must also run with: it places one real call.
+// --email approves on the /agents card with Email chosen, so BayTel is emailed instead of called (never on stage).
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
@@ -15,6 +16,7 @@ const args = process.argv.slice(2);
 const shots = args.find((arg) => !arg.startsWith("--"));
 const hand = args.includes("--hand");
 const live = args.includes("--live");
+const email = args.includes("--email");
 const SAMPLE_BILL = "data/sample-bills/mission-dumplings-baycurrent-2026-09.pdf";
 const LINDA = { name: CUSTOMER.contactName, company: CUSTOMER.name, email: CUSTOMER.contactEmail, password: "noodles-on-stage" };
 // The stage numbers from docs/plan/phases/13-product-ui.md.
@@ -101,10 +103,26 @@ try {
   mark("on stage: logged out, logged in as Linda, Approval needed");
 
   await think(page);
-  await page.getByTestId("overview-approve").click();
-  await page.getByTestId("overview-decision").waitFor({ timeout: 15_000 });
-  await think(page);
-  await page.goto(`${BASE}/agents`);
+  if (email) {
+    await page.goto(`${BASE}/agents`);
+    await page.getByTestId("contact-email").check();
+    await page.getByTestId("contact-email-note").waitFor();
+    await shot(page, "stage-2b-approval-email-chosen");
+    await page.getByTestId("approve").click();
+    // The Now pane moves on from the card once it is approved, so ask the feed rather than the page.
+    const approvedBy = Date.now() + 15_000;
+    const decided = async () => ((await (await page.request.get(`${BASE}/api/live`)).json()) as { approval: { status: string; contact: string } | null }).approval;
+    while ((await decided())?.status !== "approved") {
+      if (Date.now() > approvedBy) throw new Error("Approve did not land within 15 s");
+      await page.waitForTimeout(500);
+    }
+    assert.equal((await decided())?.contact, "email");
+  } else {
+    await page.getByTestId("overview-approve").click();
+    await page.getByTestId("overview-decision").waitFor({ timeout: 15_000 });
+    await think(page);
+    await page.goto(`${BASE}/agents`);
+  }
   // The timeline shows the run's agents at work.
   await page.locator('[data-agent-row]:not([data-state="next"])').first().waitFor();
   await shot(page, "stage-3-agents");
@@ -137,6 +155,7 @@ try {
 
   const { calls } = (await (await page.request.get(`${BASE}/api/live`)).json()) as { calls: { mode: string; startedAt: string; endedAt: string | null }[] };
   for (const call of calls) console.info(`Call: ${call.mode}, ${call.endedAt ? mmss(Date.parse(call.endedAt) - Date.parse(call.startedAt)) : "not ended"}`);
+  if (email) assert.deepEqual([...new Set(calls.map((call) => call.mode))], ["email"]);
   assert.equal(await runStatus(page), "success");
   assert.deepEqual(seen, EXPECTED);
   assert.deepEqual(money, MONEY_EXPECTED);

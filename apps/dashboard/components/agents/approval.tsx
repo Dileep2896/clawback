@@ -3,7 +3,7 @@
 import { type FormEvent, useState } from "react";
 import { post } from "../../lib/post.ts";
 import { isSandboxReplay, replayOf } from "../../lib/replay.ts";
-import { isStopped, STOPPED_TEXT } from "../../lib/run-state.ts";
+import { EMAIL_INSTEAD, isStopped, STOPPED_TEXT } from "../../lib/run-state.ts";
 import { APPROVAL_CHANNELS, useApprove } from "../../lib/use-approve.ts";
 import { useLive } from "../../lib/use-live.tsx";
 
@@ -107,10 +107,15 @@ function Phone() {
 
 /** The one amber element on the page while it waits: what the agents want to do, and the Approve button. */
 export function Approval() {
+  const { snapshot } = useLive();
   const { approval, replay, stopped, busy, failed, approve, canApprove } = useApprove();
+  const [contact, setContact] = useState<"call" | "email">("call");
   if (!approval) return null;
   const pending = approval.status === "pending";
   const count = approval.actionIds.length;
+  // Email reaches BayTel through local Mailpit only, so the choice shows on a local run whose bundle holds the call.
+  const hasCall = snapshot?.actions.some((action) => action.kind === "call" && approval.actionIds.includes(action.id)) ?? false;
+  const canChoose = canApprove && hasCall && snapshot?.run?.platform === "local";
 
   return (
     <section aria-labelledby="approval-title" className={`grid gap-4 rounded-card border p-6 ${pending ? "border-warn" : "border-line"}`}>
@@ -133,12 +138,30 @@ export function Approval() {
           {STOPPED_TEXT}
         </p>
       )}
+      {canChoose && (
+        <fieldset data-testid="contact-choice" disabled={busy} className="grid gap-2">
+          <legend className="mb-2 font-semibold">How should we contact BayTel?</legend>
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            {(["call", "email"] as const).map((value) => (
+              <label key={value} className="flex min-h-9 cursor-pointer items-center gap-2">
+                <input type="radio" name="contact" value={value} data-testid={`contact-${value}`} checked={contact === value} onChange={() => setContact(value)} className="size-4 accent-warn" />
+                {value === "call" ? "Call" : "Email"}
+              </label>
+            ))}
+          </div>
+          {contact === "email" && (
+            <p data-testid="contact-email-note" className="text-faded">
+              {EMAIL_INSTEAD}
+            </p>
+          )}
+        </fieldset>
+      )}
       {canApprove && (
         <button
           type="button"
           data-testid="approve"
           disabled={busy}
-          onClick={approve}
+          onClick={() => approve(canChoose ? contact : "call")}
           className="min-h-11 w-full cursor-pointer rounded-control bg-action font-semibold text-action-text hover:brightness-110 disabled:cursor-wait disabled:opacity-70 sm:w-auto sm:justify-self-start sm:px-8"
         >
           {busy ? "Approving" : "Approve"}
@@ -153,6 +176,7 @@ export function Approval() {
         <p data-testid="approval-decision" className={approval.status === "approved" ? "" : "text-alert"}>
           {approval.status === "approved" ? "Approved" : "Denied"} by {approval.approvedBy}
           {approval.channel && `, ${APPROVAL_CHANNELS[approval.channel]}`}
+          {approval.contact === "email" && ". BayTel is contacted by email"}
         </p>
       )}
       <p data-testid="approval-summary" className="max-w-[72ch] whitespace-pre-line text-faded">

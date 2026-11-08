@@ -108,12 +108,13 @@ function Findings({ snapshot, openId, setOpenId }: { snapshot: Snapshot; openId:
 
 /** An agent with nothing bigger to show yet: what it has done, newest first. */
 function Steps({ row }: { row: AgentRow | undefined }) {
+  const { snapshot } = useLive();
   if (!row || row.calls.length === 0) return <p className="text-faded">{row?.state === "next" ? `${agentName(row.agent)} starts after the steps before it.` : "Starting the run."}</p>;
   return (
     <ol className="grid">
       {row.calls.slice(0, 12).map((call) => (
         <li key={call.id} className="flex items-baseline justify-between gap-4 border-t border-line py-2.5 first:border-0">
-          <span>{toolWords(call.tool)}</span>
+          <span>{toolWords(call.tool, snapshot?.approval?.contact)}</span>
           <span className="text-label text-faded tabular-nums">{clock.format(new Date(call.createdAt))}</span>
         </li>
       ))}
@@ -125,7 +126,11 @@ const TITLES: Record<Moment, (s: Snapshot, row: AgentRow | undefined) => string>
   bills: (s, row) => (row?.state === "working" ? "Reading your bills" : "Your bills"),
   findings: (s) => (s.approval ? "What the agents found" : `${plural(s.findings.length, "finding")} so far`),
   approval: (s) => (s.approval?.status === "pending" ? "Waiting for you" : "Your approval"),
-  call: (s) => (s.calls.some((c) => !c.endedAt) ? "Calling the provider" : "The call"),
+  call: (s) => {
+    const open = s.calls.some((c) => !c.endedAt);
+    if (s.calls.some((c) => c.mode === "email")) return open ? "Emailing the provider" : "The email";
+    return open ? "Calling the provider" : "The call";
+  },
   ledger: () => "The money",
   steps: (s, row) => (row ? agentName(row.agent) : "Starting"),
   intake: () => "The bill email",

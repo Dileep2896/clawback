@@ -1,6 +1,6 @@
 import { DISCLOSURE_LINE } from "@bill-fighter/shared/disclosure";
 import { describe, expect, it } from "vitest";
-import { currentCalls, duration, isDisclosure, nextToSpeak, viewOf } from "./calls.ts";
+import { currentCalls, duration, emailViewOf, isDisclosure, nextToSpeak, viewOf } from "./calls.ts";
 import type { Snapshot } from "./snapshot.ts";
 
 type Call = Snapshot["calls"][number];
@@ -125,6 +125,37 @@ describe("nextToSpeak", () => {
   it("never speaks a live call", () => {
     const live = call({ mode: "live", endedAt: AT, transcriptJson: [disclosure, menu, ENDED] });
     expect(nextToSpeak([live], new Map(), false)).toEqual([]);
+  });
+});
+
+describe("emailViewOf", () => {
+  // The rows services/voice/src/email/engine.ts writes. If that text changes, these must too.
+  const SENT = row("agent", "email", "Subject: Cancel 7 lines\n\nPlease cancel these lines.");
+  const REPLY = row("provider", "email", "Subject: Re: Cancel 7 lines\n\nDone. Ticket BT-48213.");
+  const NO_REPLY = row("system", "status", "No reply from BayTel within 90 seconds, so nothing was cancelled.");
+  const email = (over: Partial<Call>) => call({ mode: "email", toNumber: "support@baytel.example", transcriptJson: [SENT], ...over });
+
+  it("waits for the reply while the email is open", () => {
+    expect(emailViewOf(email({}))).toEqual({ to: "support@baytel.example", sent: SENT, reply: null, notice: null, waiting: true });
+  });
+
+  it("shows the reply, and stops waiting", () => {
+    expect(emailViewOf(email({ transcriptJson: [SENT, REPLY], endedAt: AT }))).toMatchObject({ sent: SENT, reply: REPLY, notice: null, waiting: false });
+  });
+
+  it("shows the timeout notice, with no reply", () => {
+    expect(emailViewOf(email({ transcriptJson: [SENT, NO_REPLY], endedAt: AT }))).toMatchObject({ sent: SENT, reply: null, notice: NO_REPLY.content, waiting: false });
+  });
+
+  it("a malformed transcript shows nothing and does not throw; an ended one stops waiting", () => {
+    expect(emailViewOf(email({ transcriptJson: { not: "rows" } }))).toMatchObject({ sent: null, reply: null, notice: null, waiting: true });
+    expect(emailViewOf(email({ transcriptJson: [{ role: "agent" }], endedAt: AT }))).toMatchObject({ sent: null, reply: null, notice: null, waiting: false });
+  });
+
+  it("an email row is never spoken", () => {
+    const said = new Map<string, number>();
+    expect(nextToSpeak([email({ transcriptJson: [SENT, REPLY] })], said, false)).toEqual([]);
+    expect(said.size).toBe(0);
   });
 });
 

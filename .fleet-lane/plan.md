@@ -1,172 +1,112 @@
-# Plan: agents-redesign
+# Plan: email-negotiator
 
-## Human ruling, 2026-11-07 (orchestrator note `ar-type.md`): applies app-wide
-"The text size is really bad and why are we showing the sandbox such a big way. We need to make the UI elegant and mordern AI application."
-- **Type tokens, set once in `apps/dashboard/app/globals.css`** (`@theme` `--text-*`), used across the whole signed-in app: body 14/20 weight 400; secondary and labels 13 muted, not bold; captions and table heads 12; panel and section titles 14–15 weight 600; page title 20 weight 600; one hero money figure per page at 32–40 serif, all other money at body size. 600 only for titles and the active item; no bold body text; `tabular-nums` on money and times. Nothing above 20px except that one figure. This answers Q1: the /agents 22px floor and its check go; `dashboard-shell-check.ts` and the `panels-*` checks instead assert a 12px floor and a 20px ceiling apart from one `data-hero-figure`.
-- **Look:** quiet dark surfaces, 1px hairlines, 24px card padding, 16–24px gaps, 8–10px radius, colour only where it means something, small calm motion (streaming line, pulsing dot), 16px line icons. Existing radius tokens already match; `Card`/`PageHeader`/`AppNav`/`Table`/`StatTile` in `components/ui/` are restyled at the source so every page follows.
-- **Sandbox notice:** no banner. A 12px pill in the page header beside the run status, muted text with a small amber dot, "Sandbox replay · 2×", opening a small popover with the full sentence and "Watch it again". Replaces `ReplayBanner` (on `fleet/judge-link`: merge main after it ships and replace it there; until then the current banner becomes this pill). Supersedes item 6 below.
-- **Scope grows:** Overview, Bills, Findings, Money, sign-up, log-in and onboarding are rechecked against the scale and fixed in this lane (not only a critical/major Hallmark audit). Item 8 below becomes this.
-- **Screenshots for the human:** /agents at 1920x1080 and 1440x900 (approval and call moments), Overview, and 390x844, each beside its before (befores taken on this branch before any change).
-- With the 14px scale, the /agents sizes in item 1–3 follow the tokens: timeline names 14 weight 600, actions 13 muted, Now-pane title 20 weight 600 (answers.md Q1), "money found" in the header is the page's one hero figure (32–40 serif); ledger and finding amounts at body size, lime.
+(Replaces a stale plan.md from another lane, naive-runtime-cost, that was left in this folder.)
 
-## What exists today
-- `app/(app)/agents/page.tsx` lays out 8 `Panel`s in a 4-column grid (Board, Findings, Approval, Phone, Agents, Call, Ledger, Audit log) under `components/header.tsx` (h1, Platform, Run status, step/finding chips, Run cost, Demo data pill, "Human actions" `MeterRegister` drums). `ReplayBanner` (also in `header.tsx`) is the 34px amber bar.
-- Data: one `useLive()` snapshot polled every second (`lib/snapshot.ts`). `lib/agents.ts` `agentRows()` builds one row per agent from board cards and audit rows (CEO and the run card excluded). Audit rows carry no input, only agent/tool/time/cost.
-- Agents in the recorded run, in order: intake, collector, auditor, approver, negotiator, filer, finance, plus monitor (`schedule_check`), and ceo.
-- Reusable pieces: `evidence/kwh-chart.tsx` `KwhChart`, `evidence/bill-snippet.tsx` `BillSnippet`, `evidence/drawer.tsx` `EvidenceDrawer`, `lib/ledger.ts` `ledgerView`, `lib/calls.ts` (transcript, speech), `lib/use-approve.ts`, the landing's `wave-bar` waveform (bento.tsx) and `RollUp` / `useReducedMotion` (landing/motion.tsx), `ui/` `StatusDot`, `Button`.
-- Guards on this page: `scripts/dashboard-shell-check.ts` (22px floor on /agents), `panels-work-check.ts`, `panels-action-check.ts`, `panels-money-check.ts`, `agents-e2e.ts`, `replay-check.ts`, `stop-check.ts` and `rehearse-stage.ts` (waits for "No cards yet" to disappear). They key on `data-card`, `data-board-row`, `blocked-stamp`, `approve`, `sms-reply`, `call-timer`, `data-call-row`, `data-audit-row`, `data-finding`, `ledger-*`, `human-actions`, `replay-banner`.
+## What I found
+- `call_provider` (packages/agents/src/tools/negotiator.ts) is the one gated Negotiator tool. It waits on the approval gate, places a sim/live call, stores a `calls` row (transcript + `outcomeJson` = `{cancelled_lines, credits, ticket}`), marks the call action done. `cancel_service` and `plan-check.ts` read only `calls.outcomeJson`; Finance reads finding statuses. So if the email path writes the same `calls` row shape, cancel_service, plan-check, Finance, ledger and Overview need no change.
+- The call action payload is `{accountNumber, cancelLines, promoAccounts}`; `promoAccounts` is always `[]` (approver.ts:89, human's rehearsal decision). The email covers line cancellations only.
+- `callFacts` (services/voice/src/facts.ts) already builds holder, company, approval date and the owner/automatic wording from the database. The email reuses it, and `checkPlan` (alarm lines refused).
+- `approvals.channel` already means how the owner approved (dashboard/sms/naive). The contact choice needs its own field.
+- Mail adapter (local): Mailpit via nodemailer, recipient must pass `ALLOWED_EMAIL_DOMAINS` (`billfighter.local,goldengatenoodle.example` today). It has no inbox read; Mailpit's HTTP API (`MAILPIT_API`) is already used by scripts and tests.
+- Demo runs go through `pnpm dev:webhooks`; `pnpm run:local` runs in-process.
+- agents-redesign holds the amber approval card (`components/agents/approval.tsx`), `use-approve.ts`, the Negotiator call view (`components/agents/call.tsx`) and `lib/tool-words.ts`. Not on main yet: I merge it first and again at the end.
 
-## Design (from the brief)
-Page = slim sandbox bar (only on replays) → one-line run header → two columns: timeline (~360px) | Now pane; audit log collapsed under the Now pane. Stacks under 1100px (timeline above Now), no horizontal scroll at 390.
+## Changes, file by file
+1. **Merge `fleet/agents-redesign`** into this branch (first and again before finishing).
+2. **Schema + migration** (`packages/db/src/schema.ts`, new drizzle migration): enum `contact_channel` (`call`, `email`) and column `approvals.contact` not null default `call`; add `email` to `call_mode`.
+3. **`packages/db/src/approvals.ts`**: `ApprovalDecision` gets optional `contact` (default `call`), validated to the two values, written with the decision. First decision wins as today.
+4. **Dashboard approve** (`app/api/approve/route.ts`, `lib/decisions.ts` `approveRun`): body takes optional `contact: "call" | "email"` (zod enum, default `call`), passed to `decideApproval`, plus one `audit_log` row (`agent: owner`, `tool: approve`, input `{contact}`) so the choice is in the audit log. SMS YES and naïve approvals stay `call`.
+5. **Approval card** (`components/agents/approval.tsx`, `lib/use-approve.ts`): while pending, a radio group "How should we contact BayTel? ● Call ○ Email" (Call checked by default, real `<fieldset>`/`<legend>`, keyboard reachable) above Approve; Approve posts the choice. After the decision the card shows "Approved by …, from the dashboard, by email" (or "by phone"). Only shown when the bundle has a call action and the run is local and not a replay; otherwise nothing changes.
+6. **Email path in `call_provider`** (negotiator.ts): after the gate, the handler reads the approval's `contact`. `call` → today's code, untouched. `email` → new `emailOnce` in a new file `packages/agents/src/tools/provider-email.ts`:
+   - Builds the request in code from the approved bundle: subject `Cancellation request, account <n>`, body with the account number, the 7 lines (from `checkPlan`, alarm lines refused), "<holder>, the account holder, approved these changes on <date>", and the AI disclosure "Sent by an AI assistant on behalf of <company>." Attaches the Filer's drafted letter PDFs for those lines when their files exist.
+   - Recipient fixed in code: `support@baytel.example`. `REPLICA_EMAIL_DOMAINS` constant (our four replica provider domains `.example`); any other domain throws before sending (test). `targets()` returns the email target on the email path, so the wrapper's allowlist check applies too.
+   - Opens a `calls` row (`mode: "email"`, `toNumber` = the address), transcript rows `{role: agent, kind: "email", content}` for the sent mail, then waits for BayTel's reply by polling Mailpit for a message to our identity with `In-Reply-To` = the sent Message-ID (every 1 s, timeout 90 s, configurable by env for tests).
+   - Reply → appends `{role: provider, kind: "email"}`, parses the outcome in code: ticket from `Ticket: BT-…`, cancelled lines from the reply's "Cancelled lines" list, kept only if they were requested. Then saves `outcomeJson` and marks the call action done exactly as the call path does. A refusal reply → outcome with no lines, ticket null.
+   - Timeout → closes the row with a system row "No reply from BayTel within 90 seconds", leaves the action not done, `reportProblem`, and throws, so the step shows blocked and plan-check reports the action unfinished. Never done.
+   - Retry/idempotence: same as calls (finished row returned, `running` map).
+7. **BayTel email responder** (new `services/webhooks/src/baytel-mail.ts`, started from `services/webhooks/src/main.ts` and `scripts/run-local.ts`): polls Mailpit every 1 s for unread mail to `support@baytel.example`, marks it read, and replies through the Mail adapter from `support@baytel.example` with `In-Reply-To`. Rules as the phone rep: the account number is a BayTel account on file, the named authoriser is that account's customer contact, every line belongs to that customer and is not an alarm line → "Ticket: BT-48213" + the lines cancelled. Anything off-plan (unknown account, wrong name, foreign or alarm line, missing disclosure) → a refusal reply with no ticket. Pure `answerRequest(text, db)` with unit tests.
+8. **Negotiator view** (`components/agents/call.tsx`, `lib/calls.ts`): a call row with `mode: "email"` renders as an email thread (envelope icon, "Sent to support@baytel.example" / "Reply from BayTel", pre-wrapped bodies, "Waiting for BayTel's reply" while open, the timeout notice in alert style). Email rows are never spoken. The "Simulated call" pill reads "Email" for these.
+9. **Words** (`lib/tool-words.ts`, timeline): `call_provider` reads "Contact the provider by phone or email"; where the run's approval contact is known, "Call the provider" / "Email the provider". Nothing says sent/cancelled from the tool name alone.
+10. **Prompt** (`prompts/negotiator.md`): one line: `call_provider` may email instead of calling when the owner chose email; report the outcome the same way.
+11. **Allowlist**: add `baytel.example` to `ALLOWED_EMAIL_DOMAINS` in `.env.example` and my `.env` (waiting on Q1).
 
-1. **Run header** (one line): status dot + "Running"/"Finished", elapsed, money found so far (lime, `font-figure`, rolls up via `RollUp`), "1 human action" text (`data-testid="human-actions"` kept), run cost, Demo data chip. No Platform, no drums, no step chips. Run problems / connection lost stay as one coral line under it.
-2. **Timeline** (`components/agents/timeline.tsx`): CEO as the header row, then one row per agent in fixed run order (intake, collector, auditor, approver, negotiator, filer, finance, monitor last, see Q4). Dot: blue pulsing while working, lime done, amber while the run waits on the human (pending approval, on the approver row), coral failed/blocked. Name, action in plain words on up to 2 lines (wraps, no ellipsis on short phrases), elapsed. Rows are buttons: picking one pins the Now pane to that agent; "Follow live" un-pins.
-3. **Now pane** (`components/agents/now.tsx`): picks one moment from the snapshot, no empty states:
-   - *start / collecting*: "Reading your bills": the bills as they arrive (site, provider, period, total).
-   - *auditing / finding*: the newest finding at real size: title, site, refund in lime serif, plus `KwhChart` + `BillSnippet` from its evidence; other findings listed below with amounts (click → existing `EvidenceDrawer`).
-   - *approval pending*: the one amber element, a card with a full amber border: action count, summary, big lime Approve (`useApprove`), and on a local run the phone thread with "Reply as Linda" (see Q2). Replay: "Waiting for the recorded reply".
-   - *call*: provider, mode, timer, animated waveform (blue `wave-bar`, still under reduced motion), transcript streaming with follow-scroll; speech logic unchanged.
-   - *filing / finance / done*: the ledger (current Ledger content) with lime figures rolling up, "Customer keeps" largest.
-   - Moment choice is a pure function `nowMoment(snapshot, pickedAgent)` in `lib/now.ts` with unit tests.
-4. **Audit log**: `<details>` under the Now pane, summary "Show the full log, 42 entries". Rows: time, agent, plain-language action ("Logged in to the BayCurrent portal") then the tool name in small mono; `break-words`, never `break-all`. Phrases from a `TOOL_WORDS` map in `lib/tool-words.ts` (provider name from the snapshot's bills when there is one); unknown tools fall back to the tool name with underscores as spaces. Unit test covers every tool in `packages/agents/src/tools` and the recorded run.
-5. **Removed from /agents**: Board panel, Platform fact, the drums (`MeterRegister` deleted if nothing else uses it), every "No … yet" line. Panels that become unused are deleted; parts the Now pane reuses move into `components/agents/`.
-6. **Sandbox bar**: after `judge-link` ships, merge main and restyle its banner: about 36px tall, 14px text, `sheet` with an amber dot, "Sandbox · a recorded audit replayed for you at 2× · Watch it again". Until then the current `ReplayBanner` gets the restyle with the text it has.
-7. **Type and motion** (Hallmark): 600 for titles only, base size per Q1, motion 200–600 ms ease-out, reduced motion shows the finished state (no pulse, no waveform, figures at final value).
-8. **Then**: Hallmark audit of Overview, Bills, Findings, Money at 1440 and 390; fix critical/major only; findings listed in this plan.
-
-## Files
-- `apps/dashboard/app/(app)/agents/page.tsx`: new layout.
-- `apps/dashboard/components/header.tsx`: run header + banner restyle.
-- new `apps/dashboard/components/agents/{timeline,now,audit-log}.tsx`, `apps/dashboard/lib/{now,tool-words}.ts` (+ tests).
-- `apps/dashboard/lib/agents.ts`: fixed order, done/waiting/failed states, CEO row (+ `agents.test.ts`).
-- `components/panels/*`, `components/panel.tsx`: moved or deleted as above.
-- `scripts/dashboard-shell-check.ts`, `panels-*-check.ts`, `agents-e2e.ts`, `replay-check.ts`, `stop-check.ts`, `rehearse-stage.ts`: /agents selectors updated (board → timeline rows, font floor per Q1); existing test ids kept where the element survives (Q6).
-- `docs/plan/design.md`: the `/agents` paragraphs rewritten for the new layout.
-
-## Answers applied (answers.md, 2026-11-07 21:23)
-- Q1: the 22px floor goes entirely (large screens, not projectors). App-wide scale as above; checks assert a 12px floor; `docs/plan/design.md` updated to match.
-- Q2: the phone thread sits inside the amber approval card under Approve, on a local live run only; on naïve one line "The request went by email".
-- Q3: every agent is shown from the start; ones that haven't started read "Up next" in grey.
-- Q4: Monitor is the last row.
-- Q5: `rehearse-stage.ts` runs once after the build, browser muted.
-- Q6: the panel/e2e/rehearsal checks are rewritten against the timeline and Now pane with the same meaning.
-- Open: Q7 (which money figure is the /agents hero). Waiting for GO.
+## Answers applied (2026-11-08)
+- Q1: `ALLOWED_EMAIL_DOMAINS` untouched until the human's yes is passed on. Build with the code-level replica list. Until then, the Mail adapter will refuse the BayTel address, so the live email run waits for that yes (tests use a test env).
+- Q2: summary unchanged; with Email selected the card shows "We will email BayTel instead of calling." and that sentence goes in the approval's audit row.
+- Q3: 90 s. Q4: `calls` row with mode `email`, labelled email everywhere users see it. Q5: one gated tool. Q6: local runs only.
 
 ## How I check it
-- Unit: `lib/now.test.ts` (each moment from fixture snapshots, picked agent, replay), `lib/tool-words.test.ts`, `lib/agents.test.ts`.
+- Unit tests: `provider-email.test.ts` (non-replica recipient refused before any send; email built from the bundle with disclosure and approval date; reply parsed into the outcome; only requested lines kept; timeout leaves the action not done and throws); `baytel-mail.test.ts` (accepts the correct request, refuses wrong account / wrong name / alarm line); `approvals` contact default and validation; approve route posts contact; card renders the choice.
+- Existing negotiator, plan-check, finance-ledger tests still pass (call path unchanged).
 - `pnpm test`, `pnpm lint`, `pnpm typecheck` (root and dashboard).
-- Screenshots with Playwright over `pnpm demo:replay` (recorded run, no model cost) at 1920x1080 and 1440x900 at start, finding, approval, call, done; 390x844; sandbox (replay) and local; one before/after pair against `docs/plan/agents-before.png`. The script asserts no "No … yet" text, no horizontal scroll, no clipped agent action.
-- `scripts/rehearse-stage.ts` in sim, browser muted (Q5).
+- One sim run with email chosen (VOICE_MODE=sim, browser muted): the request in Mailpit, the reply with the ticket, 7 lines cancelled, ledger/Overview $12,606.06 / $18,319.32 / $9,277.61. `scripts/rehearse-stage.ts` in sim with Call. Screenshots at 1440: approval card with the choice, Negotiator email view, done.
 
-## Answer applied (answers.md, 21:36)
-- Q7: the /agents hero is money found so far, in the run header, counting up. GO.
+## Changes from the plan while building
+- The email desk runs only in `pnpm dev:webhooks`, not `run:local`: run:local approves automatically, never as the owner, so it never takes the email path (and `requestEmail` refuses an automatic approval).
+- The Overview card keeps one Approve button (call). The choice is on the /agents amber card only.
+- Owner's approval click is written to `audit_log` as agent `owner`, tool `approve` ("Approve the plan"), and kept off the agents column.
+- Replays of recordings made before `approvals.contact` existed default it to `call` (`scripts/replay.ts`).
+- First real run found CRLF line ends from Mailpit broke both parsers: the desk refused a valid request, nothing was cancelled, the step ended blocked (safety held). Fixed; the test inbox now returns CRLF.
 
 ## What changed and how to try it
-**Try it:** `pnpm demo:replay --speed 2 --force`, then open `/agents` (signed in). Or `pnpm demo:start` for a local run. Screenshots: the human's set is committed in `docs/plan/agents-redesign/pairs/` as JPEG (approval and call at 1920 and 1440, Overview 1440, 390 for agents, call and Overview), and `pairs/agents-before-after.jpg` is the pair against `docs/plan/agents-before.png`. The full sets (`before/`, `after/`: 5 moments × 1920/1440/390 sandbox plus every app page; `local/`: the rehearsal's local run) are in the worktree, not committed (about 30 MB; only one screenshot was ever committed before). Regenerate with `scripts/agents-shots.ts <folder>` (5 moments × 1920/1440/390 from a sandbox replay; fails on horizontal scroll, "No … yet" text or a clipped agent action) and `scripts/app-shots.ts <folder>` (every app page at 1440 and 390; flags text off the scale).
+- **Approval**: `approvals.contact` (`call` default) and `call_mode` `email`, migration `0006_approval_contact` (renumbered after the judge-link merge; `scripts/sandbox-redeploy.ts` gets run-twice catch-up SQL for it, checked twice on a scratch database). `POST /api/approve` takes `contact`; email is refused (409) on non-local runs. The /agents card asks "How should we contact BayTel? ● Call ○ Email"; Email shows "We will email BayTel instead of calling.", also written in the approval's audit row.
+- **Negotiator** (`packages/agents/src/tools/negotiator.ts`): `call_provider` reads the approval's choice after the gate. Call is unchanged. Email: `services/voice/src/email/engine.ts` sends one request built in code (`email/letter.ts`: account, the 7 lines, "Linda Park, the account holder, on <date>", "Sent by an AI assistant on behalf of …", the Filer's letters attached) to `support@baytel.example`. Non-replica domains are refused in code before sending, and the target goes through the allowlist wrapper too. It waits up to 90 s for the reply; the outcome goes on the same `calls` row shape, so cancel_service, plan-check, Finance and the ledger are unchanged. No reply leaves the action not done, with a notice on the row and a blocked problem card.
+- **BayTel desk** (`services/voice/src/email/rep.ts`, started by `dev:webhooks` on local): reads unread mail to support@baytel.example in Mailpit, cancels only when the account is BayTel's, the named authoriser is its holder, every line is the customer's and not an alarm, and the disclosure is there; else a refusal with no ticket.
+- **UI**: the Negotiator view shows an email thread (envelope, "Sent to …", "Reply from BayTel", never spoken); Now title "The email"; timeline/audit words "Email the provider"; finding activity "Emailed …", "BayTel replied by email" / "No reply from BayTel".
+- **Allowlist**: `baytel.example` added to `ALLOWED_EMAIL_DOMAINS` in `.env.example` (human's yes). The root `.env` already has it.
+- **Recording**: `data/replay/run-email.jsonl` from one local sim run with Email chosen.
+- **Judge sandbox** (`apps/dashboard/lib/sandbox.ts`): the sandbox approval card shows the same Call / Email choice. Approve with Call plays on as before. Approve with Email: under the judge's lock, their call-recording rows are deleted, and the email recording's rows up to its approval are written on the same run id (the email recording's run id is mapped to the call one at load), re-keyed and re-timed like the call path; then it plays on from the tap. The approval keeps `contact = email`. The state keeps `contact`, so `wallTime`/`play` use the email plan. Watch it again starts over as a call. Both recordings ship in the sandbox bundle and Next's file tracing.
+- **SANDBOX=1**: the provider email now takes its mail adapter from the platform factory (`getPlatform().mail()`), so it refuses in the sandbox before reading anything; tested in `test/sandbox-guards.test.ts`.
+- **Tests**: `services/voice/src/email/email.test.ts` (non-replica refused, request and reply format incl. CRLF, desk accepts/refuses, timeout throws with notice, alarm line), negotiator email tests (ticket and 7 lines recorded and cancel_service works; refused when the address is off the allowlist; timeout leaves the action not done), approve contact tests, tool words, sandbox "one judge Call, one Email" (each gets its own continuation and mode, the same totals, a double tap is one decision, restart goes back to call), sandbox guard for the email.
+- **Try it**: `DASHBOARD_URL=… pnpm exec tsx --env-file-if-exists=.env scripts/rehearse-stage.ts <shots> --email` (needs dev:dashboard, dev:portal, dev:webhooks, VOICE_MODE=sim). Without `--email` it is the call rehearsal as before.
+- **Results**: email run: ticket BT-48213, 7 lines cancelled from the reply, run success, Overview and Money $12,606.06 / $18,319.32 / $9,277.61. Screenshots in `docs/plan/email-negotiator/`.
+- Ran on this lane's own database `billfighter_email`, not the shared one, because both this branch and judge-link add a migration 0005 and drizzle would skip the older one on a shared database.
 
-**/agents** (`components/agents/`):
-- Run header on one line: status dot and word, elapsed (ticks between polls; recorded time on a replay), **money found** as the page's one 36px lime serif figure counting up, "N human action(s)", run cost. The sandbox pill sits by the title.
-- Money found is the approver's own rule: `findingTotals` over findings that are not `promoExpiry` (expired promos are flagged, not claimed), refund plus yearly savings. It reads $30,925.38 at the end of the recorded run, the Overview's refund plus savings.
-- Timeline: CEO header, then intake, collector, auditor, filer, approver, negotiator, finance, monitor (Monitor last; filer before approver because that is the real run order). Every agent shows from the start; not-started rows read "Up next" in grey and cannot be picked. Dots: blue pulsing working, lime done, amber waiting on you (approver while the approval is pending), coral failed (a blocked card, or a card still doing on a stopped run). Clicking a row pins the Now pane to it; "Follow live" unpins.
-- Now pane (`lib/now.ts` picks the moment): bills → findings (the biggest with its kWh chart or rate table, "Open the evidence", the rest as buttons) → approval (amber card, Approve; texts thread under it on a local run, "The request went by email." on naïve) → call (waveform moves only while open, transcript streams, disclosure framed) → ledger (four totals counting up, then rows). Scroll resets to the top on each moment.
-- Audit log collapsed: "Show the full log, N entries"; rows in plain words (`lib/tool-words.ts`, a unit test covers every tool and the recorded run) with the tool name in small mono, soft breaks after underscores only.
-- Gone: the board, the drums (`meter-register.tsx`), the platform line, every "No … yet" panel, the 64px icon rail.
+### Known limits
+- The Negotiator row on /agents shows the CEO's card title, written by the model before the owner picks, e.g. "Call BayTel, cancel unused lines", even on the email path. The CEO prompt is unchanged to keep the stage call wording.
+- One-process shortcut as for calls: two email runs at once in two processes could each answer; the desk also keeps its own seen set.
+- Call rehearsal (no `--email`), same database after reset: sim call 2:22, ticket BT-48213, run success, Overview and Money $12,606.06 / $18,319.32 / $9,277.61, approval contact `call`. Unchanged.
+- `pnpm test` 1885 passed, 1 skipped; `pnpm lint`; `pnpm typecheck` root and dashboard: pass, after both merges. The browser rehearsals ran before the merges and were not run again: the call path is unchanged since.
 
-**App-wide type** (human ruling): six tokens in `globals.css` (12/13/14/15/20 and one 36px hero). Overview, Bills, Findings, Money, the evidence drawer, onboarding, sign-up and log in moved onto it; 600 only on titles and the current item; 16px nav icons; the replay banner became `components/sandbox-pill.tsx` (12px pill, amber dot, popover with the full sentence) on every page header. `docs/plan/design.md` rewritten to match.
+- The sandbox's email continuation shows the email recording's own pre-approval rows: the same numbers and steps as the call recording's, but new ids, so an open evidence drawer closes at the tap.
+- The hosted sandbox is not redeployed from here (the orchestrator arranges it); `pnpm sandbox:redeploy` now runs the 0006 catch-up first.
 
-**Checks:** `panels-money`, `panels-work`, `panels-action`, `dashboard-shell` and `replay-check` rewritten against the timeline and Now pane with the same meaning and a 12px floor; all pass against a replay. `rehearse-stage.ts` waits for a started agent row instead of "No cards yet". `savings-views-check` passes.
+## Still open
+- Nothing. fleet/agents-redesign merged twice (7a97cbb, then 1cef127).
 
-**Rehearsal (sim, headless so muted):** passed. On stage 2:30, whole rehearsal 4:27; Overview and Money show $12,606.06 / $18,319.32 / $9,277.61; call sim, 1:31. It ran on this lane's own portal (3201), webhooks (3202) and database, so the shared database and the main checkout's servers were never touched, and it was reset with `demoReset({ mailpitApi: null })` so the shared Mailpit inbox was not cleared. The first attempt ended `incomplete` because this worktree's `.env` had an empty `ALLOWED_CALL_NUMBERS` and a placeholder `STRIPE_SECRET_KEY`; both now copied from the main checkout (Stripe test key). Its first `/agents` shot also caught the Now pane mid-fade, so the first moment now shows without a fade (commit 21a6dff). Model cost of both runs about $0.94 by the SDK estimate.
+## Fix round (review.md, 2026-11-08)
+- Blocking 1, reply correlation (`services/voice/src/email/engine.ts`): `runEmail` keeps the Message-ID that `mail.send` returns, looks up our own sender address from the sent message, and accepts a BayTel message only if its `In-Reply-To` is that Message-ID and it is addressed to us. The subject search now only narrows the candidates. The desk (`rep.ts`) replies with `inReplyTo`, which the local Mail adapter sends as `In-Reply-To` and `References` (`OutboundEmail.inReplyTo`, new and optional). `createMailpit().read` returns `MessageID`, `To` and `InReplyTo`, the last from Mailpit's headers endpoint because the message JSON has no In-Reply-To. Test: BayTel mail with the request's subject but a stranger's In-Reply-To, or addressed to someone else, is ignored and the step times out. Also checked by hand against the running Mailpit: `message-id:` search, and In-Reply-To survives the round trip.
+- Blocking 2, desk drops requests (`rep.ts`): a request is added to `answered` and marked read only after its reply is sent. Each message has its own try/catch, so one failure does not stop the rest of the tick. Test: the first desk send fails, the next tick answers it, and exactly one reply goes out.
+- Blocking 3, approval audit (`apps/dashboard/lib/decisions.ts`): `approveRun` runs in one transaction that takes the bundle row's lock (`select … for update`), decides the bundle, and writes the single `approve` audit row only if it was pending under the lock. A racing click waits, then sees the bundle decided and writes nothing. A failed audit insert rolls the approval back. `decideApproval` now accepts a transaction (`Pick<Db, "select" | "update">`). Test: three concurrent approvals write one audit row, and an audit insert forced to fail by a check constraint leaves the bundle pending. The sandbox path (`approveSandbox`) was already one locked transaction.
+- Checks: `pnpm test` (122 files, 1888 passed), `pnpm lint`, `pnpm typecheck` at the root and in the dashboard, all clean. I confirmed the new tests fail on the previous code.
 
-**Shortcuts and limits:**
-- `useCallSpeech` lives at page level (`AgentsView`), not in the call view, because the Now pane mounts the call late and would mark the disclosure as already said. shortcut: speech runs whatever moment is on screen; fine while one call per run.
-- The sandbox pill's popover has no "Watch it again" yet: that comes with judge-link's banner, which this lane replaces after judge-link ships and main is merged in.
-- A pinned agent with no view of its own (intake, collector, finance, monitor) shows its steps in plain words.
+## Fix round 2 (review.md, 2026-11-08)
+- Blocking 1, Mailpit marks read on fetch (`services/voice/src/email/rep.ts`): the desk keeps a `retry` set of request ids. An id joins it before the fetch and leaves only when its reply is sent, and each tick handles the retry set plus the `is:unread` search, so a request whose reply failed is answered later even though Mailpit marked it read. The test inbox (`fixture.ts`) now marks a message read when it is fetched, as Mailpit does. The existing test "the desk retries a request whose reply failed to send, and answers it once" fails on the previous code with this inbox.
+- Blocking 2, sandbox approval audit (`apps/dashboard/lib/sandbox.ts`): `planOf` leaves out recorded `owner`/`approve` audit rows, so no recording replays one. `approveSandbox` writes exactly one `owner`/`approve` row in its locked transaction, only when the bundle was pending: `input_json {contact}`, `output_json {approvedBy, note}` (same wording as `approveRun`), dated at the tap, with the judge's id prefix so Watch it again removes it. Tests: concurrent Call clicks, one Call judge and one Email judge (two concurrent clicks), each gets one row with their choice and name. Both fail on the previous code.
+- Also committed: this lane's own plan.md and questions.md. The agents-redesign merge (81d5117) had replaced them with that lane's copies.
+- Checks: `pnpm test` (122 files, 1888 passed, 1 skipped), `pnpm lint`, `pnpm typecheck` at the root and in the dashboard, all clean.
 
-## Fix round (review.md, 2026-11-07)
-1. **Shared database guard bypassable** (`scripts/agents-shots.ts`): the URL-path check is gone; the script now calls `assertNotSharedDatabase` against the live connection before the replay. Regression test in `stop-check.test.ts` for `/%62illfighter`. Tried it: an encoded URL is refused.
-2. **Audit wording claims success** (`lib/tool-words.ts`): every label is now a neutral step ("Charge the card on file", "Cancel an unused line", "Create Clawback's invoice"), since the snapshot carries no outcome and denied/failed attempts are logged too. Test asserts no label is past tense. Callers' expectations (`agents.test.ts`, `panels-money-check.ts`, phase doc) updated.
-3. **Live transitions dismiss open evidence** (`now.tsx`, `lib/now.ts`): the open finding id moved up to `NowPane`, and `nowMoment(s, picked, reading)` holds "findings" while a drawer is open. Unit test with no agent picked: a pending approval or open call stays on findings until the drawer closes.
-4. **Scroll reset defeats transcript following** (`now.tsx`): the reset-to-top skips the call, which `useFollow` has already scrolled to its newest line. `agents-shots.ts` now fails if the call moment (≥6 lines) is not at its newest line; passed on a 4× replay at 1920/1440/390.
-5. **Repeat audits never reach the money** (`lib/now.ts`): this run's finance card being done also counts, so ledger rows updated in place (old `createdAt`) still lead to the money. Regression test added.
-6. **Non-hero money at 20px**: ledger totals, the lead finding, the evidence drawer amount, Overview and Money statement rows, the invoice amount and `StatTile` moved to `text-body`. `app-shots.ts` now flags any `.font-figure` text outside `[data-hero-figure]` that is not 14px; it passes on every signed-in page at 1440 and 390.
+## Merge main (2026-11-08, orchestrator note en-merge.md)
+- Merged main (de43103, with agents-redesign and judge-link). Conflicts: `apps/dashboard/next.config.ts` (tracing now includes run.jsonl, run-email.jsonl and usage.json), and this plan.md (kept ours). Migration stays `0006_approval_contact`.
+- `pnpm test` (122 files, 1890 passed, 1 skipped), `pnpm lint`, `pnpm typecheck` at the root and in the dashboard: clean.
+- Orchestrator decision (2026-11-08, review round 3): fix both (bound each Mailpit request by the remaining deadline with AbortSignal, reject late replies, test the timeout path; adapter tests for the HTTP calls, response validation, In-Reply-To extraction and failures with a stubbed fetch). Last fix round; later non-regression findings go here as known limits.
 
-Checks: `pnpm test` (all pass), `pnpm lint`, `pnpm typecheck`; `agents-shots.ts` and `app-shots.ts` against this lane's own dashboard (port 3300) and database.
+## Fix round 9 (review round 3, last)
+- **Reply deadline does not bound polling requests** (engine.ts:47): every Mailpit `search` and `read` now takes an `AbortSignal.timeout` for the time left before the deadline, and the adapter passes it to fetch. A request that hangs is aborted at the deadline (TimeoutError is treated as no reply), and a reply read after the deadline is rejected. The last sleep is cut to the time left. New tests in `email.test.ts`: a hung search is aborted, the "No reply" notice is recorded and the row is closed (`endedAt` set); a genuine reply that reads late (105 ms against a 20 ms timeout, as in the review's reproduction) is rejected. I confirmed the late-reply test fails when the delay is removed.
+- **Mailpit adapter lacks automated tests** (mailpit.ts:20): new `packages/platform/src/local/mailpit.test.ts` with a stubbed fetch. It covers the search URL and query encoding, a null message list, read plus `In-Reply-To` from the headers (brackets trimmed, missing header gives null), schema rejection, HTTP errors naming the method and path, markRead's PUT body and empty-list no-op, signal passthrough, and an abort.
+- `pnpm test` (123 files, 1900 passed, 1 skipped), `pnpm lint`, `pnpm typecheck` at the root and in the dashboard, `git diff --check`: clean.
+- Orchestrator decision (2026-11-08, review round 4): fix both, they are small: select the exact letter IDs from this run's approved cancellations (test with overlapping run IDs), and tests for emailViewOf (waiting, reply, timeout, malformed, email rows silent). This is the final round: after it, any new finding that is not a regression goes to Known limits and the lane ships.
+- Orchestrator decision (2026-11-08, review round 5): fix the sender check only (exact, case-insensitive From.Address match to the provider address, plus a regression test with a lookalike sender). After this, the lane ships at the next review unless it finds a regression; any other new finding is a known limit.
 
-## Known limits
-- Orchestrator decision (2026-11-07, review round 3): fix the stale openId (clear when the finding is gone) and the repeat-audit collecting moment (use current-run progress), each with a regression test. This is the last fix round; later non-regression findings go here as known limits.
+## Fix round 10 (review round 4, final)
+- **Attachment selection includes other runs** (negotiator.ts:186): the `LIKE 'letter-${runId}-%'` query is gone. New exported `letterAttachments(db, runId, actionId, cancelLines)` takes the approved bundle that holds the call action, keeps its `cancel` actions on `unusedLines` findings whose line is in the plan's `cancelLines`, and selects exactly `letterActionId(runId, findingId)` for those. No approved bundle means no attachments. Test in `negotiator.test.ts`: the letters of run `run-1` and of overlapping run `run-1-2`, plus a cancellation that was requested but not approved and one that was approved but not requested. Only the one approved and requested `run-1` letter is attached, and a denied bundle attaches nothing.
+- **Email display logic lacks tests** (calls.ts:49): new `emailViewOf` tests in `apps/dashboard/lib/calls.test.ts` cover waiting (open, request only), reply (shown, no longer waiting), timeout (notice, no reply), malformed transcripts (no throw, nothing shown, `waiting` follows `endedAt`), and `nextToSpeak` never speaking an email row.
+- `pnpm test` (123 files, 1906 passed, 1 skipped), `pnpm lint`, `pnpm typecheck` at the root and in the dashboard, `git diff --check`: clean.
 
-## Fix round (review round 3)
-1. **Stale evidence selection (now.tsx:141)**: `nowMoment` now takes the open finding's id and holds the findings only while that finding still exists; `NowPane` clears `openId` at render time when an audit removes it, so its drawer closes and approvals and calls come back. Regression test in `lib/now.test.ts`.
-2. **Repeat audits skip the collecting moment (lib/now.ts:37)**: the run's own board cards and audit rows decide it. While intake or collector has begun and no agent from the auditor on has, the pane shows the bills even if an earlier audit's findings are there. Regression test covers a new run with existing findings, by card and by audit row, and the switch once the auditor or a later agent starts.
+## Fix round 11 (review round 5)
+- **Email continuation retains an extra approval wait** (sandbox.ts:269): on an Email tap the clock is now anchored so the tap is the email recording's approval moment, with no clamp at zero (the email approval was recorded later than the call's, so the clamp left that gap, about 15 s, before the first email row). Rows before the approval keep the original clock and are still capped at the tap by `wallTime`; Call taps are unchanged. New test in `sandbox.test.ts`: Email chosen at the call's approval moment; the first post-approval email event is not due 1 ms before its recorded delay after the tap and is due right at it. I confirmed it fails without the fix (cursor stays at 79).
+- `pnpm test` (123 files, 1907 passed, 1 skipped), `pnpm lint`, `pnpm typecheck` at the root and in the dashboard, `git diff --check`: clean.
 
-Checks: `pnpm test` (1828 pass), `pnpm lint`, `pnpm typecheck`, dashboard `tsc --noEmit`. Browser suites not re-run. Non-blocking design.md note left alone (not a file this round edits).
-- Orchestrator decision (2026-11-07, review round 4): fix only now.tsx:51 (show both refund and yearly savings when nonzero, regression test); it changes what customers see. Known limits, not fixed in this lane: scripts/app-shots.ts onboarding shot uses a session without a user row (lands on /login), and the shell/panels checks enforce the 12px floor but not the 20px ceiling or the single hero exception. Both are test-script coverage, not product behaviour.
-
-## Fix round 4
-
-1. **Refund hides yearly savings (components/agents/now.tsx:51)**: fixed. `amountOf` moved to `lib/now.ts` and shows every nonzero amount ("$12,600.00 refund · $10,800.00 a year"), or "To check" when both are zero. Regression test in `lib/now.test.ts`.
-2. **app-shots onboarding shot lands on /login (scripts/app-shots.ts:47)**: not fixed, by the orchestrator decision above. It is a known limit of a test script and does not change product behaviour.
-3. **Shell/panels checks lack the 20px ceiling and hero exception (scripts/dashboard-shell-check.ts:16)**: not fixed, by the orchestrator decision above. It is a known limit of a test script and does not change product behaviour.
-
-Checks: `pnpm test` (1829 pass, 1 skipped), `pnpm lint`, `pnpm typecheck`, dashboard `tsc --noEmit`. Browser suites not re-run.
-
-## Fix round 5 (human, 2026-11-08)
-
-1. **Each agent gets its own view when picked** (ar-peragent.md / phase 13): done (1660180). A pick always shows that agent's view, opening with "What <Agent> did" and its steps in tool words.
-   - Intake: arrival time, sender and subject of the email it read, the customer matched, the accounts and stores.
-   - Collector: the portals, bills per account (count, periods, total), usage per meter (readings, date range).
-   - Auditor: all six rules, Passed or N findings, then the findings with evidence.
-   - Filer: one card per claim, rate request and cancellation letter, with an excerpt of the drafted wording. "Filed" only for a claim or rate request whose action is done; letters stay "Drafted".
-   - Approver and Negotiator: the approval and the call, as before.
-   - Finance: the Stripe invoice as recorded ("Finalized in Stripe test mode, not sent"), then the ledger.
-   - Monitor: the next scheduled check.
-   - Snapshot additions, no schema change: `email` (sender and subject only) and `letterWording` (from successful `draft_letter` calls), picked field by field from this run's audit rows; `usage` per account from usage_intervals. A test proves the raw email body and other tool data stay out.
-   - Left out because no stored data has them: the email's attachment name and the pages per bill. The recording strips tool inputs and outputs and skips scheduled_checks, so on the recorded run Intake shows no sender or subject, Filer no excerpts, and Monitor only its step. A live run shows all three. To show them in the replay, the capture would have to keep these picked fields, and that needs a new recording.
-   - Tests: `lib/now.test.ts` (every pick gives a distinct view), `lib/snapshot.test.ts` (the picks, the usage). `scripts/agents-shots.ts` picks all eight agents plus "Follow live" on the recorded run, fails if two picks look the same, and writes `docs/plan/agents-redesign/after/picks/pick-*-1440.png`.
-2. **Empty screen below /agents** (bug in phase 13): fixed (d4b556f). The full log's scroller was not positioned, so each row's sr-only "No cost recorded" (absolute) escaped its clip and stretched the page (2122px on a 785px screen). The log and timeline scrollers are now `relative`. `agents-shots` now checks every moment, every pick (with the log open) and Overview, Bills, Findings and Money at 1920, 1440 and 390: the page ends where its content ends. That check also found Money scrolling sideways at 390 (753px): its grids' base column is now `minmax(0,1fr)`.
-3. **Merged main** after the build (dc568e1). judge-link had not shipped.
-
-Checks: `pnpm test` (1831 pass, 1 skipped), `pnpm lint`, `pnpm typecheck`, dashboard `tsc --noEmit`. Browser: agents-shots, panels-work-check (updated: the auditor pick is now `data-moment="auditor"`), panels-action-check, panels-money-check and replay-check all pass against this worktree's preview on :3020.
-
-Not done: HANDOVER.md (main, 2026-11-08) says this lane merges `fleet/judge-link` into its branch for a combined preview. My brief says never merge, and the instruction I was given says merge main after judge-link ships, so I left it for the orchestrator.
-
-## Fix round 6: judge-link merged in (orchestrator, 2026-11-08, ar-merge-jl.md)
-
-1. **Merged `fleet/judge-link` (e175016)** into this branch (2b0ad59). The six conflicts:
-   - `lib/replay.ts`: this lane's sentence label is kept. A judge's sandbox adds "Times shown are on your clock." The unused `SANDBOX_LABEL` is gone.
-   - `lib/snapshot.ts`: imports combined. judge-link's per-judge SMS filter is kept.
-   - `components/agents/call.tsx`: this lane's timer style, judge-link's sandbox clock scaling.
-   - `signup/page.tsx`: judge-link's server page plus `SignUpForm`, moved to the app type scale (20px title, body-size buttons).
-   - `header.tsx` and `panels/phone.tsx`: both stay deleted. Their sandbox parts moved into the new design:
-     - "Watch it again" is in the sandbox pill's popover, shown only for a judge's finished replay.
-     - The phone note ("In the sandbox the phone only shows the text…") is inside the amber approval card, under the Approve button that `useApprove` already offers in a sandbox.
-   - Sandbox start: the 22px "Sample bills on file" line is now at title size.
-   - Every SANDBOX=1 guard and test is unchanged: `test/sandbox-guards.test.ts`, `lib/sandbox.test.ts` and the rest pass.
-   - `scripts/sandbox-check.ts` now looks for the pill ("Sandbox replay") and opens it to reach "Watch it again".
-2. **Local sandbox for the review**: `NEXT_DIST_DIR` (next.config.ts, default `.next`) lets a second dev server run beside the preview. It runs as `SANDBOX=1 NEXT_DIST_DIR=.next/sandbox next dev --port 3021` from apps/dashboard, on this lane's database (migrated to 0005).
-3. **Screenshots**, in `docs/plan/agents-redesign/after/sandbox/`. All pages end where their content does and none scroll sideways.
-   - At 1440 and 390: sign-up, Try it now, approval, call, done, done with "Watch it again", Overview.
-   - At 1440 only: the nine picks on a judge's run.
-   - The nine picks on the normal preview, refreshed: `after/picks/`.
-
-Checks: `pnpm test` (1861 pass, 1 skipped), `pnpm lint`, `pnpm typecheck`, dashboard `tsc --noEmit`. Browser: sandbox-check against :3021 passed (two judges, desktop and phone, $12,606.06 / $18,319.32 / $9,277.61, about 2:15 each). agents-shots, panels-work, panels-action, panels-money and replay-check all passed against :3020.
-Note: `demo:replay --force` (used by agents-shots and replay-check) clears every run in the database, sandbox judges' runs included. Don't run it while someone is in the local sandbox.
-
-## Fix round 7 (review.md, 2026-11-08)
-- **Failed audits appear successful** (agent-views.tsx:153): the snapshot now carries `auditDone`, true only for a `run_audit` row whose output has no `error`, `refused` or `denied` key (the same test as plan-check.ts `didWork`). `AuditChecks` shows nothing without it; the auditor card being done no longer counts. Regression test in `lib/snapshot.test.ts` (failed and denied rows, then a good one).
-- **Sandbox elapsed time stays at zero** (run-header.tsx:35): new `runSeconds` in `lib/replay.ts` uses the recording's clock only for a recorded replay; a judge's sandbox rows are already on the judge's clock (sandbox.ts `wallTime`), so it uses the plain clock, as `call.tsx` already did. Tests for sandbox running and finished, recorded replay, and live in `lib/replay.test.ts`.
-- **Sandbox Collector view loses usage data** (sandbox.ts:119): cloning 432k interval rows per judge (and exporting them through the 30 s query endpoint) is too heavy, so the 12 per-meter summaries are committed as `data/replay/usage.json` (from new `usageSummary` in the seed generator; `generate.test.ts` fails if it drifts from the seed). For a sandbox run with no readings of its own, the snapshot serves them re-keyed to the judge's accounts. `sandbox-bundle.ts` ships the file. `sandbox.test.ts` checks a judge's snapshot has 12 meters on their own accounts.
-- Checks: root and dashboard typecheck, lint, full `pnpm test` (121 files, 1866 passed). Screenshots not retaken.
-- Orchestrator decision (2026-11-08, review round 8): fix only the regression from round 7: trace usage.json for the hosted build (next.config.ts outputFileTracingIncludes or a static import) and verify the packaged runtime (build, then check the traced files include it). Known limit, not fixed in this lane: on a repeat audit the Filer view can show an earlier run's documents with the current draft wording (agent-views.tsx:182); the stage always starts from a reset and each judge has one run. Last fix round.
-
-## Fix round 8
-- **Hosted sandbox omits usage data** (next.config.ts:17): `outputFileTracingIncludes` now lists `./data/replay/usage.json` next to `run.jsonl`. Verified on the packaged runtime: `sandbox-bundle.ts` into a scratch dir, `npm install`, `npm run build` (node 22; node 21 fails on tailwind's ESM, as the bundle's `engines` already says). Both files are in the `.nft.json` trace of `/api/live`, `/api/sandbox` and every other server route (21 of 22; only middleware has neither, same as before).
-- **Filer mixes documents across runs** (agent-views.tsx:182): not fixed, per the orchestrator decision for round 8 (known limit: the stage always starts from a reset and each judge has one run).
-- Checks: root and dashboard typecheck, lint, `sandbox.test.ts` and `sandbox-bundle` tests (13 passed). Full `pnpm test` not rerun (one config line changed).
-- Orchestrator decision (2026-11-08, round 9): reversed the deferral above; the reviewer will not accept it. Fix it: scope the Filer documents and their wording to the current run and action, with a repeat-audit regression test. Nothing else.
-
-## Fix round 9 (review.md, 2026-11-08)
-- **Filer mixes documents across runs** (agent-views.tsx:182): fixed. Findings outlive runs, so `snapshot.actions` held earlier runs' letters for the same finding while `letterWording` (keyed by finding, read from this run's `draft_letter` rows) was this run's. FilerView now keeps only this run's letters via `isRunLetter` in `lib/replay.ts`, which matches the id Filer writes (`letter-<run>-<finding>`, agents `letterActionId`), including a judge's sandbox copy where every id carries the `<customer>:` prefix. A finding gets one letter per run, so its wording and its document are now from the same run and action. Matching by id, not by `draft_letter` output, because replays strip tool inputs and outputs, so that route would hide every document on the stage.
-- Regression test: `lib/replay.test.ts` "isRunLetter" (repeat audit takes run-2's letter, not run-1's; `run` vs `run-2` prefix; sandbox prefix).
-- Checks: root lint and typecheck, dashboard vitest (22 files, 202 tests passed).
+## Fix round 11 (review round 5)
+- **Sender address is not verified** (engine.ts:55): a candidate reply now counts only if its `From.Address` equals BayTel's address exactly (case-insensitive), alongside the existing In-Reply-To and To checks; the Mailpit `from:` search only narrows. The test fake's `from:` filter now matches contained text, case-insensitive, as Mailpit does, so tests see what production sees. New regression test in `email.test.ts`: `evil-support@baytel.example` answers with the right subject, In-Reply-To and recipient, and the step still times out with nothing cancelled. It fails without the fix.
+- `pnpm test` (123 files, 1908 passed, 1 skipped), `pnpm lint`, `pnpm typecheck` at the root and in the dashboard, `git diff --check`: clean.

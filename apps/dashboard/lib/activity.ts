@@ -1,3 +1,4 @@
+import { emailViewOf } from "./calls.ts";
 import { money, parseEvidence } from "./evidence.ts";
 import type { Snapshot } from "./snapshot.ts";
 
@@ -36,7 +37,8 @@ export function findingActivity(
   const ownIds = new Set(own.map((action) => action.id));
   const untimed: ActivityEntry[] = [{ at: null, text: "Found by the auditor" }];
   if (own.length === 0) untimed.push({ at: null, text: "Found, not acted on" });
-  for (const action of own) untimed.push({ at: null, text: `Proposed ${ACTION_LABEL[action.kind] ?? action.kind}` });
+  const byEmail = snapshot.approval?.contact === "email";
+  for (const action of own) untimed.push({ at: null, text: `Proposed ${action.kind === "call" && byEmail ? "an email to the provider" : (ACTION_LABEL[action.kind] ?? action.kind)}` });
 
   const timed: ActivityEntry[] = [];
   const approval = snapshot.approval;
@@ -45,6 +47,13 @@ export function findingActivity(
     timed.push({ at: approval.approvedAt, text: `${approval.status === "denied" ? "Denied" : "Approved"} by ${approval.approvedBy ?? "you"}${how}` });
   }
   for (const call of snapshot.calls.filter((c) => ownIds.has(c.actionId))) {
+    if (call.mode === "email") {
+      const { sent, reply } = emailViewOf(call);
+      // Only rows that exist: "emailed" once the request is stored, a reply only when one came.
+      if (sent) timed.push({ at: call.startedAt, text: `Emailed ${call.toNumber}` });
+      if (call.endedAt) timed.push({ at: call.endedAt, text: reply ? "BayTel replied by email" : "No reply from BayTel" });
+      continue;
+    }
     timed.push({ at: call.startedAt, text: `Called ${call.toNumber}` });
     if (call.endedAt) timed.push({ at: call.endedAt, text: "Call ended" });
   }

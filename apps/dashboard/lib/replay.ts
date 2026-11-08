@@ -4,7 +4,8 @@ import type { Snapshot } from "./snapshot.ts";
 export type ReplayInfo = { recordedAt: string; speed: number; startedAt: string; sandbox?: boolean };
 
 /** What lib/sandbox.ts writes on a judge's replay: startedAt moves at the judge's approval, so the clock carries on from their tap. */
-export type SandboxState = ReplayInfo & { sandbox: true; cursor: number; approvedAt: string | null; pausedMs?: number };
+/** contact: the judge's choice at the approval. "email" plays data/replay/run-email.jsonl from then on; absent is a call. */
+export type SandboxState = ReplayInfo & { sandbox: true; cursor: number; approvedAt: string | null; pausedMs?: number; contact?: "call" | "email" };
 
 export const isSandboxReplay = (replay: unknown): replay is SandboxState => (replay as { sandbox?: unknown } | null)?.sandbox === true;
 
