@@ -10,8 +10,8 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PACKAGES = ["core", "db", "shared"];
 // Only for the seed's PDF rendering and the parser's tests, which the dashboard never loads.
 const DROP_DEPENDENCIES = ["playwright", "@fontsource/ibm-plex-sans"];
-// Tests, checks and build output never ship.
-const SKIP = /(^|\/)(node_modules|\.next|e2e)(\/|$)|\.(test|check)\.ts$|(^|\/)next-env\.d\.ts$|tsconfig\.tsbuildinfo$/;
+// Tests, checks, build output and env files (local credentials) never ship.
+const SKIP = /(^|\/)(node_modules|\.next|e2e)(\/|$)|(^|\/)\.env[^/]*$|\.(test|check)\.ts$|(^|\/)next-env\.d\.ts$|tsconfig\.tsbuildinfo$/;
 
 type Manifest = { dependencies?: Record<string, string>; devDependencies?: Record<string, string>; scripts?: Record<string, string>; [key: string]: unknown };
 const readJson = (path: string) => JSON.parse(readFileSync(join(ROOT, path), "utf8")) as Manifest;
