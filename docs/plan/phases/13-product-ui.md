@@ -347,3 +347,25 @@ Orchestrator decisions:
 **depends on:** product-polish (final look on screen)
 
 **parallel with:** landing-pages, naive-runtime-cost
+
+### `judge-link`
+
+**Goal:** A public link where judges try Clawback themselves. Human, 2026-11-07: "we should also have a live link where judges can try our product too." Human's choices (terminal, AskUserQuestion): **sandbox replay** for what judges can do, **naïve hosted App** for hosting.
+
+Orchestrator decisions:
+- **Sandbox replay per account.** A judge signs up (or uses the demo login), uploads the sample bill or picks it, and watches a recorded run play out on *their own* account: the agents on /agents, the call transcript, the approval card (they tap Approve), the ledger and the Overview money. Built from `data/replay/run.jsonl`, re-keyed to the judge's customer and replayed relative to their start time. No AI, voice, Stripe or naïve agent cost per visit; many judges at once; it never contacts anyone and never resets the shared database (today's `demo:replay` resets everything, so this needs a per-customer replay). A small "Sandbox: a recorded audit replayed for you" label stays on screen. Real runs are off in this deployment (`SANDBOX=1` disables run triggers, uploads to the parser, calls, SMS, email and invoices in code, not only in the UI).
+- **Hosting on naïve's hosted Apps with its managed database.** Start with a docs recon (`usenaive.ai/docs/<path>.md`; see `docs/plan/naive-notes.md`): how an app is deployed (Next.js or container), the managed Postgres (version, migrations, connection), env and secrets, custom or system domain, pricing and limits. Write it to `docs/plan/naive-app.md`. Then ask the orchestrator in `questions.md` with the expected naïve spend **before creating anything on naïve**; nothing is provisioned without the human's yes. If naïve Apps can't run our Next.js app, stop and report with options.
+- The deployment holds no secrets beyond what it needs: no Retell, Vapi, Stripe, Anthropic or naïve agent keys. Seeded demo data only; sign-ups restricted to the sandbox (no real bills). Basic rate limit on sign-up.
+- Landing, the five public pages and the app all served from the same deployment; the landing's "Start my audit" leads into the sandbox.
+
+**Acceptance checks:**
+- Two judges signing up at once each get their own replay, with no effect on each other or on the stage database.
+- With `SANDBOX=1`, tests prove no run, call, SMS, email, invoice or parser request can start.
+- The public URL works from a phone on mobile data; the whole flow takes under 4 minutes.
+- naïve spend recorded in `docs/plan/naive-app.md`; `pnpm test`, lint, typecheck pass.
+
+**Estimate:** 3 hours plus recon
+
+**depends on:** product-polish
+
+**parallel with:** demo-video, landing-pages
