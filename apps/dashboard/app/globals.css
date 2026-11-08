@@ -57,7 +57,7 @@
 @theme inline {
   --font-sans: "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
   --font-figure: "Source Serif 4", ui-serif, Georgia, serif;
-  --radius-card: 14px;
+  --radius-card: 10px;
   --radius-control: 8px;
   --color-paper: var(--paper);
   --color-sheet: var(--sheet);

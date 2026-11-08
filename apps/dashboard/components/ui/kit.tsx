@@ -27,7 +27,7 @@ export function Card({ title, actions, className = "", children }: { title?: str
     <section className={`rounded-card border border-line bg-sheet p-6 ${className}`}>
       {(title || actions) && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          {title && <h2 className="text-[1.375rem] leading-snug font-semibold">{title}</h2>}
+          {title && <h2 className="text-lg leading-snug font-semibold">{title}</h2>}
           {actions}
         </div>
       )}
@@ -40,52 +40,75 @@ export function Card({ title, actions, className = "", children }: { title?: str
 export function StatTile({ label, value, note, tone = "plain", testId }: { label: string; value: string; note?: string; tone?: "money" | "plain"; testId?: string }) {
   return (
     <div className="rounded-card border border-line bg-sheet p-6">
-      <p className="text-faded">{label}</p>
-      <p data-testid={testId} className={`mt-1 font-figure text-5xl leading-none ${tone === "money" ? "text-money" : ""}`}>
+      <p className="text-base text-faded">{label}</p>
+      <p data-testid={testId} className={`mt-2 font-figure text-[2.5rem] leading-none ${tone === "money" ? "text-money" : ""}`}>
         {value}
       </p>
-      {note && <p className="mt-2 text-base text-faded">{note}</p>}
+      {note && <p className="mt-2 text-[15px] text-faded">{note}</p>}
     </div>
   );
 }
 
-/** Rows go in as plain <tr>/<td>. Right-align money cells with className="text-right tabular-nums". */
-export function Table({ head, children, caption }: { head: { label: string; numeric?: boolean }[]; children: ReactNode; caption?: string }) {
+/** Rows go in as plain <tr>/<td>. Right-align money cells with className="text-right tabular-nums". 15 px rows, 13 px sticky header, hairlines, no zebra. */
+/** grouped: children are whole <tbody> elements, one per group, instead of rows. */
+export function Table({ head, children, caption, grouped }: { head: { label: string; numeric?: boolean }[]; children: ReactNode; caption?: string; grouped?: boolean }) {
   return (
     <div className="overflow-x-auto rounded-card border border-line bg-sheet">
-      <table className="w-full border-collapse text-left [&_td]:border-t [&_td]:border-line [&_td]:px-4 [&_td]:py-3">
-        {caption && <caption className="px-4 pt-3 text-left text-base text-faded">{caption}</caption>}
-        <thead>
+      <table className="w-full border-collapse text-left text-[15px] [&_td]:h-11 [&_td]:border-t [&_td]:border-line [&_td]:px-4 [&_td]:py-2 [&_tbody_tr]:hover:bg-paper/60">
+        {caption && <caption className="px-4 pt-3 pb-1 text-left text-[13px] text-faded">{caption}</caption>}
+        <thead className="sticky top-0 bg-sheet">
           <tr>
             {head.map((column) => (
-              <th key={column.label} scope="col" className={`px-4 py-3 text-base font-semibold text-faded ${column.numeric ? "text-right" : ""}`}>
+              <th key={column.label} scope="col" className={`h-9 px-4 text-[13px] font-semibold text-faded ${column.numeric ? "text-right" : ""}`}>
                 {column.label}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody>{children}</tbody>
+        {grouped ? children : <tbody>{children}</tbody>}
       </table>
     </div>
   );
 }
 
+/** A small status: a dot and a word, never a filled badge. */
+export function StatusDot({ tone = "plain", children }: { tone?: "alert" | "money" | "plain" | "live"; children: ReactNode }) {
+  const dot = { alert: "bg-alert", money: "bg-money", plain: "bg-faded/50", live: "bg-money animate-pulse motion-reduce:animate-none" }[tone];
+  return (
+    <span className={`inline-flex items-center gap-2 whitespace-nowrap ${tone === "alert" ? "font-semibold text-alert" : tone === "plain" ? "text-faded" : ""}`}>
+      <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${dot}`} />
+      {children}
+    </span>
+  );
+}
+
+/** A small outlined label, such as a finding's rule. */
+export function Chip({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <span className={`inline-flex items-center rounded-[6px] border border-line px-2 py-0.5 text-[13px] font-semibold whitespace-nowrap text-faded ${className}`}>{children}</span>;
+}
+
 export function EmptyState({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
     <div className="grid justify-items-start gap-3 rounded-card border border-dashed border-faded/50 bg-sheet px-8 py-12">
-      <h2 className="text-[1.375rem] leading-snug font-semibold">{title}</h2>
-      <div className="max-w-[60ch] text-faded">{children}</div>
+      <h2 className="text-lg leading-snug font-semibold">{title}</h2>
+      <div className="max-w-[60ch] text-base text-faded">{children}</div>
       {action}
     </div>
   );
 }
 
-export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
+/** The in-content top bar: breadcrumb (the company), page title, one line of description, actions on the right. */
+export function PageHeader({ title, description, actions, crumb }: { title: string; description?: string; actions?: ReactNode; crumb?: string }) {
   return (
-    <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-[2.5rem] leading-tight font-bold">{title}</h1>
-        {description && <p className="mt-1 max-w-[65ch] text-faded">{description}</p>}
+    <div className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
+      <div className="min-w-0">
+        {crumb && (
+          <p className="text-base text-faded">
+            {crumb} / {title}
+          </p>
+        )}
+        <h1 className="mt-1 text-[1.5rem] leading-tight font-semibold">{title}</h1>
+        {description && <p className="mt-1 max-w-[70ch] text-base text-faded">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-3">{actions}</div>}
     </div>

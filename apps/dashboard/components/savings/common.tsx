@@ -12,7 +12,7 @@ export const billDay = (date: string) => day.format(new Date(`${date}T00:00:00Z`
 export const PROVIDERS: Record<string, string> = { baycurrent: "BayCurrent", baytel: "BayTel", bayconnect: "BayConnect", bayhearth: "BayHearth" };
 export const SERVICES: Record<string, string> = { electric: "Electric", gas: "Gas", telecom: "Phone", internet: "Internet" };
 
-/** The product-page column from docs/plan/design.md. */
+/** The product-page column from docs/plan/design.md: 16 px base, denser than the landing. */
 export function Page({ children }: { children: ReactNode }) {
-  return <main className="mx-auto w-full max-w-[1200px] px-4 py-10 sm:px-6">{children}</main>;
+  return <main className="mx-auto w-full max-w-[1440px] px-4 py-8 text-base sm:px-8">{children}</main>;
 }
