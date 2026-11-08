@@ -11,7 +11,8 @@ export const metadata: Metadata = { title: "Why Clawback" };
 // Wikipedia article), read on 2026-11-07 and quoted in docs/plan/competitors.md. "Not stated publicly" means we looked.
 
 type Cell = { text: string; href?: string };
-type Player = { name: string; cells: [Cell, Cell, Cell, Cell, Cell] };
+// A cell without its own link points at the page we checked for that player, so every cell has a source.
+type Player = { name: string; source: string; cells: [Cell, Cell, Cell, Cell, Cell] };
 
 const FIELDS = ["Who it serves", "Who does the work", "How it is priced", "Calls the provider and files the claim", "Time to first refund"];
 const NOT_STATED = "Not stated publicly";
@@ -40,6 +41,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
     players: [
       {
         name: "P3 Cost Analysts",
+        source: P3,
         cells: [
           { text: "Organizations above a spend minimum, such as real estate portfolios and local governments", href: P3 },
           { text: "P3’s auditors, from your invoices and a signed letter of authorization", href: P3 },
@@ -50,6 +52,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
       },
       {
         name: "Auditel",
+        source: AUDITEL,
         cells: [
           { text: "Corporations, cities, hospitals, schools; telecom only", href: AUDITEL },
           { text: "Auditel’s own analyst team", href: AUDITEL },
@@ -60,6 +63,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
       },
       {
         name: "Troy & Banks",
+        source: TROY_SERVICES,
         cells: [
           { text: "Public and private organizations; electric, gas, water and telecom", href: TROY },
           { text: NOT_STATED },
@@ -76,6 +80,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
     players: [
       {
         name: "Tangoe",
+        source: TANGOE,
         cells: [
           { text: "Enterprises", href: TANGOE },
           { text: "Software, plus Tangoe consultants", href: TANGOE },
@@ -86,6 +91,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
       },
       {
         name: "Calero",
+        source: CALERO,
         cells: [
           { text: "IT and finance teams with thousands of invoices", href: CALERO },
           { text: "Software, plus Calero’s auditors", href: CALERO },
@@ -96,6 +102,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
       },
       {
         name: "Arcadia (owns Urjanet)",
+        source: ARCADIA,
         cells: [
           { text: "Businesses; 1,000+ enterprise customers", href: ARCADIA },
           { text: "A utility data platform and APIs, plus advisory", href: ARCADIA },
@@ -106,6 +113,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
       },
       {
         name: "EnergyCAP",
+        source: ENERGYCAP,
         cells: [
           { text: "750+ organizations, mostly education and government", href: ENERGYCAP },
           { text: "Software your own staff use; it audits bills for errors", href: ENERGYCAP },
@@ -116,6 +124,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
       },
       {
         name: "Cass Information Systems",
+        source: CASS,
         cells: [
           { text: "Hundreds of US enterprises", href: CASS },
           { text: "Cass processes, audits and pays your bills", href: CASS },
@@ -132,6 +141,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
     players: [
       {
         name: "Rocket Money",
+        source: ROCKET_HOW,
         cells: [
           { text: "Consumers: internet, cable, phone, security", href: ROCKET_HOW },
           { text: "Rocket Money’s team calls the provider", href: ROCKET_HOW },
@@ -142,6 +152,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
       },
       {
         name: "Billshark",
+        source: BILLSHARK,
         cells: [
           { text: "Consumers: internet, wireless, streaming", href: BILLSHARK },
           { text: "Billshark’s negotiators", href: BILLSHARK },
@@ -152,6 +163,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
       },
       {
         name: "Trim",
+        source: TRIM,
         cells: [
           { text: "Consumers; now OneMain MyMoney", href: TRIM },
           { text: NOT_STATED },
@@ -168,6 +180,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
     players: [
       {
         name: "Consultants and staff",
+        source: FIE,
         cells: [
           { text: "Any business that hires one, or has the expertise in-house", href: FIE },
           { text: "A person, reading bills by hand", href: FIE },
@@ -182,6 +195,7 @@ const GROUPS: { title: string; lead: string; players: Player[] }[] = [
 
 const CLAWBACK: Player = {
   name: "Clawback",
+  source: "/how-it-works",
   cells: [
     { text: "Small businesses, such as a noodle shop with three sites" },
     { text: "AI agents; you approve once, by text" },
@@ -200,10 +214,12 @@ const WORK: { label: string; cells: [string[], string[], string[]] }[] = [
   { label: "Software your staff run", cells: [[], [], ["EnergyCAP", "Arcadia"]] },
 ];
 
-function Source({ cell }: { cell: Cell }) {
-  if (!cell.href) return <span className={cell.text === NOT_STATED ? "text-faded" : ""}>{cell.text}</span>;
+function Source({ cell, fallback }: { cell: Cell; fallback: string }) {
   return (
-    <a href={cell.href} className="underline decoration-line underline-offset-4 hover:decoration-agent">
+    <a
+      href={cell.href ?? fallback}
+      className={`underline decoration-line underline-offset-4 hover:decoration-agent ${cell.text === NOT_STATED ? "text-faded" : ""}`}
+    >
       {cell.text}
     </a>
   );
@@ -221,7 +237,7 @@ function Row({ player, highlight = false }: { player: Player; highlight?: boolea
         <div role="cell" key={FIELDS[i]} className="grid gap-0.5 text-[15px] lg:block">
           {/* Under lg each row is a card, so every value carries its own label. */}
           <span className="text-faded lg:sr-only">{FIELDS[i]}</span>
-          <Source cell={cell} />
+          <Source cell={cell} fallback={player.source} />
         </div>
       ))}
     </div>
