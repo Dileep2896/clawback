@@ -106,7 +106,7 @@ function Footer() {
           Golden Gate Noodle Co. is a fictional demo customer. Every bill, provider and figure here is demo data.
         </p>
         <Link href="/naive" className="w-fit text-faded underline decoration-line underline-offset-4 hover:text-ink">
-          Agents run on naïve or locally.
+          Built on naïve
         </Link>
       </div>
       <nav aria-label="Product" className="lg:col-span-3">

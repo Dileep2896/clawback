@@ -1,5 +1,6 @@
-/* Hallmark · genre: modern-minimal (fintech) · macrostructure: intro → architecture (naïve side · tunnel · our side) → measured runs → what stays ours → one switch
- * design-system: docs/plan/design.md · sources: docs/plan/naive-notes.md, naive-endpoints.md, naive-rehearsal-notes.md */
+/* Hallmark · genre: modern-minimal (fintech) · macrostructure: intro → diagram of the agents and tools on naïve → how a run works → the measured run
+ * design-system: docs/plan/design.md · sources: docs/plan/naive-notes.md, naive-endpoints.md, naive-rehearsal-notes.md
+ * Human, 2026-11-07: "Don't mention about what's on our side, just add how we use naive". */
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { LABEL, MoreLink, PageIntro, SiteFrame, Statement, WIDTH } from "../../components/landing/chrome.tsx";
@@ -7,92 +8,98 @@ import { Reveal } from "../../components/landing/motion.tsx";
 
 export const metadata: Metadata = { title: "Built on naïve" };
 
-// Every figure is from the lane notes above: the naïve measurement run (run e23702bd, 2026-11-07, Sonnet 5.5, $2 cap),
-// the flag probe, and the recorded local run (data/replay/run.jsonl: runs.cost_usd and finished_at).
+// Every figure is from the naïve measurement run (run e23702bd, 2026-11-07, Sonnet 5.5) in naive-rehearsal-notes.md.
 
 const NAIVE = "https://usenaive.ai";
 const MEMBERS = ["intake", "collector", "auditor", "filer", "approver", "negotiator", "finance", "monitor"];
 
-const RUNS = [
-  { label: "Result", local: "Success", naive: "Success: 19 of 19 actions done, summary sent" },
-  { label: "Start to finish", local: "4 min 28 s", naive: "13 min 33 s" },
-  { label: "Model cost", local: "$0.40", naive: "$1.70, under the $2 cap" },
-  { label: "Sessions", local: "One process", naive: "11 (a root and 10 member threads), all cancelled at the end" },
-  { label: "Paused tool calls", local: "None", naive: "53: 12 gated, 28 ungated, 13 delegations" },
+// A few of the run's tools, as the agents see them over MCP. Gated ones (packages/shared/src/gated-tools.ts) wait for the approval.
+const TOOLS: { name: string; gated: boolean }[] = [
+  { name: "download_bills", gated: false },
+  { name: "run_audit", gated: false },
+  { name: "draft_letter", gated: false },
+  { name: "call_provider", gated: true },
+  { name: "submit_claim", gated: true },
+  { name: "change_rate_plan", gated: true },
+  { name: "cancel_service", gated: true },
+  { name: "record_savings", gated: false },
 ];
 
-const STAYS = [
-  { what: "Phone calls", why: "naïve has no voice. The Negotiator’s calls go through Retell or Vapi, as they do locally." },
-  { what: "The virtual card", why: "naïve’s card issuing answered 501, not configured yet. Runs use our mock card, capped at $5." },
-  { what: "Sending SMS", why: "naïve’s SMS send answered 501 too. The approval request goes by email, and the owner taps approve." },
+const HOW = [
+  { title: "One coordinator, eight members.", text: "clawback-ceo gets the job and hands each step to a member agent, one at a time, waiting for its result." },
+  { title: "Our tools, over MCP.", text: "Every tool the agents call is served to naïve over MCP at a public HTTPS address, with a bearer token kept in a naïve vault for the run." },
   {
-    what: "Provider portals",
-    why: "naïve’s browser won’t open a private host, and its vault holds only API tokens. The Collector keeps Playwright and our own vault.",
+    title: "One approval releases the bundle.",
+    text: "Tools that act for the owner are set to ask. Each one pauses until the owner’s single YES, and then every call in the approved bundle goes through.",
   },
-  { what: "The database", why: "Board cards, the audit log and the ledger stay in our Postgres, so the dashboard reads the same rows in both modes." },
+  { title: "Audited and capped.", text: "Every tool call and decision lands in the audit log. Each run has a $2 cap, and each agent $8 a day." },
+  { title: "Nothing left running.", text: "When a run stops, every naïve session it started is cancelled: the root and each member thread." },
 ];
 
-function Box({ title, children, tone = "line" }: { title: string; children: ReactNode; tone?: "line" | "agent" | "warn" }) {
+const RESULT = [
+  { value: "19 of 19", label: "actions done, summary sent" },
+  { value: "13 min 33 s", label: "start to finish" },
+  { value: "$1.70", label: "naïve cost, against a $2 cap" },
+  { value: "11", label: "sessions, all cancelled at the end" },
+];
+
+function Node({ title, children, tone = "line" }: { title: string; children?: ReactNode; tone?: "line" | "agent" | "warn" }) {
   const border = tone === "agent" ? "border-agent" : tone === "warn" ? "border-warn" : "border-line";
   return (
     <div className={`reveal-line grid content-start gap-1 rounded-[10px] border ${border} bg-sheet px-4 py-3`}>
       <p className="font-semibold">{title}</p>
-      <div className="text-[15px] text-faded">{children}</div>
+      {children && <div className="text-[15px] text-faded">{children}</div>}
     </div>
   );
 }
 
-/** naïve's side, the tunnel, our side. Three columns at lg; stacked below, with the tunnel as a band between. */
-function Architecture() {
+/** A short connector between two rows of the diagram. */
+const Down = ({ label }: { label: string }) => (
+  <div className="flex items-center gap-3 pl-6 text-[15px] text-faded">
+    <span aria-hidden="true" className="h-8 w-px border-l-2 border-dashed border-agent" />
+    {label}
+  </div>
+);
+
+function Diagram() {
   return (
-    <Reveal className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_14rem_minmax(0,1fr)] lg:items-stretch">
-      <section aria-labelledby="naive-side" className="canvas grid content-start gap-3 rounded-[12px] border border-line bg-paper p-4 sm:p-6">
-        <h3 id="naive-side" className={`${LABEL} text-faded`}>
-          On naïve
-        </h3>
-        <Box title="clawback-ceo" tone="agent">
-          The coordinator. It hands each step to a member agent and waits for the result.
-        </Box>
-        <ul aria-label="Member agents" className="flex flex-wrap gap-1.5">
-          {MEMBERS.map((member, i) => (
+    <Reveal className="canvas grid gap-1 rounded-[12px] border border-line bg-paper p-4 sm:p-8">
+      <p className={`${LABEL} mb-3 text-faded`}>On naïve</p>
+      <Node title="clawback-ceo" tone="agent">
+        The coordinator
+      </Node>
+      <Down label="delegates each step" />
+      <ul aria-label="Member agents" className="grid gap-2 sm:grid-cols-2">
+        {MEMBERS.map((member, i) => (
+          <li key={member} className="reveal-line rounded-[10px] border border-line bg-sheet px-4 py-2.5" style={{ animationDelay: `${120 + i * 50}ms` }}>
+            clawback-{member}
+          </li>
+        ))}
+      </ul>
+      <Down label="call tools over MCP" />
+      <div className="grid gap-3 rounded-[10px] border border-line bg-sheet p-4">
+        <p className="font-semibold">Clawback’s tools</p>
+        <ul aria-label="Some of the tools" className="flex flex-wrap gap-1.5">
+          {TOOLS.map((tool, i) => (
             <li
-              key={member}
-              className="reveal-line rounded-full border border-line px-2.5 py-0.5 text-[15px] text-faded"
-              style={{ animationDelay: `${150 + i * 50}ms` }}
+              key={tool.name}
+              className={`reveal-line flex items-center gap-2 rounded-full border px-2.5 py-0.5 text-[15px] ${tool.gated ? "border-warn" : "border-line text-faded"}`}
+              style={{ animationDelay: `${500 + i * 50}ms` }}
             >
-              clawback-{member}
+              <code>{tool.name}</code>
+              <span className={tool.gated ? "text-warn" : ""}>{tool.gated ? "ask" : "allow"}</span>
             </li>
           ))}
         </ul>
-        <Box title="Tool policy">
-          Tools that act for the owner are set to <code className="text-ink">ask</code>; the rest to <code className="text-ink">allow</code>.
-        </Box>
-        <Box title="Caps">$2 a run, $8 a day per agent. Every session the run started is cancelled when it stops.</Box>
-      </section>
-
-      {/* The tunnel: a dashed line between the two sides (across at lg, down when stacked), with what crosses it. */}
-      <div className="grid content-center gap-3 px-2 py-2 text-center">
-        <div aria-hidden="true" className="reveal-draw hidden w-full border-t-2 border-dashed border-agent lg:block" />
-        <div aria-hidden="true" className="mx-auto h-10 w-px border-l-2 border-dashed border-agent lg:hidden" />
-        <p className="font-semibold">Tunnel</p>
-        <p className="text-[15px] text-faded">
-          Our tools, served over MCP at a public HTTPS address. Open only while a run is going, with a bearer token kept in a naïve vault and deleted
-          when the run ends.
-        </p>
-        <div aria-hidden="true" className="mx-auto h-10 w-px border-l-2 border-dashed border-agent lg:hidden" />
       </div>
-
-      <section aria-labelledby="our-side" className="canvas grid content-start gap-3 rounded-[12px] border border-line bg-paper p-4 sm:p-6">
-        <h3 id="our-side" className={`${LABEL} text-faded`}>
-          On our side
-        </h3>
-        <Box title="MCP tool server">Every tool the agents call: parse a bill, run the audit, file a claim, cancel a line.</Box>
-        <Box title="Approval loop" tone="warn">
-          One YES from the owner releases the bundle. A paused call goes through only if its action is in the approved bundle.
-        </Box>
-        <Box title="Postgres">Board cards, audit log, ledger. The dashboard reads these in both modes.</Box>
-        <Box title="Voice, card, portals">Retell or Vapi, the mock card, Playwright.</Box>
-      </section>
+      <Down label="ask waits for" />
+      <Node title="The owner’s one YES" tone="warn">
+        Releases every gated call in the approved bundle
+      </Node>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <Node title="Audit log">Every call and every decision</Node>
+        <Node title="Caps">$2 a run, $8 a day per agent</Node>
+      </div>
     </Reveal>
   );
 }
@@ -100,108 +107,52 @@ function Architecture() {
 export default function NaivePage() {
   return (
     <SiteFrame>
-      <PageIntro caption="Built on naïve" lead="The same agents, on naïve." rest="Or on one laptop. One switch.">
+      <PageIntro caption="Built on naïve" lead="Clawback’s agents run on naïve." rest="A team of nine, one approval, capped and audited.">
         <p>
-          Clawback’s agents can run as managed agents on{" "}
+          Each Clawback agent is a managed agent on{" "}
           <a href={NAIVE} className="text-agent underline underline-offset-2">
             naïve
           </a>
-          , or locally through Claude Code. Here is what runs where, what we measured, and what naïve can’t do for us yet.
+          , named <code className="text-ink">clawback-&lt;agent&gt;</code>. Here is how they work together there, and what one full audit cost.
         </p>
       </PageIntro>
 
-      <section aria-labelledby="arch-title" className={`${WIDTH} grid gap-10 pb-24 lg:pb-36`}>
-        <Statement id="arch-title" lead="What runs on naïve.">
-          Each agent is a naïve agent. Our tools stay on our side and reach them through one tunnel.
-        </Statement>
-        <Architecture />
+      <section aria-labelledby="how-title" className={`${WIDTH} grid gap-12 pb-24 lg:grid-cols-12 lg:gap-x-10 lg:pb-36`}>
+        <div className="grid content-start gap-8 lg:col-span-5">
+          <Statement id="how-title" lead="How we use naïve.">
+            A coordinator, its members, our tools, and one human decision.
+          </Statement>
+          <ol className="grid border-t border-line">
+            {HOW.map((step) => (
+              <li key={step.title} className="border-b border-line py-5">
+                <span className="font-semibold">{step.title}</span> <span className="text-faded">{step.text}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <div className="min-w-0 lg:col-span-7">
+          <Diagram />
+        </div>
       </section>
 
-      <section aria-labelledby="runs-title" className="border-y border-line bg-sheet">
+      <section aria-labelledby="run-title" className="border-y border-line bg-sheet">
         <div className={`${WIDTH} grid gap-10 py-24 lg:py-36`}>
-          <Statement id="runs-title" lead="What we measured.">
-            The full audit, once each way. Same customer, same bills.
+          <Statement id="run-title" lead="One full audit on naïve.">
+            The noodle shop’s bills, on 7 November 2026, with Sonnet 5.5 and a $2 cap.
           </Statement>
-          <div className="overflow-hidden rounded-[12px] border border-line bg-paper">
-            <table className="w-full text-left">
-              <thead className="text-[15px] text-faded">
-                <tr className="border-b border-line">
-                  <th className="px-5 py-3 font-normal">
-                    <span className="sr-only">Measure</span>
-                  </th>
-                  <th className="px-5 py-3 font-normal">Local</th>
-                  <th className="px-5 py-3 font-normal">naïve</th>
-                </tr>
-              </thead>
-              <tbody>
-                {RUNS.map((row) => (
-                  <tr key={row.label} className="border-b border-line align-top last:border-b-0">
-                    <th scope="row" className="px-5 py-4 font-semibold">
-                      {row.label}
-                    </th>
-                    <td className="px-5 py-4">{row.local}</td>
-                    <td className="px-5 py-4">{row.naive}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2 lg:gap-5">
-            <div className="grid content-start gap-3 rounded-[12px] border border-line bg-paper p-6 sm:p-8">
-              <h3 className="text-[1.375rem] font-semibold">Where the 13 minutes go</h3>
-              <p className="text-faded">
-                Once a naïve chat has seen a tool result, its next tool call is refused, the model issues it again, and that call waits for us to allow
-                it. Each pause costs a model turn and 10 to 15 seconds. In this run, every member agent’s calls paused from the first one.
-              </p>
-            </div>
-            <div className="grid content-start gap-3 rounded-[12px] border border-line bg-paper p-6 sm:p-8">
-              <h3 className="text-[1.375rem] font-semibold">What a $0.001 probe showed</h3>
-              <p className="text-faded">
-                One agent, one allowed tool, two calls. With the bill email in its first message, it made both calls and paused on none. Without it, the
-                second call paused after the first result came back. So the email doesn’t cause the pause; a tool result does. Allowing a paused call
-                costs no extra model turn.
-              </p>
-            </div>
-          </div>
+          <dl className="grid gap-px overflow-hidden rounded-[12px] border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
+            {RESULT.map((item) => (
+              <div key={item.label} className="grid content-start gap-1 bg-paper px-5 py-5">
+                <dd className={`order-first font-figure text-[2rem] leading-tight ${item.value.startsWith("$") ? "text-money" : ""}`}>{item.value}</dd>
+                <dt className="text-[15px] text-faded">{item.label}</dt>
+              </div>
+            ))}
+          </dl>
           <p className="max-w-[72ch] text-faded">
-            Local cost is the run’s recorded model cost. The naïve run, on 7 November 2026, was approved by a scripted stand-in for the owner’s tap.
+            The run ended in success: every action done and the owner’s summary sent. It was approved by a scripted stand-in for the owner’s tap.
           </p>
+          <MoreLink href="/how-it-works">What each agent does</MoreLink>
         </div>
-      </section>
-
-      <section aria-labelledby="stays-title" className={`${WIDTH} grid gap-10 py-24 lg:grid-cols-12 lg:gap-x-10 lg:py-36`}>
-        <div className="lg:col-span-5">
-          <Statement id="stays-title" lead="What stays on our side.">
-            Some of it naïve doesn’t offer, and some of it isn’t switched on yet.
-          </Statement>
-        </div>
-        <ul className="grid content-start border-t border-line lg:col-span-7">
-          {STAYS.map((item) => (
-            <li key={item.what} className="grid gap-1 border-b border-line py-5 sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-x-6">
-              <span className="font-semibold">{item.what}</span>
-              <span className="text-faded">{item.why}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section aria-labelledby="switch-title" className={`${WIDTH} grid gap-10 pb-24 lg:grid-cols-12 lg:gap-x-10 lg:pb-36`}>
-        <div className="grid content-start gap-6 lg:col-span-5">
-          <Statement id="switch-title" lead="One switch.">
-            The same agents and tools run either way. The stage demo runs locally, because a naïve run takes about 13 minutes.
-          </Statement>
-          <MoreLink href="/how-it-works">What the agents do</MoreLink>
-        </div>
-        <pre className="min-w-0 overflow-x-auto rounded-[12px] border border-line bg-sheet p-5 text-[15px] leading-relaxed lg:col-span-7">
-          <code>
-            <span className="text-faded"># on one laptop, through Claude Code</span>
-            {"\n"}PLATFORM=local pnpm dev:webhooks{"\n\n"}
-            <span className="text-faded"># on naïve, with the tool tunnel open</span>
-            {"\n"}PLATFORM=naive pnpm naive:tunnel -- pnpm dev:webhooks{"\n\n"}
-            <span className="text-faded"># then, either way</span>
-            {"\n"}pnpm demo:start
-          </code>
-        </pre>
       </section>
     </SiteFrame>
   );
