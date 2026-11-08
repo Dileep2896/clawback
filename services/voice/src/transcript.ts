@@ -8,7 +8,7 @@ import { eq, sql } from "drizzle-orm";
 // A `status` row says how a live call is going. Retell only gives the transcript once the call ends, so that is all a live call shows until then.
 export type TranscriptRow = {
   role: "agent" | "provider" | "system";
-  kind: "speech" | "keypress" | "refused" | "fallback" | "status";
+  kind: "speech" | "keypress" | "refused" | "fallback" | "status" | "email";
   content: string;
   at: string;
 };

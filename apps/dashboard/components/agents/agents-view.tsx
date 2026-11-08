@@ -22,6 +22,7 @@ export function AgentsView() {
     boardCards: snapshot?.boardCards ?? [],
     auditLog: snapshot?.auditLog ?? [],
     approvalPending: snapshot?.approval?.status === "pending",
+    contact: snapshot?.approval?.contact ?? null,
     runActive: !isStopped(snapshot?.run?.status),
   };
   const rows = agentRows(input);

@@ -1,4 +1,4 @@
-import { approvals, actions, boardCards, customers, runs, smsMessages } from "@bill-fighter/db/schema";
+import { approvals, actions, auditLog, boardCards, customers, runs, smsMessages } from "@bill-fighter/db/schema";
 import type { Db } from "@bill-fighter/db/client";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { RUN_CARD_AGENT } from "@bill-fighter/shared/run-card";
@@ -6,7 +6,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { approveRun, isYes, receiveSms, respond, sameOrigin } from "./decisions.ts";
-import { isStopped, runProblems, STOPPED_TEXT } from "./run-state.ts";
+import { EMAIL_INSTEAD, isStopped, runProblems, STOPPED_TEXT } from "./run-state.ts";
 import { liveSnapshot } from "./snapshot.ts";
 
 const ACTION_IDS = ["a-claim", "a-call", "a-invoice"];
@@ -57,6 +57,44 @@ describe("approveRun", () => {
       const row = await bundle(db);
       expect(row).toMatchObject({ status: "approved", channel: "dashboard", approvedBy: "Test Owner", actionIds: ACTION_IDS });
       expect((await liveSnapshot(db)).humanActions).toBe(1);
+    });
+  });
+
+  it("records the contact choice on the approval and once in the audit log, call by default", async () => {
+    await withTestDb("approve_contact", async (db) => {
+      await seedBundle(db);
+      await approveRun(db, "r1", undefined, undefined, "email");
+      await approveRun(db, "r1", undefined, undefined, "call");
+      expect((await bundle(db)).contact).toBe("email");
+      const rows = await db.select().from(auditLog).where(eq(auditLog.tool, "approve"));
+      expect(rows.map(({ agent, inputJson, outputJson }) => ({ agent, inputJson, outputJson }))).toEqual([
+        { agent: "owner", inputJson: { contact: "email" }, outputJson: { approvedBy: "Test Owner", note: EMAIL_INSTEAD } },
+      ]);
+    });
+  });
+
+  it("writes one audit row for racing clicks, and keeps the bundle pending when the audit write fails", async () => {
+    await withTestDb("approve_audit_atomic", async (db) => {
+      await seedBundle(db);
+      await Promise.all([approveRun(db, "r1", undefined, undefined, "email"), approveRun(db, "r1"), approveRun(db, "r1")]);
+      expect(await db.$count(auditLog, eq(auditLog.tool, "approve"))).toBe(1);
+
+      await seedRun(db, "r2");
+      await db.insert(approvals).values({ runId: "r2", actionIds: [], summary: "Approve the fixes" });
+      await db.execute(sql`alter table audit_log add constraint no_approve check (tool <> 'approve' or run_id <> 'r2')`);
+      await expect(approveRun(db, "r2")).rejects.toThrow();
+      expect((await bundle(db, "r2")).status).toBe("pending");
+    });
+  });
+
+  it("refuses email on a naive run and leaves the bundle pending", async () => {
+    await withTestDb("approve_contact_naive", async (db) => {
+      await seedBundle(db);
+      await db.update(runs).set({ platform: "naive" }).where(eq(runs.id, "r1"));
+      await expect(approveRun(db, "r1", undefined, undefined, "email")).rejects.toMatchObject({ status: 409 });
+      expect((await bundle(db)).status).toBe("pending");
+      await approveRun(db, "r1");
+      expect((await bundle(db)).contact).toBe("call");
     });
   });
 

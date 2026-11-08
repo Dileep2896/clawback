@@ -1,13 +1,19 @@
 import { db as sharedDb, type Db } from "@bill-fighter/db/client";
-import { accounts, actions, calls, findings, phoneLines } from "@bill-fighter/db/schema";
+import { accounts, actions, approvals, calls, findings, phoneLines } from "@bill-fighter/db/schema";
 import { getPlatform } from "@bill-fighter/platform/factory";
+import { createMailpit } from "@bill-fighter/platform/local/mailpit";
 import type { Budget } from "@bill-fighter/platform/types";
+import { runEmail } from "@bill-fighter/voice/email/engine";
+import { BAYTEL_SUPPORT, emailOutcome } from "@bill-fighter/voice/email/letter";
 import { runLiveCall } from "@bill-fighter/voice/live/caller/engine";
 import { LINE_NUMBER } from "@bill-fighter/voice/live/line/script";
 import { type CallOutcome, extractOutcome } from "@bill-fighter/voice/outcome";
 import { type CallPlan, lineKey, runSimCall } from "@bill-fighter/voice/sim/engine";
 import type { TranscriptRow } from "@bill-fighter/voice/transcript";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, isNotNull } from "drizzle-orm";
+import { existsSync } from "node:fs";
+import { basename, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { reportProblem, retryingCallLlm } from "../retry.ts";
 import { defineTool } from "../tool-wrapper.ts";
@@ -16,7 +22,9 @@ import { letterActionId } from "./filer.ts";
 type EngineCall = { actionId: string; plan: CallPlan; onCost: (usd: number) => void; fallbackReason?: string };
 type Engine = (call: EngineCall) => Promise<{ callId: string }>;
 
-export type NegotiatorDeps = { db: Db; budget: () => Promise<Budget>; sim: Engine; live: Engine };
+type EmailEngine = (email: { actionId: string; plan: CallPlan; runId: string }) => Promise<{ callId: string }>;
+
+export type NegotiatorDeps = { db: Db; budget: () => Promise<Budget>; sim: Engine; live: Engine; email: EmailEngine };
 
 const CALL_PLAN: z.ZodType<CallPlan> = z.object({
   accountNumber: z.string().min(1),
@@ -33,7 +41,18 @@ function voiceMode() {
   return mode;
 }
 
-export function negotiatorTools({ db, budget, sim, live }: NegotiatorDeps) {
+const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
+
+/** The owner's choice on the approval that holds this action. Call when none is recorded. */
+async function contactOf(db: Db, actionId: string) {
+  const [approval] = await db
+    .select({ contact: approvals.contact })
+    .from(approvals)
+    .where(and(eq(approvals.status, "approved"), arrayContains(approvals.actionIds, [actionId])));
+  return approval?.contact ?? "call";
+}
+
+export function negotiatorTools({ db, budget, sim, live, email }: NegotiatorDeps) {
   async function place(call: EngineCall) {
     if (voiceMode() === "sim") return { ...(await sim(call)), mode: "sim" as const };
     try {
@@ -59,12 +78,16 @@ export function negotiatorTools({ db, budget, sim, live }: NegotiatorDeps) {
     const plan = CALL_PLAN.parse(action.payloadJson);
     let costUsd = 0;
     try {
-      const placed = await place({ actionId, plan, onCost: (usd) => (costUsd += usd) }).catch(async (error: unknown) => {
-        await reportProblem(db, runId, "The provider call could not be completed, so no cancellation or credit was confirmed.");
+      const byEmail = (await contactOf(db, actionId)) === "email";
+      const reached = byEmail ? email({ actionId, plan, runId }).then((sent) => ({ ...sent, mode: "email" as const })) : place({ actionId, plan, onCost: (usd) => (costUsd += usd) });
+      const placed = await reached.catch(async (error: unknown) => {
+        await reportProblem(db, runId, byEmail ? "BayTel did not answer the email, so no cancellation was confirmed." : "The provider call could not be completed, so no cancellation or credit was confirmed.");
         throw error;
       });
       const [call] = await db.select().from(calls).where(eq(calls.id, placed.callId));
-      const outcome = extractOutcome(call!.transcriptJson as TranscriptRow[]);
+      const rows = call!.transcriptJson as TranscriptRow[];
+      const reply = rows.findLast((row) => row.role === "provider" && row.kind === "email");
+      const outcome = byEmail ? emailOutcome(reply?.content ?? "", plan.cancelLines) : extractOutcome(rows);
       // Only accounts the owner approved can be won, whatever was said on the call.
       const restored = outcome.credits.filter((account) => plan.promoAccounts.includes(account));
       await db.transaction(async (tx) => {
@@ -92,10 +115,10 @@ export function negotiatorTools({ db, budget, sim, live }: NegotiatorDeps) {
     defineTool({
       name: "call_provider",
       description:
-        "Calls the provider line about an approved call action, says the required disclosure, and saves the outcome: the lines the rep cancelled, the promo accounts restored (credits) and the ticket. Returns callId for cancel_service.",
+        "Contacts the provider about an approved call action, by phone or, when the owner chose it, by one email, with the required disclosure, and saves the outcome: the lines the provider cancelled, the promo accounts restored (credits) and the ticket. Returns callId for cancel_service.",
       inputSchema: z.object({ actionId: z.string().min(1) }),
-      // Fixed in code, so the model cannot choose who is dialled.
-      targets: () => [{ kind: "phone", value: LINE_NUMBER }],
+      // Fixed in code, so the model cannot choose who is dialled or mailed. Read after the gate, so it follows the owner's choice.
+      targets: async ({ actionId }) => [(await contactOf(db, actionId)) === "email" ? { kind: "email", value: BAYTEL_SUPPORT } : { kind: "phone", value: LINE_NUMBER }],
       handler({ actionId }, { runId }) {
         // No await between the lookup and the set, so two overlapping uses cannot both start a call.
         const shared = running.get(actionId);
@@ -145,10 +168,51 @@ export function negotiatorTools({ db, budget, sim, live }: NegotiatorDeps) {
   ];
 }
 
+/**
+ * The Filer's drafted cancellation letters, by exact id: only for cancellations in the approved bundle that holds this
+ * action, and only for lines the plan asks to cancel. A letter whose file is missing is left out.
+ */
+export async function letterAttachments(db: Db, runId: string, actionId: string, cancelLines: string[]) {
+  const [approval] = await db
+    .select({ actionIds: approvals.actionIds })
+    .from(approvals)
+    .where(and(eq(approvals.status, "approved"), arrayContains(approvals.actionIds, [actionId])));
+  if (!approval) return [];
+  const cancels = await db
+    .select({ findingId: findings.id, evidence: findings.evidenceJson })
+    .from(actions)
+    .innerJoin(findings, eq(actions.findingId, findings.id))
+    .where(and(inArray(actions.id, approval.actionIds), eq(actions.kind, "cancel"), eq(findings.type, "unusedLines")));
+  const lineIds = cancels.flatMap(({ evidence }) => (evidence as { phoneLineIds?: string[] } | null)?.phoneLineIds ?? []);
+  const lines = lineIds.length ? await db.select({ id: phoneLines.id, number: phoneLines.number }).from(phoneLines).where(inArray(phoneLines.id, lineIds)) : [];
+  const requested = new Set(lines.filter((line) => cancelLines.some((number) => lineKey(number) === lineKey(line.number))).map((line) => line.id));
+  const letterIds = cancels
+    .filter(({ evidence }) => ((evidence as { phoneLineIds?: string[] } | null)?.phoneLineIds ?? []).some((id) => requested.has(id)))
+    .map(({ findingId }) => letterActionId(runId, findingId));
+  if (letterIds.length === 0) return [];
+  const letters = await db
+    .select({ payload: actions.payloadJson })
+    .from(actions)
+    .where(and(inArray(actions.id, letterIds), eq(actions.kind, "letter")));
+  return letters.flatMap(({ payload }) => {
+    const path = (payload as { letterPath?: string } | null)?.letterPath;
+    return path && existsSync(resolve(REPO_ROOT, path)) ? [{ filename: basename(path), path: resolve(REPO_ROOT, path) }] : [];
+  });
+}
+
 // Everything that can fail waits for a handler, so importing this file never throws.
-export default negotiatorTools({
+export const DEFAULT_DEPS: NegotiatorDeps = {
   db: sharedDb,
   budget: () => getPlatform().budget(),
   sim: async (call) => runSimCall({ db: sharedDb, llm: retryingCallLlm(await getPlatform().llm()), ...call }),
   live: (call) => runLiveCall({ db: sharedDb, ...call }),
-});
+  async email({ actionId, plan, runId }) {
+    // Mailpit only (orchestrator, 2026-11-08): the local adapter itself refuses any SMTP host but localhost.
+    if ((process.env.PLATFORM || "local") !== "local") throw new Error("Email to the provider works on local runs only");
+    // First, so the sandbox's refusal (platform factory) comes before anything is read.
+    const mail = await getPlatform().mail();
+    const attachments = await letterAttachments(sharedDb, runId, actionId, plan.cancelLines);
+    return runEmail({ db: sharedDb, mail, mailpit: createMailpit(), actionId, plan, attachments });
+  },
+};
+export default negotiatorTools(DEFAULT_DEPS);

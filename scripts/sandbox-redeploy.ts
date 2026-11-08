@@ -14,7 +14,13 @@ type Deployment = { id: string; status: "queued" | "building" | "ready" | "error
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 // shortcut: every migration after the first deploy, written to run twice safely; switch to the db/migrations ledger when the next one lands.
-export const CATCH_UP_SQL = ["ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_ip_hash text"];
+export const CATCH_UP_SQL = [
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_ip_hash text",
+  // 0006_approval_contact. Postgres has no CREATE TYPE IF NOT EXISTS, hence the DO block.
+  "DO $$ BEGIN CREATE TYPE contact_channel AS ENUM ('call', 'email'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+  "ALTER TYPE call_mode ADD VALUE IF NOT EXISTS 'email'",
+  "ALTER TABLE approvals ADD COLUMN IF NOT EXISTS contact contact_channel NOT NULL DEFAULT 'call'",
+];
 
 /** The API answers 429 "at capacity" often; a retry half a minute later goes through. Anything else fails at once. */
 export async function retrying<T>(fn: () => Promise<T>, wait = sleep, tries = 12): Promise<T> {
@@ -51,9 +57,11 @@ async function main() {
   // Documented body: { query: string } (docs/api/database, "Run SQL").
   for (const query of CATCH_UP_SQL) await retrying(() => call("POST", `/apps/${APP}/db/query`, { query }));
   const { rows } = await retrying(() =>
-    call<{ rows: unknown[] }>("POST", `/apps/${APP}/db/query`, { query: "select 1 from information_schema.columns where table_name = 'users' and column_name = 'signup_ip_hash'" }),
+    call<{ rows: unknown[] }>("POST", `/apps/${APP}/db/query`, {
+      query: "select 1 from information_schema.columns where (table_name, column_name) in (('users', 'signup_ip_hash'), ('approvals', 'contact'))",
+    }),
   );
-  if (rows.length !== 1) throw new Error("users.signup_ip_hash is still missing");
+  if (rows.length !== 2) throw new Error("users.signup_ip_hash or approvals.contact is still missing");
   console.info("database up to date");
 
   const out = mkdtempSync(join(tmpdir(), "sandbox-bundle-"));

@@ -38,6 +38,11 @@ describe("SANDBOX=1", () => {
     ).rejects.toThrow(/sandbox/);
   });
 
+  it("will not email the provider, whichever contact the approval chose", async () => {
+    const { DEFAULT_DEPS } = await import("@bill-fighter/agents/tools/negotiator");
+    await expect(DEFAULT_DEPS.email({ actionId: "a", plan: untouchable as never, runId: "r" })).rejects.toThrow(/sandbox/);
+  });
+
   it("will not make a Stripe client, so no invoice", async () => {
     const { stripeClient } = await import("@bill-fighter/agents/tools/finance-invoice");
     expect(() => stripeClient("sk_test_x")).toThrow(/sandbox/);

@@ -17,7 +17,7 @@ const inboundEmail = z.strictObject({
 
 export function createMail(env: Record<string, string | undefined> = process.env): Mail {
   return {
-    async send({ to, from, subject, text, html, attachments }) {
+    async send({ to, from, subject, text, html, attachments, inReplyTo }) {
       // Nodemailer splits an address on these, so the part the allowlist checked may not be the only recipient.
       if (/[,;<>\s]/.test(to) || !isAllowedEmail(allowlistFromEnv(env), to)) {
         throw new Error(`Mail refused: ${to} is outside ALLOWED_EMAIL_DOMAINS`);
@@ -44,6 +44,7 @@ export function createMail(env: Record<string, string | undefined> = process.env
         text,
         html,
         attachments,
+        ...(inReplyTo ? { inReplyTo: `<${inReplyTo}>`, references: `<${inReplyTo}>` } : {}),
       });
       return { id: info.messageId.replace(/^<|>$/g, "") };
     },

@@ -117,6 +117,9 @@ describe("record_savings", () => {
       live: async () => {
         throw new Error("live is not used here");
       },
+      email: async () => {
+        throw new Error("email is not used here");
+      },
     });
     const use = (name: string, input: unknown) => wrapTool(tools.find((tool) => tool.name === name)!, { audit: AUDIT, allowlist: ALLOWED }).handler(input, { runId: RUN, agent: "negotiator" });
 

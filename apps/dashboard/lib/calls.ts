@@ -43,6 +43,17 @@ export function viewOf(call: Call): CallView {
   return { state: "transcript", fallback, failure, rows: all.filter((row) => SHOWN_KINDS.includes(row.kind)) };
 }
 
+export type EmailView = { to: string; sent: Row | null; reply: Row | null; notice: string | null; waiting: boolean };
+
+/** An email to the provider, stored as a call row with mode "email": the request, then the reply, or a notice that none came. */
+export function emailViewOf(call: Call): EmailView {
+  const all = rowsOf(call);
+  const sent = all.find((row) => row.role === "agent" && row.kind === "email") ?? null;
+  const reply = all.find((row) => row.role === "provider" && row.kind === "email") ?? null;
+  const notice = all.findLast((row) => row.role === "system" && row.kind === "status")?.content ?? null;
+  return { to: call.toNumber, sent, reply, notice, waiting: !reply && !notice && !call.endedAt };
+}
+
 export const isDisclosure = (row: Row) => row.role === "agent" && row.kind === "speech" && row.content.startsWith(DISCLOSURE_LINE);
 
 /**

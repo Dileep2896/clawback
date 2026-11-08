@@ -37,7 +37,9 @@ export const actionKind = pgEnum("action_kind", [
 ]);
 export const approvalStatus = pgEnum("approval_status", ["pending", "approved", "denied"]);
 export const approvalChannel = pgEnum("approval_channel", ["dashboard", "sms", "naive"]);
-export const callMode = pgEnum("call_mode", ["sim", "live"]);
+export const callMode = pgEnum("call_mode", ["sim", "live", "email"]);
+// How the owner chose to reach the provider. Call is the default (human, 2026-11-08).
+export const contactChannel = pgEnum("contact_channel", ["call", "email"]);
 export const ledgerKind = pgEnum("ledger_kind", ["refund", "savings", "fee", "invoice", "card_spend"]);
 export const runTrigger = pgEnum("run_trigger", ["email", "schedule", "manual"]);
 export const boardCardStatus = pgEnum("board_card_status", ["todo", "doing", "done", "blocked"]);
@@ -192,6 +194,7 @@ export const approvals = pgTable("approvals", {
   summary: text("summary").notNull(),
   status: approvalStatus("status").notNull().default("pending"),
   channel: approvalChannel("channel"),
+  contact: contactChannel("contact").notNull().default("call"),
   approvedBy: text("approved_by"),
   approvedAt: timestamptz("approved_at"),
 });

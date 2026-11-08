@@ -59,7 +59,8 @@ export async function applyEvents(client: Client, events: ReplayEvent[], label: 
   for (const { table, id } of deletes) await client.query(`delete from ${table} where id = $1`, [id]);
   for (const { table, row } of upserts) {
     // On every run update, so no poll can ever read this run without its label.
-    const values = table === "runs" ? { ...row, replay: label } : row!;
+    // Recordings made before approvals.contact existed hold no choice, and those runs called.
+    const values = table === "runs" ? { ...row, replay: label } : table === "approvals" ? { contact: "call", ...row } : row!;
     const sets = Object.keys(values).filter((column) => column !== "id").map((column) => `"${column}" = excluded."${column}"`);
     await client.query(`insert into ${table} select * from jsonb_populate_record(null::${table}, $1::jsonb) on conflict (id) do update set ${sets.join(", ")}`, [JSON.stringify(values)]);
   }

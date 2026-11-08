@@ -13,13 +13,19 @@ import { LINE_NUMBER } from "@bill-fighter/voice/live/line/script";
 import { checkPlan, lineKey, runSimCall } from "@bill-fighter/voice/sim/engine";
 import { ALARM_LINES, SEED_PLAN, seedCallData, seedCallFacts } from "@bill-fighter/voice/sim/fixture";
 import { stubLlm } from "@bill-fighter/voice/sim/stub-llm";
+import { runEmail } from "@bill-fighter/voice/email/engine";
+import { fakeInbox } from "@bill-fighter/voice/email/fixture";
+import { startEmailRep } from "@bill-fighter/voice/email/rep";
 import type { TranscriptRow } from "@bill-fighter/voice/transcript";
-import { eq } from "drizzle-orm";
+import { eq, notInArray } from "drizzle-orm";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadTools } from "../registry.ts";
 import { wrapTool } from "../tool-wrapper.ts";
 import { letterActionId } from "./filer.ts";
-import { negotiatorTools, type NegotiatorDeps } from "./negotiator.ts";
+import { letterAttachments, negotiatorTools, type NegotiatorDeps } from "./negotiator.ts";
 
 const CALL = "call-action";
 const CTX = { runId: "run-1", agent: "negotiator" };
@@ -84,7 +90,7 @@ type CallResult = {
   outcome: { cancelled_lines: string[]; credits: string[]; ticket: string | null };
 };
 
-function setup(db: Db, options: { refuse?: string[]; llm?: Llm; live?: NegotiatorDeps["live"]; allowlist?: Allowlist; budget?: Budget } = {}) {
+function setup(db: Db, options: { refuse?: string[]; llm?: Llm; live?: NegotiatorDeps["live"]; email?: NegotiatorDeps["email"]; allowlist?: Allowlist; budget?: Budget } = {}) {
   const llm = options.llm ?? stubLlm().llm;
   const sim = vi.fn<NegotiatorDeps["sim"]>((call) => runSimCall({ db, llm, ...call, ...(options.refuse ? { refuse: options.refuse } : {}) }));
   const live = vi.fn<NegotiatorDeps["live"]>(
@@ -95,12 +101,19 @@ function setup(db: Db, options: { refuse?: string[]; llm?: Llm; live?: Negotiato
   );
   const record = vi.fn<Audit["record"]>(async () => {});
   const budget: Budget = options.budget ?? { add: async () => STATUS, status: async () => STATUS };
-  const tools = negotiatorTools({ db, budget: async () => budget, sim, live });
+  const email = vi.fn<NegotiatorDeps["email"]>(
+    options.email ??
+      (async () => {
+        throw new Error("email not expected");
+      }),
+  );
+  const tools = negotiatorTools({ db, budget: async () => budget, sim, live, email });
   const wrap = (name: string) =>
     wrapTool(tools.find((tool) => tool.name === name)!, { audit: { record, list: async () => [] }, allowlist: options.allowlist ?? ALLOWED });
   return {
     sim,
     live,
+    email,
     record,
     call: (actionId = CALL) => wrap("call_provider").handler({ actionId }, CTX) as Promise<CallResult>,
     cancel: (actionId: string, callId: string) => wrap("cancel_service").handler({ actionId, callId }, CTX),
@@ -538,5 +551,72 @@ describe("the real tool file", () => {
     vi.stubEnv("PLATFORM", "not-a-platform");
     const names = (await loadTools()).map((tool) => tool.name);
     expect(names).toEqual(expect.arrayContaining(["call_provider", "cancel_service"]));
+  });
+});
+
+describe("call_provider with email chosen", () => {
+  const EMAIL_PLAN = { ...SEED_PLAN, promoAccounts: [] };
+  const EMAIL_ALLOWED: Allowlist = { ...ALLOWED, emailDomains: ["baytel.example"] };
+  const chooseEmail = async (db: Db) => {
+    await db.update(actions).set({ payloadJson: EMAIL_PLAN }).where(eq(actions.id, CALL));
+    await db.update(approvals).set({ contact: "email" });
+  };
+
+  test("emails BayTel instead of calling, and records the reply's ticket and lines exactly as a call would", async (db) => {
+    await chooseEmail(db);
+    const inbox = fakeInbox();
+    const stop = startEmailRep({ db, mail: inbox.mail, mailpit: inbox.mailpit, intervalMs: 5 });
+    try {
+      const { call, cancel, sim, email } = setup(db, { allowlist: EMAIL_ALLOWED, email: ({ actionId, plan }) => runEmail({ db, mail: inbox.mail, mailpit: inbox.mailpit, actionId, plan, pollMs: 5 }) });
+      const result = await call();
+      expect(sim).not.toHaveBeenCalled();
+      expect(email).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({ mode: "email", outcome: { cancelled_lines: EMAIL_PLAN.cancelLines.map(lineKey), credits: [], ticket: "BT-48213" } });
+      expect(await actionStatus(db, CALL)).toBe("done");
+      await seedCancel(db, LINE, "cancel-1");
+      expect(await cancel("cancel-1", result.callId)).toEqual({ recorded: LINE });
+      expect(await statusOf(db, "cancel-1")).toBe("won");
+    } finally {
+      stop();
+    }
+  });
+
+  test("attaches only this run's letters for approved, requested cancellations, not a run whose id it prefixes", async (db) => {
+    const [unrequested] = await db.select().from(phoneLines).where(notInArray(phoneLines.number, SEED_PLAN.cancelLines));
+    await seedCancel(db, LINE, "cancel-1");
+    await seedCancel(db, SEED_PLAN.cancelLines[1]!, "cancel-2");
+    await seedCancel(db, unrequested!.number, "cancel-3");
+    // cancel-2 is requested but not in the approved bundle; cancel-3 is approved but not requested.
+    await db.update(approvals).set({ actionIds: [CALL, "cancel-1", "cancel-3"] });
+    const dir = mkdtempSync(join(tmpdir(), "letters-"));
+    const letter = (runId: string, findingId: string) => {
+      const id = letterActionId(runId, findingId);
+      writeFileSync(join(dir, `${id}.pdf`), "pdf");
+      return { id, findingId, kind: "letter" as const, status: "proposed", payloadJson: { letterPath: join(dir, `${id}.pdf`) } };
+    };
+    await db.insert(actions).values([letter(CTX.runId, "cancel-1"), letter(CTX.runId, "cancel-2"), letter(CTX.runId, "cancel-3"), letter(`${CTX.runId}-2`, "cancel-1")]);
+    const attached = await letterAttachments(db, CTX.runId, CALL, SEED_PLAN.cancelLines);
+    expect(attached.map((a) => a.filename)).toEqual([`${letterActionId(CTX.runId, "cancel-1")}.pdf`]);
+    // No approved bundle holds the action: nothing goes along.
+    await db.update(approvals).set({ status: "denied" });
+    expect(await letterAttachments(db, CTX.runId, CALL, SEED_PLAN.cancelLines)).toEqual([]);
+  });
+
+  test("refuses the email when BayTel's address is not on the allowlist, before anything is sent", async (db) => {
+    await chooseEmail(db);
+    const { call, email } = setup(db);
+    await expect(call()).rejects.toThrow(/email target support@baytel.example is not on the allowlist/);
+    expect(email).not.toHaveBeenCalled();
+  });
+
+  test("leaves the step not done when no reply comes in time", async (db) => {
+    await chooseEmail(db);
+    const inbox = fakeInbox();
+    const { call } = setup(db, { allowlist: EMAIL_ALLOWED, email: ({ actionId, plan }) => runEmail({ db, mail: inbox.mail, mailpit: inbox.mailpit, actionId, plan, timeoutMs: 30, pollMs: 5 }) });
+    await expect(call()).rejects.toThrow(/No reply from BayTel/);
+    expect(await actionStatus(db, CALL)).toBe("approved");
+    const [row] = await db.select().from(calls);
+    expect(row).toMatchObject({ mode: "email", outcomeJson: null });
+    expect((row!.transcriptJson as TranscriptRow[]).at(-1)?.content).toMatch(/No reply from BayTel within/);
   });
 });

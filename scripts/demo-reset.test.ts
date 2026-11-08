@@ -392,7 +392,7 @@ describe("demoReset", () => {
       const runId = await startSandboxRun(db, user.customerId, start);
       const tap = start + plan.approvalT / SANDBOX_SPEED;
       await advanceSandbox(db, user.customerId, tap);
-      await approveSandbox(db, user.customerId, runId, "Judge", tap);
+      await approveSandbox(db, user.customerId, runId, "Judge", "call", tap);
       await advanceSandbox(db, user.customerId, tap + plan.events.at(-1)!.t / SANDBOX_SPEED);
       expect((await db.select().from(ledger)).length).toBeGreaterThan(0);
       expect(runId).toContain(":");

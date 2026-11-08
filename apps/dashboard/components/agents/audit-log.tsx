@@ -49,7 +49,7 @@ export function AuditLog() {
                   <td className="py-2 pr-4 whitespace-nowrap">{agentName(row.agent)}</td>
                   <td className="py-2 pr-4 break-words">
                     {/* A narrow screen may break the tool name after an underscore, never inside a word. */}
-                    {toolWords(row.tool)} <code className="font-mono text-caption text-faded">{row.tool.replaceAll("_", "_​")}</code>
+                    {toolWords(row.tool, snapshot?.approval?.contact)} <code className="font-mono text-caption text-faded">{row.tool.replaceAll("_", "_​")}</code>
                   </td>
                   <td data-testid="audit-cost" className="py-2 text-right text-label text-faded tabular-nums">
                     {cost ?? (

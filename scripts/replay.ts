@@ -63,7 +63,8 @@ export function recordingProblems(recording: Recording, secrets: string[]) {
   if (blocked.length > 0) problems.push(`board cards ended blocked: ${blocked.join(", ")}`);
   const calls = isRow(final, "calls");
   if (calls.length === 0) problems.push("no call");
-  if (calls.some(({ mode }) => mode !== "sim")) problems.push("a call is not sim");
+  // An email to BayTel's replica desk spends no voice credit, so it may be recorded like a sim call.
+  if (calls.some(({ mode }) => mode !== "sim" && mode !== "email")) problems.push("a call is not sim");
   if (calls.some(({ transcript_json: rows }) => (rows as { kind?: string }[] | null)?.some(({ kind }) => kind === "fallback"))) problems.push("a call fell back from live");
   try {
     checkRecording(recording);
