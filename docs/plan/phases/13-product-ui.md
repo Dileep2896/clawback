@@ -272,3 +272,22 @@ Human, verbatim: "see all the AI platform landing page and learn from it to make
 **depends on:** savings-views, signup-connect
 
 **parallel with:** landing-live, naive-rehearsal
+## New colour theme (human, 2026-11-07, from a screenshot; overrides earlier colour guidance in design-study.md and Design pass 2)
+
+| Role | Name | Hex |
+|---|---|---|
+| Background | Near black | #0B0F14 |
+| Cards / panels | Dark slate | #141A21 |
+| Borders | Steel | #263040 |
+| Main text | Soft white | #E8EDF2 |
+| Muted text | Gray blue | #8A96A6 |
+| Accent: savings, buttons, logo | Electric lime | #C6F432 |
+| Agent activity / links | Voltage blue | #3BA7FF |
+| Overcharges / errors | Coral red | #FF5C5C |
+| Warnings / pending approval | Amber | #FFB547 |
+
+Orchestrator decisions:
+- Applies to the whole product: landing page and every in-app page. Dark is the only theme; drop the light palette and the prefers-color-scheme switch.
+- Map onto the existing token names in apps/dashboard/app/globals.css (paper=#0B0F14, sheet=#141A21, line=#263040, ink=#E8EDF2, faded=#8A96A6, money and action=#C6F432 with near-black #0B0F14 text on lime, alert=#FF5C5C, a new warn/pending token=#FFB547, a new agent/link token=#3BA7FF; band tokens collapse onto these). Kwh chart: billed line coral, meter line voltage blue, gap shaded amber.
+- Each colour keeps one meaning: lime = money and the primary button only, blue = agents working and links, coral = wrong numbers and errors, amber = pending approval and warnings. No other hues; no hard-coded hex outside globals.css.
+- Check text contrast ≥ 4.5:1 for body and labels (muted #8A96A6 on #141A21 included) and fix by token, not per component. Update docs/plan/design.md with this table.
