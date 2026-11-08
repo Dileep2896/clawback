@@ -291,3 +291,28 @@ Orchestrator decisions:
 - Map onto the existing token names in apps/dashboard/app/globals.css (paper=#0B0F14, sheet=#141A21, line=#263040, ink=#E8EDF2, faded=#8A96A6, money and action=#C6F432 with near-black #0B0F14 text on lime, alert=#FF5C5C, a new warn/pending token=#FFB547, a new agent/link token=#3BA7FF; band tokens collapse onto these). Kwh chart: billed line coral, meter line voltage blue, gap shaded amber.
 - Each colour keeps one meaning: lime = money and the primary button only, blue = agents working and links, coral = wrong numbers and errors, amber = pending approval and warnings. No other hues; no hard-coded hex outside globals.css.
 - Check text contrast ≥ 4.5:1 for body and labels (muted #8A96A6 on #141A21 included) and fix by token, not per component. Update docs/plan/design.md with this table.
+
+### `landing-pages`
+
+**Goal:** Four public pages linked from the landing nav and footer: Pricing, Market, Why Clawback (how we differ from current players) and How it works. Human, 2026-11-07: "add more detailed pages about pricing, our market size, how we are different from all the current players and how it work with good motion design and illustrations."
+
+Orchestrator decisions:
+- Routes `/pricing`, `/market`, `/compare`, `/how-it-works`, sharing the landing's nav, footer, tokens and the new dark colour theme. Reuse the landing's components and motion helpers; the hero and bento stay on `/`.
+- **Pricing:** 30% of what is actually recovered (refund plus first-year savings), nothing up front, nothing if nothing comes back. A worked example from the recorded run ($12,606.06 refund, $18,319.32 a year, fee $9,277.61, you keep $21,647.77) with the stacked-bar animation, a "what counts / what doesn't" list (claimed is not granted; fee is charged only on granted money), and an FAQ. No invented plans or tiers.
+- **Market:** the TAM already on the landing (about $500B+ of US business utility and telecom spend, 1–3% recoverable, $5–16B a year, about $1.6–4.9B revenue at 30%), with how each number is derived and its sources, as a drawn funnel or nested-area graphic. Mark estimates as estimates.
+- **Why Clawback:** research the current players from their public pages and cite each claim with a link in the page or in `docs/plan/competitors.md`: utility and telecom bill auditors on contingency, energy and telecom expense management software (for example Tangoe, Calero, Urjanet/Arcadia, EnergyCAP, Cass), consumer bill negotiators (for example Rocket Money, BillShark, Trim) and manual consultants. Verify each one exists and what it does before naming it. Compare on who it serves, who does the work, how it's priced, whether it calls the provider and files the claim, and time to first refund. Fair and factual: no logos, no claims about them we can't link, no "10x" style figures.
+- **How it works:** the five agents step by step (Collector, Auditor, Approver, Negotiator, Finance) with the human's one approval, each step an illustration plus real data from the recorded run; scroll-driven sequence (agent graph lights up, bill → finding → call waveform → ledger).
+- **Illustrations and motion:** hand-built SVG and CSS in the theme colours (lime money, blue agents, coral wrong numbers, amber pending), no stock art, no AI images, no emoji. Motion ease-out, 200–600 ms, plays when on screen, finished state under prefers-reduced-motion. Every page looks complete at t=0.
+- Run the Hallmark slop test and the design study's anti-patterns list on each page.
+
+**Acceptance checks:**
+- Four routes render with no console errors and link from the landing nav and footer.
+- Screenshots at 1920x1080, 390x844 and 320x640 per page, no sideways scroll, reduced-motion frames.
+- Every competitor claim has a source link; every figure comes from the recorded run, the TAM derivation, or is labelled an estimate.
+- `pnpm test`, lint, typecheck pass.
+
+**Estimate:** 2.5 hours
+
+**depends on:** landing-live
+
+**parallel with:** product-polish, naive-runtime-cost
