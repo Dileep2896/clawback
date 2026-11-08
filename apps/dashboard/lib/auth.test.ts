@@ -47,9 +47,9 @@ describe("sessions", () => {
 });
 
 describe("the login guard's public paths", () => {
-  it("leaves only the landing, sign-up, log-in, the SMS webhook and assets open", () => {
-    for (const path of ["/", "/signup", "/login", "/api/sms", "/_next/static/x.css"]) expect(isPublicPath(path)).toBe(true);
-    for (const path of ["/overview", "/bills", "/findings", "/money", "/agents", "/onboarding", "/api/approve", "/api/live", "/api/bills/upload", "/signup/x"]) {
+  it("leaves only the public site pages, sign-up, log-in, the SMS webhook and assets open", () => {
+    for (const path of ["/", "/how-it-works", "/pricing", "/compare", "/market", "/naive", "/signup", "/login", "/api/sms", "/_next/static/x.css"]) expect(isPublicPath(path)).toBe(true);
+    for (const path of ["/overview", "/bills", "/findings", "/money", "/agents", "/onboarding", "/api/approve", "/api/live", "/api/bills/upload", "/signup/x", "/pricing/x"]) {
       expect(isPublicPath(path)).toBe(false);
     }
   });
