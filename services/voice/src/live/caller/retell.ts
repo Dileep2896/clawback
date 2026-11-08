@@ -1,4 +1,5 @@
 import { type Allowlist, isAllowedCallNumber } from "@bill-fighter/shared/allowlist";
+import { assertNotSandbox } from "@bill-fighter/shared/sandbox";
 
 export const REQUEST_TIMEOUT_MS = 15_000;
 
@@ -16,6 +17,7 @@ export type Retell = (method: "GET" | "POST" | "PATCH", path: string, body?: unk
 
 export function retellClient(apiKey: string, allowlist: Allowlist, fetchImpl: typeof fetch = fetch): Retell {
   return async (method, path, body, timeoutMs = REQUEST_TIMEOUT_MS) => {
+    assertNotSandbox("place calls");
     // Every request goes through here, so this is the one place a number can be refused before it dials.
     if (method === "POST" && path === "/v2/create-phone-call") {
       const to = (body as { to_number?: unknown } | undefined)?.to_number;

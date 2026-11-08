@@ -1,3 +1,4 @@
+import { assertNotSandbox } from "@bill-fighter/shared/sandbox";
 import { splitFee } from "@bill-fighter/core/money/fee";
 import { dollars } from "@bill-fighter/core/rules/input";
 import { db as sharedDb, type Db } from "@bill-fighter/db/client";
@@ -25,7 +26,7 @@ const DAYS_UNTIL_DUE = 30;
 const CARD_PAYLOAD = z.object({ amountCents: z.number().int().positive(), description: z.string().min(1) });
 
 /** The SDK retries connection errors and 5xx itself, with the same idempotency key. Its default 80 s per try would stall the stage. */
-export const stripeClient = (key: string, httpClient?: Stripe.HttpClient) => new Stripe(key, { timeout: 15_000, maxNetworkRetries: 2, ...(httpClient ? { httpClient } : {}) });
+export const stripeClient = (key: string, httpClient?: Stripe.HttpClient) => (assertNotSandbox("send invoices"), new Stripe(key, { timeout: 15_000, maxNetworkRetries: 2, ...(httpClient ? { httpClient } : {}) }));
 
 export function financeInvoiceTools({
   db = sharedDb,
