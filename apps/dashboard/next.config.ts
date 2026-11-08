@@ -13,8 +13,8 @@ const config: NextConfig = {
   // Workspace packages export raw TypeScript.
   transpilePackages: ["@bill-fighter/core", "@bill-fighter/db", "@bill-fighter/shared"],
   serverExternalPackages: ["pg"],
-  // The judge sandbox reads the recording at runtime (lib/sandbox.ts). The hosted bundle carries it at ./data (scripts/sandbox-bundle.ts).
-  outputFileTracingIncludes: { "/**": ["./data/replay/run.jsonl"] },
+  // The judge sandbox reads the recording and usage summary at runtime (lib/sandbox.ts). The hosted bundle carries it at ./data (scripts/sandbox-bundle.ts).
+  outputFileTracingIncludes: { "/**": ["./data/replay/run.jsonl", "./data/replay/usage.json"] },
 };
 
 export default config;
