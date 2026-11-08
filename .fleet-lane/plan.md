@@ -110,3 +110,23 @@ Checks: `pnpm test` (1828 pass), `pnpm lint`, `pnpm typecheck`, dashboard `tsc -
 3. **Shell/panels checks lack the 20px ceiling and hero exception (scripts/dashboard-shell-check.ts:16)**: not fixed, by the orchestrator decision above. It is a known limit of a test script and does not change product behaviour.
 
 Checks: `pnpm test` (1829 pass, 1 skipped), `pnpm lint`, `pnpm typecheck`, dashboard `tsc --noEmit`. Browser suites not re-run.
+
+## Fix round 5 (human, 2026-11-08)
+
+1. **Each agent gets its own view when picked** (ar-peragent.md / phase 13): done (1660180). A pick always shows that agent's view, opening with "What <Agent> did" and its steps in tool words.
+   - Intake: arrival time, sender and subject of the email it read, the customer matched, the accounts and stores.
+   - Collector: the portals, bills per account (count, periods, total), usage per meter (readings, date range).
+   - Auditor: all six rules, Passed or N findings, then the findings with evidence.
+   - Filer: one card per claim, rate request and cancellation letter, with an excerpt of the drafted wording. "Filed" only for a claim or rate request whose action is done; letters stay "Drafted".
+   - Approver and Negotiator: the approval and the call, as before.
+   - Finance: the Stripe invoice as recorded ("Finalized in Stripe test mode, not sent"), then the ledger.
+   - Monitor: the next scheduled check.
+   - Snapshot additions, no schema change: `email` (sender and subject only) and `letterWording` (from successful `draft_letter` calls), picked field by field from this run's audit rows; `usage` per account from usage_intervals. A test proves the raw email body and other tool data stay out.
+   - Left out because no stored data has them: the email's attachment name and the pages per bill. The recording strips tool inputs and outputs and skips scheduled_checks, so on the recorded run Intake shows no sender or subject, Filer no excerpts, and Monitor only its step. A live run shows all three. To show them in the replay, the capture would have to keep these picked fields, and that needs a new recording.
+   - Tests: `lib/now.test.ts` (every pick gives a distinct view), `lib/snapshot.test.ts` (the picks, the usage). `scripts/agents-shots.ts` picks all eight agents plus "Follow live" on the recorded run, fails if two picks look the same, and writes `docs/plan/agents-redesign/after/picks/pick-*-1440.png`.
+2. **Empty screen below /agents** (bug in phase 13): fixed (d4b556f). The full log's scroller was not positioned, so each row's sr-only "No cost recorded" (absolute) escaped its clip and stretched the page (2122px on a 785px screen). The log and timeline scrollers are now `relative`. `agents-shots` now checks every moment, every pick (with the log open) and Overview, Bills, Findings and Money at 1920, 1440 and 390: the page ends where its content ends. That check also found Money scrolling sideways at 390 (753px): its grids' base column is now `minmax(0,1fr)`.
+3. **Merged main** after the build (dc568e1). judge-link had not shipped.
+
+Checks: `pnpm test` (1831 pass, 1 skipped), `pnpm lint`, `pnpm typecheck`, dashboard `tsc --noEmit`. Browser: agents-shots, panels-work-check (updated: the auditor pick is now `data-moment="auditor"`), panels-action-check, panels-money-check and replay-check all pass against this worktree's preview on :3020.
+
+Not done: HANDOVER.md (main, 2026-11-08) says this lane merges `fleet/judge-link` into its branch for a combined preview. My brief says never merge, and the instruction I was given says merge main after judge-link ships, so I left it for the orchestrator.
