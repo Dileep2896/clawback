@@ -117,6 +117,29 @@ describe("the judge sandbox", { timeout: 180_000 }, () => {
       expect(await db.$count(accounts)).toBe(3 * (await db.$count(accounts, sql`not ${accounts.id} like 'sandbox-%'`)));
     }));
 
+  it("asks for the seed ids again after a failed lookup, instead of failing every later start", () =>
+    withTestDb("sandbox_seed_retry", async (db) => {
+      await loadSeed(db, generateSeed());
+      let lookups = 0;
+      // A database that is down for the seed lookup only, then the real one.
+      const client = {
+        query: async (text: string) => {
+          if (!text.includes("union all")) return { rows: [], rowCount: 0 };
+          lookups++;
+          throw new Error("connection reset");
+        },
+        release: () => {},
+      };
+      const down = { $client: { connect: async () => client } } as unknown as Db;
+      await expect(startSandboxRun(down, "sandbox-s", START)).rejects.toThrow("connection reset");
+      await expect(startSandboxRun(down, "sandbox-s", START)).rejects.toThrow("connection reset");
+      expect(lookups).toBe(2);
+
+      await judge(db, "sandbox-s");
+      await advanceSandbox(db, "sandbox-s", at(plan.approvalT));
+      expect(await db.$count(findings, eq(findings.customerId, "sandbox-s"))).toBeGreaterThan(0);
+    }));
+
   it("shows each judge only their own texts on the live dashboard, while their replays overlap and after a restart", () =>
     withTestDb("sandbox_sms_isolation", async (db) => {
       await loadSeed(db, generateSeed());

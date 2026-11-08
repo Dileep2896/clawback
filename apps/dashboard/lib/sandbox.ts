@@ -100,7 +100,14 @@ const SEED_IDS = `
 
 let seedIds: Promise<Set<string>> | undefined;
 const knownIds = (client: Client) =>
-  (seedIds ??= client.query<{ id: string }>(SEED_IDS, [CUSTOMER.id]).then(({ rows }) => new Set([...sandboxPlan().ids, ...rows.map(({ id }) => id)])));
+  (seedIds ??= client
+    .query<{ id: string }>(SEED_IDS, [CUSTOMER.id])
+    .then(({ rows }) => new Set([...sandboxPlan().ids, ...rows.map(({ id }) => id)]))
+    // A failed lookup is not cached: the next start or poll asks again.
+    .catch((error: unknown) => {
+      seedIds = undefined;
+      throw error;
+    }));
 
 /** Forget the cached seed ids, for tests that seed a fresh database. */
 export const resetSandboxCache = () => {
