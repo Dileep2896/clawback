@@ -70,6 +70,8 @@ export async function clearSignups(client: Pick<Db["$client"], "query">): Promis
     const accountsOf = "select a.id from accounts a join locations l on l.id = a.location_id where l.customer_id = any($1)";
     await client.query(`delete from bill_lines where bill_id in (select id from bills where account_id in (${accountsOf}))`, [created]);
     await client.query(`delete from bills where account_id in (${accountsOf})`, [created]);
+    // A sandbox sign-up clones the demo customer's phone lines too (apps/dashboard/lib/sandbox.ts).
+    await client.query(`delete from phone_lines where account_id in (${accountsOf})`, [created]);
     await client.query(`delete from accounts where id in (${accountsOf})`, [created]);
     await client.query("delete from locations where customer_id = any($1)", [created]);
     // No other table may still point at these customers: a run or finding for one fails here rather than vanishing.
