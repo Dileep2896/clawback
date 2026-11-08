@@ -22,6 +22,8 @@ const AUTHORISED = /^Authorised by: (.+), the account holder, on (.+)\.$/m;
 const LIST = /^Lines to cancel:\n((?:- .+\n?)+)/m;
 const CANCELLED = /^We have cancelled these lines on account .+:\n((?:- .+\n?)+)/m;
 const TICKET = /^Ticket: ([A-Z]+-\d+)$/m;
+// Mail comes back from SMTP with CRLF line ends, so every parse reads plain newlines.
+const lf = (text: string) => text.replace(/\r\n?/g, "\n");
 const items = (block: string | undefined) => (block ?? "").split("\n").flatMap((line) => (line.startsWith("- ") ? [line.slice(2).trim()] : []));
 
 /** One email for the whole bundle. Throws when the bundle was not approved by the owner, so an automatic approval never mails a provider. */
@@ -51,7 +53,8 @@ export function requestEmail(facts: CallFacts, accountNumber: string, lines: str
 export type ParsedRequest = { accountNumber: string; authorisedBy: string; lines: string[]; disclosed: boolean };
 
 /** What BayTel reads from a request. Null when a required part is missing. */
-export function parseRequest(text: string): ParsedRequest | null {
+export function parseRequest(raw: string): ParsedRequest | null {
+  const text = lf(raw);
   const accountNumber = ACCOUNT.exec(text)?.[1]?.trim();
   const authorisedBy = AUTHORISED.exec(text)?.[1]?.trim();
   const lines = items(LIST.exec(text)?.[1]);
@@ -65,7 +68,8 @@ export const acceptedReply = (accountNumber: string, lines: string[]) =>
 export const refusalReply = (reason: string) => ["Hello,", "", `We could not make these changes: ${reason}. Nothing was cancelled.`, "", "BayTel Business support"].join("\n");
 
 /** Only what the reply confirms, and only lines that were asked for, count. Promos are never on the email. */
-export function emailOutcome(reply: string, requested: string[]): CallOutcome {
+export function emailOutcome(raw: string, requested: string[]): CallOutcome {
+  const reply = lf(raw);
   const asked = new Set(requested.map(lineKey));
   const cancelled = [...new Set(items(CANCELLED.exec(reply)?.[1]).map(lineKey))].filter((key) => asked.has(key));
   return { cancelled_lines: cancelled, credits: [], ticket: TICKET.exec(reply)?.[1] ?? null };

@@ -41,6 +41,12 @@ describe("the request email", () => {
     expect(parseRequest(text)).toEqual({ accountNumber: "BT-7001", authorisedBy: "Linda Park", lines: PLAN.cancelLines, disclosed: true });
   });
 
+  it("reads a request and a reply that came back through SMTP with CRLF line ends", () => {
+    const crlf = (text: string) => text.replaceAll("\n", "\r\n");
+    expect(parseRequest(crlf(requestEmail(FACTS, "BT-7001", PLAN.cancelLines, "r").text))?.lines).toEqual(PLAN.cancelLines);
+    expect(emailOutcome(crlf(acceptedReply("BT-7001", PLAN.cancelLines)), PLAN.cancelLines)).toEqual({ cancelled_lines: PLAN.cancelLines.map(lineKey), credits: [], ticket: TICKET_NUMBER });
+  });
+
   it("is never written for an automatic approval", () => {
     expect(() => requestEmail({ ...FACTS, byOwner: false }, "BT-7001", PLAN.cancelLines, "r")).toThrow(/account holder/);
   });

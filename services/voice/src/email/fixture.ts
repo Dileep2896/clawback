@@ -5,7 +5,7 @@ type Stored = { ID: string; From: { Address: string }; To: string; Subject: stri
 
 const field = (query: string, name: string) => new RegExp(`${name}:"([^"]*)"`).exec(query)?.[1];
 
-/** An in-memory Mailpit and Mail adapter for tests. The query matcher covers only the searches the email path makes. */
+/** An in-memory Mailpit and Mail adapter for tests. Text comes back with CRLF line ends, as it does through SMTP. The query matcher covers only the searches the email path makes. */
 export function fakeInbox() {
   const box: Stored[] = [];
   const sent: OutboundEmail[] = [];
@@ -13,7 +13,7 @@ export function fakeInbox() {
     async send(email) {
       sent.push(email);
       const ID = `m${box.length + 1}`;
-      box.push({ ID, From: { Address: email.from ?? "bills@billfighter.local" }, To: email.to, Subject: email.subject, Text: email.text, Read: false });
+      box.push({ ID, From: { Address: email.from ?? "bills@billfighter.local" }, To: email.to, Subject: email.subject, Text: email.text.replaceAll("\n", "\r\n"), Read: false });
       return { id: ID };
     },
     parseInbound: () => {
