@@ -88,3 +88,4 @@ Run `e23702bd-8b22-4290-a998-a7e04de5c837`, 2026-11-07 17:33–17:46 PST. Own da
 ### Still open (needs a decision and spend)
 
 - One Haiku probe (~$0.01): does a delegated thread whose message holds no email park on its first MCP call? If yes, naïve flags every thread, and on naïve every member call costs a park whatever we do. The lever then is the model, not the parks: members on Haiku (`NAIVE_MODEL` is per run today, so this needs a per-agent model), or fewer member tool calls. If no, keep the bill email out of the delegated message.
+  - Attempted 2026-11-07 (`flag-probe.ts thread`, cap $0.05): naïve answered `GET /vaults: 429 rate_limited the service is at capacity` before any session started. Cost $0.0000 (balance $247.086357 before and after), and no session was created. Not retried: waiting on the human.

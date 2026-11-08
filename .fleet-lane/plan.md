@@ -1,0 +1,51 @@
+# Plan: naive-runtime-cost
+
+## What I found
+- naïve docs (`capabilities/tools.md`, "Once a chat has read people's data"): reading contacts, mail, messages or a connected app **flags the chat and every chat it hands work to**; then every MCP tool asks on every call, even at `allow`, and a `scope: "session"` grant does not cover it. So in a flagged run every ungated call of ours parks. A park ends the turn; after our `allow` the model is called again (rehearsal: 68 parks ≈ $2, 13 min on Sonnet).
+- The adapter already answers ungated parks itself (`decide()` → allow, no human, no model decision). The cost is the extra model turn per park, so the fix is **fewer parks**, not a faster answer.
+- What flags our chat is not proven. Candidates: (a) the root message carries the raw bill email JSON (`runPrompt` in `packages/agents/src/run.ts`), (b) MCP tool results count as "a connected app". The fix differs (see questions).
+- CEO's 28 parks are mostly `board_update`. `naive/mirror.ts` copies every card (incl. `done`/`blocked`) to the coordinator's naïve board; naïve starts a board digest "when cards finish or block", which is the stray digest session, even with `board: false`.
+- `finally` cancels only the root, once, with `.catch(() => {})`: network down → sessions left parked.
+
+## Changes (all in `packages/platform/src/naive/` + tests)
+1. **Board out of model calls** (`agent-runtime.ts`): `board_update` is not offered to the CEO on naïve (not in `tools.configs`, a line in the platform note says the board is kept for it). The loop keeps the board itself by calling the run's own `board_update` ToolDef handler (so `wrapTool` still audits and `board_cards` stay the dashboard's record): `thread.created` → card for that member, title = first line of the delegated task, `doing`; thread ends `end_turn`/completed → `done`; failed/stopped/denied → `blocked`. Removes ~28 parks per run.
+2. **No digest sessions** (`mirror.ts`): per answer to Q2, either stop the naïve-console mirror, or mirror only `todo`/`doing` so no card ever finishes on naïve. Plus a sweep (item 3) for safety.
+3. **Cancel every run session, with retry** (`agent-runtime.ts`): on stop, cancel every session in `owned` that is not terminal (root, threads), not only the root. Each cancel retries on network error (every 5 s, up to 5 min; `409 session_terminal` counts as done); whatever is still left is printed by id so a person can cancel it.
+4. **Fewer flagged reads** (depends on Q1/probe): if the raw email in the root message flags the chat, the root message carries the parsed bill facts instead (this touches `runPrompt` in `packages/agents`, outside the lane, so only with a test proving it). If MCP results flag it, item 1 is the main lever and I note the floor.
+5. **Measure parks**: the loop counts ungated parks it answered and gated ones, reported in the final `naïve cost` text line and one `audit_log` row (`naive_run_stats`: parks, ungated parks, sessions, duration).
+
+## How I check it
+- Fake-naïve tests in `agent-runtime.test.ts`: ungated parked calls confirmed with no model/owner step and counted; board cards created/moved by the loop from thread events through the handler, CEO toolset has no `board_update`; stop cancels root and every thread; cancel retries after simulated network errors then succeeds; terminal sessions not re-cancelled.
+- `mirror.test.ts` for the Q2 choice.
+- `pnpm test`, lint, typecheck.
+- Live only if approved (Q1/Q3): parks, cost, duration recorded in `docs/plan/naive-notes.md`.
+
+## What changed and how to try it
+
+Answers applied: the naïve board mirror is dropped (Q2), and there is one card per delegated task (Q3). The live probe (Q1) showed that the raw email in the first message does **not** flag the chat; an MCP tool result does. So `runPrompt` was not changed (item 4 dropped).
+
+- `packages/platform/src/naive/board.ts`: our `board_cards` only. `mirror.ts` and `mirror.test.ts` are deleted, so nothing is written to naïve's board and no board-digest sessions start.
+- `packages/platform/src/naive/agent-runtime.ts`:
+  - On naïve the CEO is not offered `board_update`, and a note in its prompt says so. The runtime makes a card through the run's own `board_update` handler when a member thread starts: titled with the first line of the delegated task, `doing`. It moves the card to `done` on `thread.idle`, to `blocked` on failure or `thread.terminated`, and to `blocked` if the member never reported. The CEO's first MCP result is now its summary email, so it and the members it starts stay unflagged.
+  - On stop, `cancelAll` cancels every session the run owns (root and threads), retrying every 5 s for up to 5 min while naïve is unreachable. `409 session_terminal` counts as done, and anything left is printed by id.
+  - Parks (total and ungated), sessions and duration go in the final `naïve cost:` text line and in an `audit_log` row `naive_run_stats`.
+- `packages/platform/src/naive/flag-probe.ts`: the live probe (Haiku, $0.001).
+- `docs/plan/naive-rehearsal-notes.md`: cherry-picked from `fleet/naive-rehearsal` (notes only, so the later merge sees the same file) and extended with the probe and the changes.
+
+Try: `pnpm exec vitest run packages/platform/src/naive` (new tests are under "naïve runtime cost"). For a live run, see the measurement section in `naive-rehearsal-notes.md`.
+
+### Known limits
+- Board cards on naïve are one per delegated member task, titled from the CEO's task message, not written by the CEO (orchestrator-approved).
+- Members still park on every MCP call after their own first result: naïve refuses the call and the model re-issues it. Our allow adds no model turn, but naïve's refusal and the re-issue cannot be avoided from our side.
+- Cards and the sessions the run owns live in memory for the run, one run at a time (the demo rule, as before).
+
+### Live results
+- Probe (Haiku, $0.0010): an MCP result flags a chat; the email in the first message does not; our allow adds no model turn.
+- Sonnet measurement run: **success** (all 19 actions done), **$1.7044, 13:33, 53 parks** (28 ungated). Run 1 was $1.97, 13:13, 68 parks. **Targets ($0.75, 7 min) missed.** Member threads park on every call from their first, so they start flagged for a reason the CEO change does not reach. Details and the next probe proposal are in `docs/plan/naive-rehearsal-notes.md`. All sessions are cancelled, and none are open on the API.
+
+## Fix round
+- **Blocking 1, failed tasks can appear done (agent-runtime.ts:283):** on `thread.idle` the runtime now reads the member's session from the API before it picks `done` or `blocked`, so a stale or missing copy can't mark a failed member `done`. The test fake now returns session snapshots, as HTTP would, not shared objects (that sharing is why the old tests could not catch this). New test: "reads a member's own state when its result folds back…".
+- **Blocking 2, failed board updates dropped (agent-runtime.ts:137):** a card keeps its mapping until its move is written. A failed move is retried at the start of each poll round and once more at the end. If it still fails, a run that would have succeeded ends `error: board cards not updated: <ids>`. The first outcome wins, so `thread.idle` followed by `thread.terminated` stays `done`. New test: "retries a card move that failed to write, and fails the run if it never lands".
+- Both new tests fail on the old code and pass now. Lint, typecheck and `pnpm test` pass (111 files, 1811 tests).
+- Non-blocking: the flagging comment (agent-runtime.ts:21) now matches the Sonnet measurement.
+- Thread probe (C, `flag-probe.ts thread`), approved 17:54: the one attempt failed with naïve `GET /vaults: 429 rate_limited the service is at capacity` before any session started, so it cost $0.0000. answers.md says not to retry a failed run without asking, so I asked in questions.md.
