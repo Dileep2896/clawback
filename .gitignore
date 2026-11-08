@@ -29,3 +29,9 @@ data/samples/
 # Rejected or half-written captures, which can hold the secrets that got them rejected.
 data/replay/*.failed
 data/replay/*.tmp
+
+# The demo video: footage, voice and renders stay out of git (video/README.md).
+video/out/
+video/public/footage/
+video/public/vo/
+video/public/call.*

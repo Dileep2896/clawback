@@ -32,7 +32,7 @@ function boundary(packages) {
 }
 
 export default [
-  { ignores: ["**/node_modules/", "**/.next/", "**/dist/", "**/coverage/", "**/next-env.d.ts", "data/"] },
+  { ignores: ["**/node_modules/", "**/.next/", "**/dist/", "**/coverage/", "**/next-env.d.ts", "data/", "video/"] },
   ...tseslint.configs.recommended,
   {
     files: ["**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}"],

@@ -1,0 +1,3 @@
+# Own install, outside the repo workspace (pnpm install --ignore-workspace from this folder).
+allowBuilds:
+  esbuild: true
