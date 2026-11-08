@@ -32,9 +32,28 @@ async function checkPage(browser: Browser, path: string, viewport: (typeof VIEWP
   const where = `${path} at ${viewport.name}${reducedMotion ? ", reduced motion" : ""}`;
   assert.equal(response?.status(), 200, `${where}: status ${response?.status()}`);
   assert.equal(new URL(page.url()).pathname, path, `${where}: redirected to ${page.url()}`);
-  // Scroll through once so every reveal plays, then come back: the measure covers the finished page.
-  await page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
-  await page.waitForTimeout(800);
+  // Scroll down half a screen at a time, so every section crosses the viewport and each reveal plays, as a reader would see it.
+  await page.evaluate(`(async () => {
+    while (scrollY + innerHeight < document.documentElement.scrollHeight) {
+      scrollBy(0, innerHeight / 2);
+      await new Promise((done) => setTimeout(done, 150));
+    }
+  })()`);
+  await page.waitForFunction(`!document.querySelector('[data-reveal="ready"]')`, undefined, { timeout: 5000 }).catch(() => {
+    throw new Error(`${where}: a reveal never played`);
+  });
+  await page.waitForTimeout(1200); // the longest reveal animation
+  // /how-it-works: centring each step lights its node in the graph, and only that one.
+  const steps = await page.locator("[data-step]").count();
+  for (let i = 0; i < steps; i++) {
+    await page.evaluate(`document.getElementById("step-${i + 1}").scrollIntoView({ block: "center" })`);
+    const active = page.locator('ol[aria-label="The agents, in order"] a[aria-current="step"]');
+    await page.waitForFunction(`document.querySelector('ol[aria-label="The agents, in order"] a[aria-current="step"]')?.getAttribute("href") === "#step-${i + 1}"`, undefined, { timeout: 3000 }).catch(() => {
+      throw new Error(`${where}: step ${i + 1} in view but the graph does not mark it`);
+    });
+    assert.equal(await active.count(), 1, `${where}: more than one step marked current`);
+  }
+  if (path === "/how-it-works") assert.ok(steps >= 6, `${where}: expected six steps, found ${steps}`);
   await page.evaluate("window.scrollTo(0, 0)");
 
   const { scrollWidth, innerWidth } = await page.evaluate<{ scrollWidth: number; innerWidth: number }>(WIDTHS);
