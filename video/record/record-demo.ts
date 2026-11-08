@@ -1,7 +1,9 @@
 // Records the demo video's one take (.fleet-lane brief, docs/plan/demo-video.md) as CDP screencast frames plus an event log.
 // Before the take, not captured: Linda signs up, connects BayCurrent, starts the audit and waits at approval in her own context.
 // The take: landing hero, sample business signs up and uploads its bill, cut to Linda on /agents: the Collector, the Auditor's
-// kWh chart, Approve in the amber card, the call in the Now pane to Success, then Overview, Money. A copy of scripts/rehearse-stage.ts's flow, not an import (it has no exports).
+// kWh chart, Approve in the amber card, the call in the Now pane to Success, then Findings, Overview, Money. A copy of scripts/rehearse-stage.ts's flow, not an import (it has no exports).
+// Paced to the voiceover (video/src/vo-words.json): each step happens on its word, and every element the voice names is logged
+// with its box before the edit highlights it (scenes.json; syncProblems checks it).
 // Run from the repo root after pnpm demo:reset, with dashboard, portal and webhooks up:
 // pnpm exec tsx --env-file-if-exists=.env video/record/record-demo.ts [--live]
 // --live needs VOICE_MODE=live here and on the webhook process, and places one real call. Writes a new gitignored video/out/take-<time>/.
@@ -10,6 +12,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
 import { type BrowserContext, chromium, type Locator, type Page } from "playwright";
+import { phraseAt, type Word } from "../src/timeline.ts";
+import voWords from "../src/vo-words.json" with { type: "json" };
 import { liveCallProblem, type TakeCall } from "./live-check.ts";
 
 const BASE = process.env.DASHBOARD_URL ?? "http://localhost:3000";
@@ -28,7 +32,7 @@ if (mode !== (live ? "live" : "sim")) throw new Error(`VOICE_MODE is "${mode}"; 
 
 type Box = { x: number; y: number; w: number; h: number };
 const frames: { file: string; ts: number }[] = [];
-const events: { t: number; kind: string; label?: string; box?: Box }[] = [];
+const events: { t: number; kind: string; label?: string; box?: Box; boxes?: Box[] }[] = [];
 let origin = 0; // epoch ms of the first frame; every t is measured from it
 
 const type = (page: Page, label: string, text: string) => page.getByLabel(label).pressSequentially(text, { delay: TYPE_DELAY_MS });
@@ -37,10 +41,41 @@ const boxOf = async (target: Locator): Promise<Box | undefined> => {
   const b = await target.boundingBox();
   return b ? { x: b.x, y: b.y, w: b.width, h: b.height } : undefined;
 };
+/** Logs a step (and the box of what it shows) at this moment; returns the moment, epoch ms, for pacing the voiceover from it. */
 const log = async (kind: string, target?: Locator, label?: string) => {
-  if (!origin) return; // before the take: nothing is filmed yet
-  events.push({ t: Date.now() - origin, kind, label, box: target && (await boxOf(target)) });
-  console.info(`${((Date.now() - origin) / 1000).toFixed(1).padStart(7)}s  ${kind}${label ? ` ${label}` : ""}`);
+  const at = Date.now();
+  if (!origin) return at; // before the take: nothing is filmed yet
+  events.push({ t: at - origin, kind, label, box: target && (await boxOf(target)) });
+  console.info(`${((at - origin) / 1000).toFixed(1).padStart(7)}s  ${kind}${label ? ` ${label}` : ""}`);
+  return at;
+};
+/** One spoken thing that is several elements: a box for each, all of which must be on screen. */
+const logAll = async (kind: string, targets: Locator[]) => {
+  const boxes = (await Promise.all(targets.map(boxOf))).filter((b): b is Box => !!b);
+  assert.equal(boxes.length, targets.length, `${kind}: not every element is on screen`);
+  events.push({ t: Date.now() - origin, kind, boxes });
+  console.info(`${((Date.now() - origin) / 1000).toFixed(1).padStart(7)}s  ${kind} (${boxes.length})`);
+};
+/** Union of two boxes: the call's head is its waveform through its timer. */
+const join2 = (a: Box, b: Box): Box => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.max(a.x + a.w, b.x + b.w) - Math.min(a.x, b.x), h: Math.max(a.y + a.h, b.y + b.h) - Math.min(a.y, b.y) });
+/** A box cut to what its scrolling container shows (a long table in the Now pane). */
+const clip = (b: Box, c: Box): Box => ({ x: Math.max(b.x, c.x), y: Math.max(b.y, c.y), w: Math.min(b.x + b.w, c.x + c.w) - Math.max(b.x, c.x), h: Math.min(b.y + b.h, c.y + c.h) - Math.max(b.y, c.y) });
+const logBox = (kind: string, box: Box | undefined) => {
+  assert.ok(box && box.w > 0 && box.h > 0, `${kind}: not on screen`);
+  events.push({ t: Date.now() - origin, kind, box });
+  console.info(`${((Date.now() - origin) / 1000).toFixed(1).padStart(7)}s  ${kind}`);
+};
+
+/** The voiceover's clock for one scene: the clip's second `anchorSec` fell at `anchorMs`. `until` waits for a clip second. */
+const voClock = (page: Page, clip: string, anchorMs: number, anchorSec = 0) => {
+  const words = (voWords as Record<string, Word[]>)[clip]!;
+  return {
+    word: (phrase: string) => phraseAt(words, phrase).start,
+    until: async (sec: number) => {
+      const ms = anchorMs + (sec - anchorSec) * 1000 - Date.now();
+      if (ms > 0) await page.waitForTimeout(ms);
+    },
+  };
 };
 const click = async (kind: string, target: Locator) => {
   await target.scrollIntoViewIfNeeded();
@@ -119,14 +154,21 @@ try {
   const stopSam = await capture(sam);
   await sam.waitForTimeout(500);
   await signUp(sam, { name: "Sam Lee", company: "Mission Dumplings", email: `sam+${Date.now()}@missiondumplings.example`, password: "dumplings-2026" }, true);
-  await think(sam);
+  // V3 (scene 3 starts 2.4 s before this): "You upload a bill, or give us your provider login, and that's the last thing…"
+  const v3 = voClock(sam, "V3.m4a", await log("onboarding"), 2.4);
+  const portalTab = sam.getByRole("tab", { name: "Sign in to your provider" });
+  const dropzone = sam.locator("label", { has: sam.getByTestId("upload-input") });
+  await log("provider-login", portalTab);
+  await v3.until(v3.word("upload a bill") - 0.6);
   await click("upload-tab", sam.getByTestId("upload-tab"));
-  await think(sam);
-  await log("upload", sam.getByTestId("upload-input"));
+  await dropzone.waitFor();
+  await log("upload-field", dropzone);
+  await v3.until(v3.word("and that's"));
+  await log("upload", dropzone);
   await sam.getByTestId("upload-input").setInputFiles(SAMPLE_BILL);
   await sam.locator('[data-status="saved"]').waitFor({ timeout: 30_000 });
   await log("bill-saved", sam.getByTestId("upload-list"));
-  await sam.waitForTimeout(2500);
+  await v3.until(10.5);
   await stopSam();
 
   // Part 2: cut to Linda, already signed in.
@@ -140,23 +182,41 @@ try {
   // finding's kWh chart inline (the lead finding is the biggest refund), then back to the amber approval card.
   await linda.goto(`${BASE}/agents`);
   const now = linda.locator('section[aria-labelledby="now-title"]');
+  const nowBody = now.locator('[role="group"]');
   await linda.locator('section[data-moment="approval"]').waitFor();
   await linda.evaluate(() => document.fonts.ready);
-  await log("agents-before");
-  await log("money-found", linda.getByTestId("money-found"));
-  await linda.waitForTimeout(3000);
-  await click("collector", linda.locator('[data-agent-row="collector"]'));
-  await linda.waitForTimeout(5000);
-  await click("auditor", linda.locator('[data-agent-row="auditor"]'));
+  // V4 from here: "The Collector pulls two years of bills and meter data. The Auditor checks every line against the tariff.
+  // Here it finds that since the meter was changed in September 2025, the Fremont store has been billed for double the electricity it used."
+  const v4 = voClock(linda, "V4.m4a", await log("agents-before"));
+  const collectorRow = linda.locator('[data-agent-row="collector"]');
+  const auditorRow = linda.locator('[data-agent-row="auditor"]');
+  await log("collector-row", collectorRow);
+  await log("auditor-row", auditorRow);
+  await v4.until(v4.word("collector") + 0.1);
+  await click("collector", collectorRow);
+  const bills = linda.getByTestId("collector-view").locator("table").first();
+  await bills.waitFor();
+  await linda.waitForTimeout(400); // the Now pane's fade-in
+  logBox("collector-bills", clip((await boxOf(bills))!, (await boxOf(nowBody))!));
+  await v4.until(v4.word("auditor") - 0.1);
+  await click("auditor", auditorRow);
   await linda.getByTestId("kwh-plot").waitFor();
-  await linda.waitForTimeout(800);
-  await log("kwh-plot", linda.getByTestId("kwh-plot"));
-  await linda.waitForTimeout(11_000);
+  await linda.waitForTimeout(400);
+  const finding = now.locator("article").first();
+  await log("finding", finding);
+  await log("swap-marker", linda.getByTestId("swap-marker"));
+  await log("fremont", finding.locator("p", { hasText: /^Fremont/ }).first());
+  await log("kwh-bars", linda.getByTestId("kwh-plot"));
+  await v4.until(18.7);
   await click("follow-live", linda.getByRole("button", { name: "Follow live" }));
+  // V5: "…the Approver asks the owner once. One tap." The edit plays the Approve click on "tap".
   const card = linda.locator('section[aria-labelledby="approval-title"]');
   await card.waitFor();
-  await log("approval", card);
-  await linda.waitForTimeout(3000);
+  const v5 = voClock(linda, "V5.m4a", await log("approval-card", card), -0.55); // scene 5 starts 0.55 s after the card shows
+  await log("approve-button", linda.getByTestId("approve"));
+  // The card offers Call or Email (email-negotiator); the take keeps the default, Call.
+  if (await linda.getByTestId("contact-choice").count()) assert.ok(await linda.getByTestId("contact-call").isChecked(), "the take keeps Call");
+  await v5.until(v5.word("tap"));
   await click("approve", linda.getByTestId("approve"));
   // Once approved, the Now pane leaves the approval for the next moment, so the card (and its decision line) unmounts.
   await linda.locator('section[data-moment="approval"]').waitFor({ state: "detached", timeout: 15_000 });
@@ -175,7 +235,8 @@ try {
       await log("call-start", now);
       // The call's head (waveform, timer) is what the call scenes zoom on; the pane itself is mostly empty during a live call.
       await now.getByTestId("call-timer").waitFor({ timeout: 10_000 });
-      await log("call-head", now.getByTestId("call-timer"));
+      const wave = now.locator(".call-bar").first().locator("xpath=..");
+      logBox("call-head", join2((await boxOf(wave))!, (await boxOf(now.getByTestId("call-timer")))!));
     }
     if (callSeen && !callEnded && snap.calls.every((call) => call.endedAt)) {
       callEnded = true;
@@ -187,12 +248,51 @@ try {
   await log("run-end", undefined, status);
   await linda.waitForTimeout(3000);
 
+  // V7: "It cancels seven lines nobody uses, flags three expired promotions and the Filer files the overbilling claim…"
+  await linda.goto(`${BASE}/findings`);
+  const rows = linda.locator("tr[data-finding-row]");
+  await rows.first().waitFor();
+  await linda.evaluate(() => document.fonts.ready);
+  const rule = (label: string) => rows.filter({ has: linda.getByText(label, { exact: true }) });
+  const cancelled = rule("Unused line").filter({ hasNot: linda.getByText("Found, not acted on") });
+  const promos = rule("Promo ended");
+  const claim = rule("Meter multiplier");
+  assert.equal(await cancelled.count(), 7, "seven cancelled lines");
+  assert.equal(await promos.count(), 3, "three expired promotions");
+  assert.equal(await claim.count(), 1, "one overbilling claim");
+  // Show the lines and promos together (and the claim too when it all fits), centred under the sticky table header.
+  const docSpan = async (locs: Locator[]) => {
+    const spans = await Promise.all(locs.map((l) => l.evaluateAll((els) => els.map((el) => [el.getBoundingClientRect().top + scrollY, el.getBoundingClientRect().bottom + scrollY]))));
+    const flat = spans.flat();
+    return { top: Math.min(...flat.map((x) => x[0]!)), bottom: Math.max(...flat.map((x) => x[1]!)) };
+  };
+  const scrollToSpan = (span: { top: number; bottom: number }) => linda.evaluate(({ top, bottom }) => window.scrollTo(0, Math.max(0, top - 60 - (innerHeight - 60 - (bottom - top)) / 2)), span);
+  const all = await docSpan([cancelled, promos, claim]);
+  const together = all.bottom - all.top < 1080 - 120;
+  const group = together ? all : await docSpan([cancelled, promos]);
+  assert.ok(group.bottom - group.top < 1080 - 120, "the cancelled lines and the promos do not fit on one screen");
+  await scrollToSpan(group);
+  await linda.waitForTimeout(300);
+  const v7 = voClock(linda, "V7.m4a", await log("findings"));
+  await logAll("cancelled-lines", await cancelled.all());
+  await logAll("promos", await promos.all());
+  if (together) await log("claim-row", claim);
+  else {
+    await v7.until(phraseAt((voWords as Record<string, Word[]>)["V7.m4a"]!, "3 expired promotions").end + 0.05);
+    await scrollToSpan(await docSpan([claim]));
+    await log("claim-row", claim);
+  }
+  await v7.until(12.4);
+
+  // V8: "Twelve thousand six hundred dollars back, and over eighteen thousand a year saved. We take thirty percent…"
   await linda.goto(`${BASE}/overview`);
   await linda.getByTestId("overview-run-status").waitFor();
+  await linda.evaluate(() => document.fonts.ready);
+  const v8 = voClock(linda, "V8.m4a", await log("overview"));
   await log("overview-refund", linda.getByTestId("overview-refund"));
   await log("overview-savings", linda.getByTestId("overview-savings"));
-  // Under the money line (V8, 12 s).
-  await linda.waitForTimeout(13_000);
+  await log("overview-fee", linda.getByTestId("overview-fee"));
+  await v8.until(12.6);
   const seen = Object.fromEntries(await Promise.all(Object.keys(EXPECTED).map(async (id) => [id, await linda.getByTestId(id).innerText()])));
   await linda.goto(`${BASE}/money`);
   await linda.locator("[data-ledger-row]").first().waitFor();

@@ -2,13 +2,59 @@
   "scenes": [
     { "id": "1-problem", "title": "Landing hero", "vo": "V1.m4a", "voSec": 13.44, "footage": { "from": "landing", "offsetSec": -0.3 } },
     { "id": "2-title", "title": "Clawback title card", "vo": "V2.m4a", "voSec": 7.32, "card": "title" },
-    { "id": "3-signup", "title": "Sign-up and upload", "vo": "V3.m4a", "voSec": 9.66, "footage": { "from": "signup-form", "offsetSec": -0.5, "rate": 1.6 } },
-    { "id": "4-agents", "title": "Agents at work, kWh chart", "vo": "V4.m4a", "voSec": 19.35, "footage": { "from": "agents-before", "offsetSec": 0.2 }, "zoom": { "at": "kwh-plot", "scale": 1.5, "offsetSec": 0.4 } },
-    { "id": "5-approval", "title": "Linda approves", "vo": "V5.m4a", "voSec": 7.68, "footage": { "from": "approval", "offsetSec": -0.1 }, "zoom": { "at": "approve", "scale": 1.5, "offsetSec": -1.5 } },
-    { "id": "6-call-opens", "title": "Call panel opens", "vo": "V6.m4a", "voSec": 4.65, "footage": { "from": "approval", "offsetSec": 8.08 }, "zoom": { "at": "call-head", "scale": 1.45, "offsetSec": -0.3 } },
-    { "id": "7-call", "title": "Real call audio, no voiceover", "sec": 21, "footage": { "from": "call-start", "offsetSec": 9.8 }, "zoom": { "at": "call-head", "scale": 1.45, "offsetSec": -10 }, "callAudio": { "fromSec": 0 }, "label": "Real call, recorded live · call continues, 2:25 total", "emailCardAtSec": 17 },
-    { "id": "8-filer", "title": "Call ends, Filer and ledger", "vo": "V7.m4a", "voSec": 11.97, "footage": { "from": "call-end", "offsetSec": -1, "rate": 3 } },
-    { "id": "9-money", "title": "Overview: refund and savings", "vo": "V8.m4a", "voSec": 11.99, "footage": { "from": "overview-refund", "offsetSec": -0.5 }, "zoom": { "at": "overview-refund", "scale": 1.7, "offsetSec": 0.3 }, "callout": "overview-refund" },
+    {
+      "id": "3-signup", "title": "Sign-up and upload", "vo": "V3.m4a", "voSec": 9.66,
+      "footage": { "from": "onboarding", "offsetSec": -2.4 },
+      "highlights": [
+        { "say": "upload a bill", "box": "upload-field" },
+        { "say": "provider login", "box": "provider-login" }
+      ]
+    },
+    {
+      "id": "4-agents", "title": "Collector, Auditor, kWh chart", "vo": "V4.m4a", "voSec": 19.35,
+      "footage": { "from": "agents-before" },
+      "highlights": [
+        { "say": "collector", "to": "pulls", "box": "collector-row" },
+        { "say": "two years of bills and meter data", "box": "collector-bills" },
+        { "say": "auditor", "to": "checks", "box": "auditor-row" },
+        { "say": "every line against the tariff", "box": "finding" },
+        { "say": "since the meter was changed in september 2025", "box": "swap-marker" },
+        { "say": "fremont store", "box": "fremont" },
+        { "say": "double the electricity", "to": "it used", "box": "kwh-bars" }
+      ]
+    },
+    {
+      "id": "5-approval", "title": "Linda approves", "vo": "V5.m4a", "voSec": 7.68,
+      "footage": { "from": "approve", "atWord": "tap" },
+      "highlights": [
+        { "say": "asks the owner once", "box": "approval-card" },
+        { "say": "one tap", "box": "approve-button" }
+      ]
+    },
+    {
+      "id": "6-call-opens", "title": "Call panel opens", "vo": "V6.m4a", "voSec": 4.65,
+      "footage": { "from": "approve", "offsetSec": 2.13 },
+      "highlights": [{ "say": "picks up the phone", "box": "call-head" }]
+    },
+    { "id": "7-call", "title": "Real call audio, no voiceover", "sec": 21, "footage": { "from": "approve", "offsetSec": 7.28 }, "zoom": { "at": "call-head", "scale": 1.45, "offsetSec": -10 }, "callAudio": { "fromSec": 0 }, "label": "Real call, recorded live · call continues, 2:25 total", "emailCardAtSec": 17 },
+    {
+      "id": "8-findings", "title": "Findings: lines, promos, the claim", "vo": "V7.m4a", "voSec": 11.97,
+      "footage": { "from": "findings" },
+      "highlights": [
+        { "say": "7 lines nobody uses", "box": "cancelled-lines" },
+        { "say": "3 expired promotions", "box": "promos" },
+        { "say": "the filer files the overbilling claim", "to": "rule", "box": "claim-row" }
+      ]
+    },
+    {
+      "id": "9-money", "title": "Overview: refund, savings, fee", "vo": "V8.m4a", "voSec": 11.99,
+      "footage": { "from": "overview" },
+      "highlights": [
+        { "say": "$12,600", "to": "back", "box": "overview-refund", "count": true },
+        { "say": "$18,000 a year", "to": "saved", "box": "overview-savings" },
+        { "say": "30%", "to": "comes back", "box": "overview-fee" }
+      ]
+    },
     { "id": "10-close", "title": "Close card", "vo": "V9.m4a", "voSec": 6.46, "card": "close" }
   ]
 }

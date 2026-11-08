@@ -10,20 +10,45 @@ export const C = { paper: "#0b0f14", sheet: "#141a21", line: "#263040", ink: "#e
 export const SANS = '"Atkinson Hyperlegible Next", system-ui, sans-serif';
 export const SERIF = '"Source Serif 4", Georgia, serif';
 
-/** Springs into a box from `start` (scene frames) and stays. Clamped so the footage never shows an edge. */
-export function ZoomTo({ box, start, zoom = 1.8, children }: { box?: Box; start: number; zoom?: number; children: ReactNode }) {
+const MAX_ZOOM = 1.6;
+/** One camera move: to `box` from `frame` on, so it fills about half the frame (1x to MAX_ZOOM), unless `scale` is given. */
+export type Shot = { frame: number; box: Box; scale?: number };
+
+/** Springs from one named element to the next, in footage coordinates. Clamped so the footage never shows an edge. */
+export function Camera({ shots, children }: { shots: Shot[]; children: ReactNode }) {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
-  if (!box) return <AbsoluteFill>{children}</AbsoluteFill>;
-  const k = spring({ frame: frame - start, fps, config: { damping: 200 }, durationInFrames: 40 });
-  const s = interpolate(k, [0, 1], [1, zoom]);
-  const cx = box.x + box.w / 2;
-  const cy = box.y + box.h / 2;
-  const limX = (width * (s - 1)) / (2 * s);
-  const limY = (height * (s - 1)) / (2 * s);
-  const tx = Math.max(-limX, Math.min(limX, (width / 2 - cx) * k));
-  const ty = Math.max(-limY, Math.min(limY, (height / 2 - cy) * k));
-  return <AbsoluteFill style={{ transform: `scale(${s}) translate(${tx}px, ${ty}px)`, transformOrigin: "50% 50%" }}>{children}</AbsoluteFill>;
+  let cur = { cx: width / 2, cy: height / 2, s: 1 };
+  for (const shot of shots) {
+    if (frame < shot.frame) break;
+    const k = spring({ frame: frame - shot.frame, fps, config: { damping: 200 }, durationInFrames: 24 });
+    const s = shot.scale ?? Math.min(MAX_ZOOM, Math.max(1, Math.min((width * 0.55) / shot.box.w, (height * 0.55) / shot.box.h)));
+    const to = { cx: shot.box.x + shot.box.w / 2, cy: shot.box.y + shot.box.h / 2, s };
+    cur = { cx: cur.cx + (to.cx - cur.cx) * k, cy: cur.cy + (to.cy - cur.cy) * k, s: cur.s + (to.s - cur.s) * k };
+  }
+  const limX = (width * (cur.s - 1)) / (2 * cur.s);
+  const limY = (height * (cur.s - 1)) / (2 * cur.s);
+  const tx = Math.max(-limX, Math.min(limX, width / 2 - cur.cx));
+  const ty = Math.max(-limY, Math.min(limY, height / 2 - cur.cy));
+  return <AbsoluteFill style={{ transform: `scale(${cur.s}) translate(${tx}px, ${ty}px)`, transformOrigin: "50% 50%" }}>{children}</AbsoluteFill>;
+}
+
+/** A box on each thing the voice names, faded in over the lead before its word (6 frames) and out after its phrase. */
+export function Boxes({ items }: { items: { from: number; to: number; boxes: Box[] }[] }) {
+  const frame = useCurrentFrame();
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none" }}>
+      {items.flatMap((item, i) => {
+        const o = interpolate(frame, [item.from, item.from + 6, item.to, item.to + 6], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+        if (o <= 0) return [];
+        // Rows stacked edge to edge (the seven lines) get no vertical padding, so their boxes do not overlap.
+        const pad = item.boxes.length > 1 ? 1 : 6;
+        return item.boxes.map((b, j) => (
+          <div key={`${i}-${j}`} style={{ position: "absolute", left: b.x - 8, top: b.y - pad, width: b.w + 16, height: b.h + pad * 2, borderRadius: 12, border: `3px solid ${C.money}`, boxShadow: "0 0 0 4px rgb(11 15 20 / 0.4)", opacity: o, transform: `scale(${0.96 + 0.04 * o})` }} />
+        ));
+      })}
+    </AbsoluteFill>
+  );
 }
 
 /** A drawn arrow that glides to each click and rings on it. Playwright clicks leave no real cursor in the footage. */
@@ -57,20 +82,18 @@ export function Cursor({ clicks }: { clicks: { frame: number; x: number; y: numb
 
 const usd = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-/** A ring round the figure and a count-up laid over it, which fades to reveal the page's own number. */
+/** A count-up laid over the figure, which fades to reveal the page's own number. Its box is drawn by Boxes. */
 export function Callout({ box, start, cents }: { box?: Box; start: number; cents: number }) {
   const frame = useCurrentFrame();
   if (!box) return null;
   const f = frame - start;
   const count = interpolate(f, [0, 45], [0, cents], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) });
   const cover = interpolate(f, [-1, 0, 50, 62], [0, 1, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
-  const ring = interpolate(f, [0, 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
       <div style={{ position: "absolute", left: box.x - 4, top: box.y - 4, width: box.w + 8, height: box.h + 8, background: C.sheet, opacity: cover, fontFamily: SERIF, fontWeight: 600, fontSize: box.h * 0.82, lineHeight: `${box.h + 8}px`, color: C.ink, fontVariantNumeric: "lining-nums tabular-nums", whiteSpace: "nowrap" }}>
         {usd(Math.round(count))}
       </div>
-      <div style={{ position: "absolute", left: box.x - 18, top: box.y - 14, width: box.w + 36, height: box.h + 28, borderRadius: 14, border: `3px solid ${C.money}`, opacity: ring, transform: `scale(${0.92 + 0.08 * ring})` }} />
     </AbsoluteFill>
   );
 }

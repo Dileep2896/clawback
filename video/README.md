@@ -16,6 +16,9 @@ Footage, voice and renders are gitignored: `out/`, `public/footage/`, `public/vo
 ## Edit and render (from `video/`)
 
 - Voiceover clips: copy `~/Desktop/clawback-voiceover/Clawback/V*.m4a` to `public/vo/` (never edit the originals). Scene lengths in `public/scenes.json` are the clip lengths (ffprobe) plus a 0.5 s breath.
+- Word timings (once per set of clips, free and local): download `ggml-small.en.bin` from huggingface.co/ggerganov/whisper.cpp into `out/models/`, then from the repo root `pnpm exec tsx video/record/vo-words.ts` writes `src/vo-words.json` (whisper.cpp, the speech onset from the leading silence, misheard words set to the script's).
+- Highlights: each scene's `highlights` in `public/scenes.json` names a phrase the voice says (`say`, held to the end of `to`) and the logged element to box. The box shows 0.2 s before the word and the camera moves to that element. The recorder is paced by the same word times, so every named element is on screen and logged before its word. `footage.atWord` plays an event on a word (the Approve click on "tap").
+- Sync proof: after `pnpm rough`, from the repo root `pnpm exec tsx video/record/sync-sheet.ts video/out/rough.mp4 ~/Desktop/clawback-video/sync-sheet-<date>.png` prints any element boxed before the take showed it and tiles one still per highlight.
 - `pnpm studio` to preview, `pnpm rough` for the rough cut with timecode and scene names, `pnpm render` (H.264 CRF 16) and `pnpm master` (ProRes HQ).
 - Loudness: `ffmpeg -i out/demo.mp4 -c:v copy -af loudnorm=I=-16:TP=-1.5:LRA=11 -c:a aac -b:a 320k out/demo-final.mp4`.
 - `src/timeline.test.ts` runs under the root `pnpm test`.
