@@ -488,3 +488,23 @@ Orchestrator decisions:
 **depends on:** demo-video (raw take copied to `~/Desktop/clawback-video/raw-take-2026-11-08/`)
 
 **parallel with:** demo-video
+
+### `compare-fix`
+
+**Goal:** Make the /compare positioning grid claim only what our sources support. Human, 2026-11-08, asked "how much is this part claimable?" about the "Who it serves, by who does the work" grid, then said "yes" to these fixes.
+
+Orchestrator decisions (all in `apps/dashboard/app/compare/page.tsx`, sources in `docs/plan/competitors.md`):
+1. Troy & Banks: take it off the grid (as Trim is), because its row says who does the work is not stated publicly. Update the comment above `SERVES`.
+2. Under the grid, one line: "Among the companies we compared; terms read from their public pages on November 7, 2026."
+3. Arcadia: move to "Software plus the vendor's staff" (its home page offers "expert advisory"); keep EnergyCAP where it is.
+4. Billshark: also in "Says it serves small businesses" (its menu lists "Corporate / Business Billing"), keeping it in Households; if the layout can't show one name twice cleanly, put it in small businesses with a short note.
+5. Clawback's "Who does the work" cell: "AI agents; you approve once (tap or text)". Check the same "by text" wording elsewhere on the public pages and fix it the same way.
+No new claims, no new competitors. Screenshot /compare at 1440 and 390.
+
+**Acceptance checks:** the five edits visible in the screenshots; `pnpm lint`, typecheck (dashboard) and `pnpm test` pass.
+
+**Estimate:** 0.3 hours
+
+**depends on:** none
+
+**parallel with:** presentation
