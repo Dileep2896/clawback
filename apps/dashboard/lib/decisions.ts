@@ -1,6 +1,6 @@
 import { decideApproval } from "@bill-fighter/db/approvals";
 import type { Db } from "@bill-fighter/db/client";
-import { approvals, customers, runs, smsMessages } from "@bill-fighter/db/schema";
+import { approvals, customers, runs, smsMessages, users } from "@bill-fighter/db/schema";
 import { and, desc, eq, gte } from "drizzle-orm";
 import { isSandbox } from "@bill-fighter/shared/sandbox";
 import { z } from "zod";
@@ -34,12 +34,17 @@ async function runOf(db: Db, runId: string) {
 const bundleOf = async (db: Db, runId: string) => (await db.select({ id: approvals.id }).from(approvals).where(eq(approvals.runId, runId)))[0];
 
 /** The backup path in both platform modes, so it touches only the run, its customer and its bundle. Never SMS. */
-export async function approveRun(db: Db, runId: string, customerId?: string) {
+export async function approveRun(db: Db, runId: string, customerId?: string, userId?: string) {
   const { approver, customerId: owner, replay } = await runOf(db, runId);
   // The signed-in customer's own runs only: one customer never releases another's bundle. Same answer as a missing run.
   if (customerId !== undefined && owner !== customerId) throw new Refused(`Run ${runId} does not exist`, 404);
   if (!(await bundleOf(db, runId))) throw new Refused(`Run ${runId} has no approval request`, 404);
-  if (isSandboxReplay(replay)) return approveSandbox(db, runId, approver);
+  if (isSandboxReplay(replay)) {
+    // The judge's copy keeps Linda Park as its contact, so the approver is the signed-in judge, by their own name.
+    const [judge] = userId ? await db.select({ name: users.name }).from(users).where(and(eq(users.id, userId), eq(users.customerId, owner))) : [];
+    if (!judge) throw new Refused(`Run ${runId} does not exist`, 404);
+    return approveSandbox(db, owner, runId, judge.name);
+  }
   // The approver is the customer's contact, and the channel shows it was the button.
   return decideApproval(db, { runId, status: "approved", channel: "dashboard", approvedBy: approver });
 }

@@ -51,6 +51,12 @@ describe("SANDBOX=1", () => {
     expect(noFetch).not.toHaveBeenCalled();
   });
 
+  // The bill upload route's refusal is tested next to it (apps/dashboard/app/api/bills/upload/route.test.ts), under Next's types.
+  it("refuses a reply from the simulated phone before touching the database", async () => {
+    const { receiveSms, SANDBOX_REPLY } = await import("../apps/dashboard/lib/decisions.ts");
+    await expect(receiveSms(untouchable as never, { runId: "r", body: "YES" })).rejects.toMatchObject({ message: SANDBOX_REPLY, status: 409 });
+  });
+
   it("will not start the webhook service", async () => {
     await expect(import("../services/webhooks/src/main.ts")).rejects.toThrow(/sandbox/);
   });

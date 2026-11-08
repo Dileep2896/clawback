@@ -1,9 +1,9 @@
 // The judge sandbox (SANDBOX=1): each sign-up gets its own copy of the demo customer, and the recorded run plays into
 // that copy's rows. Nothing runs in the background: every /api/live poll writes the events whose time has come, so it
 // works on a serverless host and any number of judges can watch at once. It never touches another customer's rows.
+import { createHmac } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { decideApproval } from "@bill-fighter/db/approvals";
 import type { Db } from "@bill-fighter/db/client";
 import { applyEvents, parseRecording, type Recording, type ReplayEvent, TABLES } from "@bill-fighter/db/replay";
 import { CUSTOMER } from "@bill-fighter/db/seed/customer";
@@ -52,18 +52,37 @@ export const sandboxPlan = () => (cached ??= planOf(readRecording()));
 const ID_KEY = /^id$|_ids?$|Ids?$/;
 
 /** The row as it belongs to this judge: every id of a recorded or seed row gets the judge's prefix, the demo customer becomes theirs. */
-export function rekey(value: unknown, customerId: string, known: Set<string>, key = ""): unknown {
-  if (Array.isArray(value)) return value.map((item) => rekey(item, customerId, known, key));
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, rekey(v, customerId, known, k)]));
-  if (typeof value !== "string" || !ID_KEY.test(key)) return value;
-  if (value === CUSTOMER.id) return customerId;
-  return known.has(value) ? sandboxId(customerId, value) : value;
+export const rekey = (value: unknown, customerId: string, known: Set<string>) =>
+  mapStrings(value, (text, key) => {
+    if (!ID_KEY.test(key)) return text;
+    if (text === CUSTOMER.id) return customerId;
+    return known.has(text) ? sandboxId(customerId, text) : text;
+  });
+
+/** Every string in the value, with the JSON key or column it sits under, mapped by fn. */
+function mapStrings(value: unknown, fn: (text: string, key: string) => string, key = ""): unknown {
+  if (Array.isArray(value)) return value.map((item) => mapStrings(item, fn, key));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, mapStrings(v, fn, k)]));
+  return typeof value === "string" ? fn(value, key) : value;
 }
 
-function eventFor(event: ReplayEvent, customerId: string, known: Set<string>): ReplayEvent {
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * A recorded moment on the judge's clock: as far after their start as it was after the recording's, at their speed, plus
+ * their wait when it came after the recorded approval. So a row written twice gets the same time both times, and calls
+ * and refunds always sort after the tap that allowed them.
+ */
+export function wallTime(iso: string, state: SandboxState, approvalT = sandboxPlan().approvalT) {
+  const sinceStart = Date.parse(iso) - Date.parse(state.recordedAt);
+  const pausedMs = state.pausedMs ?? 0;
+  return new Date(Date.parse(state.startedAt) - pausedMs + sinceStart / state.speed + (sinceStart >= approvalT ? pausedMs : 0)).toISOString();
+}
+
+function eventFor(event: ReplayEvent, customerId: string, known: Set<string>, state: SandboxState): ReplayEvent {
   const id = sandboxId(customerId, event.id);
   if (!event.row) return { ...event, id };
-  const row = rekey(event.row, customerId, known) as Row;
+  const row = mapStrings(rekey(event.row, customerId, known), (text) => (ISO.test(text) ? wallTime(text, state) : text)) as Row;
   // Unique across runs: the recorded email's key would let only one judge ever start.
   if (event.table === "runs") row.dedupe_key = null;
   return { ...event, id, row };
@@ -142,18 +161,23 @@ async function inTransaction<T>(db: Db, fn: (client: Client) => Promise<T>): Pro
 
 export const sandboxRunId = (customerId: string) => sandboxId(customerId, sandboxPlan().events[0]!.id);
 
+/** One lock per judge, taken first by every writer of their replay (start, poll, approve, restart), so they take turns. */
+const lockJudge = (client: Client, customerId: string) => client.query("select pg_advisory_xact_lock(hashtext($1))", [`sandbox:${customerId}`]);
+
+/** Writes the judge's run from the start, unless it is already there. In the caller's transaction, under the judge's lock. */
+async function startIn(client: Client, customerId: string, now: number) {
+  if ((await client.query("select 1 from runs where id = $1", [sandboxRunId(customerId)])).rowCount) return;
+  const state: SandboxState = { sandbox: true, recordedAt: sandboxPlan().recordedAt, speed: SANDBOX_SPEED, startedAt: new Date(now).toISOString(), cursor: 0, approvedAt: null, pausedMs: 0 };
+  await play(client, customerId, state, now);
+}
+
 /** Starts the judge's replay once: a second click, or a second tab, finds the run already there. Returns its id. */
 export async function startSandboxRun(db: Db, customerId: string, now = Date.now()) {
-  const plan = sandboxPlan();
-  const runId = sandboxRunId(customerId);
   await inTransaction(db, async (client) => {
-    await client.query("select pg_advisory_xact_lock(hashtext($1))", [`sandbox:${customerId}`]);
-    const { rowCount } = await client.query("select 1 from runs where id = $1", [runId]);
-    if (rowCount) return;
-    const state: SandboxState = { sandbox: true, recordedAt: plan.recordedAt, speed: SANDBOX_SPEED, startedAt: new Date(now).toISOString(), cursor: 0, approvedAt: null };
-    await play(client, customerId, state, now);
+    await lockJudge(client, customerId);
+    await startIn(client, customerId, now);
   });
-  return runId;
+  return sandboxRunId(customerId);
 }
 
 /** Writes every event that is due, and the cursor with it. Waits at the approval until the judge has approved. */
@@ -169,7 +193,7 @@ async function play(client: Client, customerId: string, state: SandboxState, now
   // Tick by tick, in recorded order, so a parent row is always written before a later tick's child.
   const due = plan.events.slice(state.cursor, cursor);
   for (const t of new Set(due.map((event) => event.t))) {
-    await applyEvents(client, due.filter((event) => event.t === t).map((event) => eventFor(event, customerId, known)), next);
+    await applyEvents(client, due.filter((event) => event.t === t).map((event) => eventFor(event, customerId, known, state)), next);
   }
   await client.query("update runs set replay = $2 where id = $1", [sandboxRunId(customerId), JSON.stringify(next)]);
 }
@@ -177,8 +201,9 @@ async function play(client: Client, customerId: string, state: SandboxState, now
 /** Brings the judge's replay up to now. Called on every live poll; a customer with no sandbox run is left alone. */
 export async function advanceSandbox(db: Db, customerId: string, now = Date.now()) {
   await inTransaction(db, async (client) => {
-    // The row lock makes two tabs take turns, and the second finds nothing left to write.
-    const { rows } = await client.query<{ replay: unknown }>("select replay from runs where id = $1 for update", [sandboxRunId(customerId)]);
+    // Two tabs take turns, and the second finds nothing left to write.
+    await lockJudge(client, customerId);
+    const { rows } = await client.query<{ replay: unknown }>("select replay from runs where id = $1", [sandboxRunId(customerId)]);
     const replay = rows[0]?.replay;
     if (isSandboxReplay(replay)) await play(client, customerId, replay, now);
   });
@@ -186,34 +211,56 @@ export async function advanceSandbox(db: Db, customerId: string, now = Date.now(
 
 /**
  * The judge's tap: the bundle is approved as theirs, on the dashboard, and the clock moves so the recording carries on from
- * the moment it was approved. The first decision wins, as everywhere else, so a double click is one approval.
+ * the moment it was approved. One transaction under the judge's lock, so the approval never lands without the replay
+ * resuming. The first decision wins, as everywhere else, so a double click is one approval.
  */
-export async function approveSandbox(db: Db, runId: string, approvedBy: string, now = Date.now()) {
-  const decided = await decideApproval(db, { runId, status: "approved", channel: "dashboard", approvedBy });
-  const startedAt = new Date(now - sandboxPlan().approvalT / SANDBOX_SPEED).toISOString();
-  // Merged into the row as it is now, and only once, so a poll writing its cursor at the same moment loses nothing.
-  await db.$client.query(
-    "update runs set replay = replay || jsonb_build_object('approvedAt', $2::text, 'startedAt', $3::text) where id = $1 and replay->>'sandbox' = 'true' and replay->>'approvedAt' is null",
-    [runId, new Date(now).toISOString(), startedAt],
-  );
-  return decided;
+export async function approveSandbox(db: Db, customerId: string, runId: string, approvedBy: string, now = Date.now()) {
+  if (!approvedBy) throw new Error("An approval decision must record who made it");
+  return inTransaction(db, async (client) => {
+    await lockJudge(client, customerId);
+    const tap = new Date(now).toISOString();
+    const { rowCount: approved } = await client.query(
+      "update approvals set status = 'approved', channel = 'dashboard', approved_by = $2, approved_at = $3 where run_id = $1 and status = 'pending'",
+      [runId, approvedBy, tap],
+    );
+    if (approved) {
+      const startedAt = new Date(now - sandboxPlan().approvalT / SANDBOX_SPEED).toISOString();
+      // pausedMs is how far the clock moved, so rows recorded after the approval land after the tap (wallTime).
+      const { rowCount } = await client.query(
+        "update runs set replay = replay || jsonb_build_object('approvedAt', $2::text, 'startedAt', $3::text, 'pausedMs', extract(epoch from $3::timestamptz - (replay->>'startedAt')::timestamptz) * 1000) where id = $1 and replay->>'sandbox' = 'true' and replay->>'approvedAt' is null",
+        [runId, tap, startedAt],
+      );
+      if (rowCount !== 1) throw new Error(`Run ${runId} is not a sandbox replay waiting at its approval`);
+    }
+    const { rows } = await client.query<{ status: string; channel: string; approvedBy: string; approvedAt: Date }>(
+      `select id, run_id as "runId", status, channel, approved_by as "approvedBy", approved_at as "approvedAt" from approvals where run_id = $1`,
+      [runId],
+    );
+    return rows[0]!;
+  });
 }
 
-/** "Watch it again": the judge's run rows go, children first, and the replay starts over. Only ids with their prefix are touched. */
+/** "Watch it again": the judge's run rows go, children first, and the replay starts over, in one transaction. Only ids with their prefix are touched. */
 export async function restartSandbox(db: Db, customerId: string, now = Date.now()) {
   await inTransaction(db, async (client) => {
-    await client.query("select pg_advisory_xact_lock(hashtext($1))", [`sandbox:${customerId}`]);
+    await lockJudge(client, customerId);
     for (const table of [...TABLES].reverse()) await client.query(`delete from ${table} where starts_with(id, $1)`, [sandboxId(customerId, "")]);
+    await startIn(client, customerId, now);
   });
-  return startSandboxRun(db, customerId, now);
+  return sandboxRunId(customerId);
 }
 
 /** Sign-ups the sandbox takes, across every visitor: enough for a judging room, and a ceiling for a script. */
 export const SIGNUPS_PER_MINUTE = 30;
 export const SIGNUPS_PER_DAY = 1000;
+/** Sign-ups from one client address a minute: a judge and a retry or two, not a script taking the whole allowance. */
+export const SIGNUPS_PER_IP_PER_MINUTE = 3;
 export const BUSY_TEXT = "The sandbox is busy. Try again in a minute.";
 
-export type SandboxSignUp = { name: string; company: string; email: string; passwordHash: string };
+/** Keyed, so the stored hash cannot be reversed by hashing every IPv4 address. */
+export const ipHash = (ip: string, key = process.env.VAULT_KEY ?? "") => createHmac("sha256", key).update(`signup-ip:${ip}`).digest("hex");
+
+export type SandboxSignUp = { name: string; company: string; email: string; passwordHash: string; ipHash: string };
 
 /**
  * A sandbox account: always a fresh copy of the demo customer, never linked by email to a real one, so no judge can reach
@@ -222,15 +269,18 @@ export type SandboxSignUp = { name: string; company: string; email: string; pass
 export async function createSandboxUser(db: Db, input: SandboxSignUp, customerId = `sandbox-${crypto.randomUUID()}`) {
   return inTransaction(db, async (client) => {
     await client.query("select pg_advisory_xact_lock(hashtext('sandbox:signup'))");
-    const { rows } = await client.query<{ minute: number; day: number }>(
-      "select count(*) filter (where created_at > now() - interval '1 minute')::int as minute, count(*) filter (where created_at > now() - interval '1 day')::int as day from users",
+    const { rows } = await client.query<{ minute: number; day: number; ip: number }>(
+      `select count(*) filter (where created_at > now() - interval '1 minute')::int as minute, count(*) filter (where created_at > now() - interval '1 day')::int as day,
+        count(*) filter (where created_at > now() - interval '1 minute' and signup_ip_hash = $1)::int as ip from users`,
+      [input.ipHash],
     );
-    if (rows[0]!.minute >= SIGNUPS_PER_MINUTE || rows[0]!.day >= SIGNUPS_PER_DAY) return "busy" as const;
+    const { minute, day, ip } = rows[0]!;
+    if (minute >= SIGNUPS_PER_MINUTE || day >= SIGNUPS_PER_DAY || ip >= SIGNUPS_PER_IP_PER_MINUTE) return "busy" as const;
     if ((await client.query("select 1 from users where email = $1", [input.email])).rowCount) return "taken" as const;
     await cloneDemoCustomer(client, customerId);
     const { rows: users } = await client.query<{ id: string }>(
-      "insert into users (name, company, email, password_hash, customer_id, created_customer) values ($1, $2, $3, $4, $5, true) returning id",
-      [input.name, input.company, input.email, input.passwordHash, customerId],
+      "insert into users (name, company, email, password_hash, customer_id, created_customer, signup_ip_hash) values ($1, $2, $3, $4, $5, true, $6) returning id",
+      [input.name, input.company, input.email, input.passwordHash, customerId, input.ipHash],
     );
     return { id: users[0]!.id, customerId };
   });
