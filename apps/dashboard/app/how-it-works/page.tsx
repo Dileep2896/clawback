@@ -155,7 +155,7 @@ export default function HowItWorksPage() {
           <Step
             index={2}
             title="You approve once."
-            rest="By text. Nothing is filed and nobody is called until you do."
+            rest="Tap or text. Nothing is filed and nobody is called until you do."
             figure={
               <Reveal className="grid max-w-[480px] gap-3">
                 <p className="reveal-line max-w-[92%] rounded-[14px] rounded-bl-[4px] border border-line bg-sheet p-4">

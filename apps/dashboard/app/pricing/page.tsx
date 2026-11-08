@@ -65,7 +65,7 @@ const FAQ = [
   },
   {
     q: "Do the agents call or file anything without me?",
-    a: "No. They read your bills and find the overcharges, then ask you once, by text. Nothing is filed and no call is made until you reply yes.",
+    a: "No. They read your bills and find the overcharges, then ask you once, by tap or text. Nothing is filed and no call is made until you approve.",
   },
   { q: "Are there tiers or a bigger plan?", a: `No. Every business pays the same ${SHARE}% of what comes back.` },
 ];
