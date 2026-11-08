@@ -399,3 +399,12 @@ Orchestrator decisions:
 **depends on:** product-polish
 
 **parallel with:** judge-link (merge main after it ships)
+## Added by the human, 2026-11-07: "The text size is really bad and why are we showing the sandbox such a big way. We need to make the UI elegant and mordern AI application."
+
+Orchestrator decisions (apply app-wide, not only /agents):
+- **Type scale for the whole signed-in app** (set once as tokens in globals.css and used everywhere): body 14px/20px weight 400; secondary and labels 13px (muted colour, not bold); small captions and table heads 12px; panel and section titles 14–15px weight 600; page title 20px weight 600; one hero money figure per page at 32–40px in the serif, everything else at body size. Weight 600 only for titles and the active item; no bold body text. Tabular numbers for money and times. Remove any text above 20px except that one money figure.
+- **Look and feel:** a modern AI application in the spirit of Linear, Vercel's dashboard, Attio and Claude.ai (learn from them, don't copy): quiet dark surfaces, 1px hairline borders, generous whitespace (24px card padding, 16–24px gaps), 8–10px radius, no heavy boxes, colour only where it means something, small calm motion (a streaming line, a pulsing dot), crisp 16px line icons.
+- **Sandbox notice:** not a banner. A small pill in the page header next to the run status, 12px, muted text with a small amber dot: "Sandbox replay · 2×", with a tooltip or popover for the full sentence and the "Watch it again" action. No full-width bar. The banner code is on fleet/judge-link: merge main after judge-link ships and replace it there.
+- Recheck the Overview, Bills, Findings, Money and sign-up/onboarding pages against this scale and fix them in this lane.
+- After this lane ships, the sandbox on naïve gets one redeploy with all of it (the orchestrator arranges it).
+Screenshots for the human: /agents at 1920x1080 and 1440x900 (approval and call moments), Overview, and 390x844, each next to the before.
