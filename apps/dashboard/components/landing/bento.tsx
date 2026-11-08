@@ -117,7 +117,7 @@ export function Bento() {
         </Reveal>
       </Card>
 
-      <Card fig="Fig 4 · Approval" lead="You approve once." rest="By text, in one word." className="lg:col-span-4">
+      <Card fig="Fig 4 · Approval" lead="You approve once." rest="By tap or text." className="lg:col-span-4">
         <div className="grid gap-3">
           <p className="max-w-[92%] rounded-[14px] rounded-bl-[4px] border border-line bg-sheet p-4">
             Your approval request is waiting. It covers a refund claim of $12,606.06 and yearly savings of $18,319.32, with rate changes for two Oakland
