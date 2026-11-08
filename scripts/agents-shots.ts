@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 // Screenshots /agents at five moments of the recorded run (start, finding, approval, call, done) at 1920x1080, 1440x900 and 390x844, and checks each:
-// no "No … yet" text, no horizontal scroll, no clipped agent action. Replays data/replay/run.jsonl into DATABASE_URL, so point it at your own database.
+// no "No … yet" text, no horizontal scroll, no clipped agent action, the call at its newest line. Replays data/replay/run.jsonl into DATABASE_URL, so point it at your own database.
 // pnpm dev:dashboard must be running. No model, voice or network cost.
 // pnpm exec tsx --env-file-if-exists=.env scripts/agents-shots.ts <folder> [--speed N] [--no-check]
 import { spawn } from "node:child_process";
@@ -9,7 +9,9 @@ import { join } from "node:path";
 import { chromium, type Page } from "playwright";
 import { viewOf } from "../apps/dashboard/lib/calls.ts";
 import type { Snapshot } from "../apps/dashboard/lib/snapshot.ts";
+import { db } from "@bill-fighter/db/client";
 import { signedInContext } from "./dashboard-session.ts";
+import { assertNotSharedDatabase } from "./stop-check.ts";
 
 const BASE = process.env.DASHBOARD_URL ?? "http://localhost:3000";
 const args = process.argv.slice(2);
@@ -17,9 +19,9 @@ const folder = args.find((arg, i) => !arg.startsWith("--") && args[i - 1] !== "-
 const speed = args.includes("--speed") ? args[args.indexOf("--speed") + 1]! : "2";
 const check = !args.includes("--no-check");
 if (!folder) throw new Error("Pass a folder for the screenshots");
-if (new URL(process.env.DATABASE_URL ?? "postgres://x/billfighter").pathname === "/billfighter") {
-  throw new Error("DATABASE_URL is the shared billfighter database; the replay would clear other lanes' run. Use your own.");
-}
+// The replay clears the run's rows, so never on the shared database. The server names it; the URL can be encoded.
+await assertNotSharedDatabase((sql) => db.$client.query(sql));
+await db.$client.end();
 
 const VIEWPORTS = [
   { name: "1920", width: 1920, height: 1080 },
@@ -39,7 +41,7 @@ const MOMENTS: [string, (s: Snapshot) => boolean][] = [
   ["done", (s) => !!s.run && s.run.status !== "running"],
 ];
 
-/** What a judge must never see: an empty panel, a sideways scroll, an agent action cut off. */
+/** What a judge must never see: an empty panel, a sideways scroll, an agent action cut off, a call stuck at its top. */
 async function problems(page: Page) {
   return page.evaluate(() => {
     const found: string[] = [];
@@ -47,6 +49,9 @@ async function problems(page: Page) {
     if (doc.scrollWidth > doc.clientWidth) found.push(`horizontal scroll: ${doc.scrollWidth} > ${doc.clientWidth}`);
     const empty = document.body.innerText.match(/\bNo [a-z ]+ yet\b/);
     if (empty) found.push(`empty state: "${empty[0]}"`);
+    // Entering the call with a long transcript must land on its newest line, or useFollow stops following.
+    const now = document.querySelector<HTMLElement>('[data-moment="call"] [role="group"]');
+    if (now && now.scrollHeight > now.clientHeight && now.scrollTop + now.clientHeight < now.scrollHeight - 40) found.push(`call transcript not at its newest line: ${now.scrollTop}`);
     for (const el of document.querySelectorAll<HTMLElement>("[data-agent-action]")) {
       if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) found.push(`clipped action: "${el.innerText}"`);
     }
