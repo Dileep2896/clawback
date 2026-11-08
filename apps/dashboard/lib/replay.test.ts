@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { recordedNow, replayLabel, replayOf, speechRate, type ReplayInfo } from "./replay.ts";
+import { recordedNow, replayLabel, replayOf, replayPill, speechRate, type ReplayInfo } from "./replay.ts";
 import type { Snapshot } from "./snapshot.ts";
 
 const info = (speed: number): ReplayInfo => ({ recordedAt: "2026-11-06T10:00:00.000Z", speed, startedAt: "2026-11-07T20:00:00.000Z" });
 
 describe("replayLabel", () => {
   it("always says replay, and when it was recorded", () => {
-    expect(replayLabel(info(1))).toMatch(/^REPLAY · recorded Nov \d+, 2026/);
+    expect(replayLabel(info(1))).toMatch(/^A recorded audit replayed for you, recorded Nov \d+, 2026/);
   });
 
   it("says real speed at 1×, and the speed otherwise", () => {
-    expect(replayLabel(info(1))).toContain("real speed");
+    expect(replayLabel(info(1))).toContain("at real speed");
     expect(replayLabel(info(1.8))).toContain("playing at 1.8× speed");
+  });
+
+  it("puts the speed on the pill only when it is not real speed", () => {
+    expect(replayPill(info(2))).toBe("Sandbox replay · 2×");
+    expect(replayPill(info(1))).toBe("Sandbox replay");
   });
 });
 

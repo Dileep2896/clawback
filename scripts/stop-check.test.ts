@@ -130,6 +130,12 @@ describe("assertNotSharedDatabase", () => {
     await expect(assertNotSharedDatabase(connectedTo("billfighter"))).rejects.toThrow(/Refusing/);
   });
 
+  it("refuses an encoded name that a URL check would miss", async () => {
+    // agents-shots once compared the URL path; /%62illfighter passed it and still connected to billfighter.
+    expect(new URL("postgres://x/%62illfighter").pathname).not.toBe("/billfighter");
+    await expect(assertNotSharedDatabase(connectedTo("billfighter"))).rejects.toThrow(/Refusing/);
+  });
+
   it("refuses when the server does not name a database", async () => {
     await expect(assertNotSharedDatabase(connectedTo())).rejects.toThrow(/Refusing/);
   });

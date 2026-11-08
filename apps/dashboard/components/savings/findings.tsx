@@ -46,6 +46,7 @@ export function FindingsList() {
       <PageHeader
         title="Findings"
         crumb={snapshot?.customer?.name}
+        replay={replayOf(snapshot?.run)}
         description={findings.length > 0 ? `${findings.length} findings, biggest first. Open one to see the evidence.` : "What the agents found on your bills. Open one to see the evidence."}
       />
       {snapshot && !snapshot.run && <NoAudit />}
@@ -64,13 +65,13 @@ export function FindingsList() {
             return (
               <tr key={finding.id} data-finding-row={finding.id} onClick={() => setOpenId(finding.id)} className="cursor-pointer">
                 <td className="py-3!">
-                  {site && <span className="block text-[13px] text-faded">{site}</span>}
+                  {site && <span className="block text-label text-faded">{site}</span>}
                   <button
                     type="button"
                     data-finding={finding.id}
                     aria-haspopup="dialog"
                     onClick={() => setOpenId(finding.id)}
-                    className="cursor-pointer text-left font-semibold decoration-agent decoration-2 underline-offset-4 hover:underline"
+                    className="cursor-pointer text-left decoration-agent decoration-2 underline-offset-4 hover:underline"
                   >
                     {finding.title}
                   </button>
@@ -92,7 +93,7 @@ export function FindingsList() {
           })}
         </Table>
       )}
-      {findings.length > 0 && <p className="mt-3 text-[13px] text-faded">A finding&apos;s own estimate. Only what the agents act on reaches your statement.</p>}
+      {findings.length > 0 && <p className="mt-3 text-label text-faded">A finding&apos;s own estimate. Only what the agents act on reaches your statement.</p>}
       {open && (
         <EvidenceDrawer
           finding={open}

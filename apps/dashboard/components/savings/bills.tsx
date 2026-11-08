@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { money, parseEvidence } from "../../lib/evidence.ts";
+import { replayOf } from "../../lib/replay.ts";
 import type { Snapshot } from "../../lib/snapshot.ts";
 import { useLive } from "../../lib/use-live.tsx";
 import { ButtonLink, EmptyState, PageHeader, StatusDot, Table } from "../ui/kit.tsx";
@@ -55,7 +56,7 @@ function FilterChip({ pressed, onClick, children }: { pressed: boolean; onClick:
       type="button"
       aria-pressed={pressed}
       onClick={onClick}
-      className={`min-h-9 cursor-pointer rounded-full border px-3 text-[15px] font-semibold whitespace-nowrap ${pressed ? "border-ink bg-ink text-sheet" : "border-line text-faded hover:border-faded hover:text-ink"}`}
+      className={`min-h-9 cursor-pointer rounded-full border px-3 text-body whitespace-nowrap ${pressed ? "border-ink bg-ink text-sheet" : "border-line text-faded hover:border-faded hover:text-ink"}`}
     >
       {children}
     </button>
@@ -65,7 +66,7 @@ function FilterChip({ pressed, onClick, children }: { pressed: boolean; onClick:
 function FilterGroup<T extends string>({ label, options, value, onChange, name }: { label: string; options: T[]; value: T | null; onChange: (v: T | null) => void; name: (v: T) => string }) {
   return (
     <div role="group" aria-label={label} className="flex flex-wrap items-center gap-2">
-      <span className="text-[13px] font-semibold text-faded">{label}</span>
+      <span className="text-label text-faded">{label}</span>
       <FilterChip pressed={value === null} onClick={() => onChange(null)}>
         All
       </FilterChip>
@@ -97,6 +98,7 @@ export function Bills() {
       <PageHeader
         title="Bills"
         crumb={snapshot?.customer?.name}
+        replay={replayOf(snapshot?.run)}
         description={all.length > 0 ? `${all.length} bills across ${accounts} accounts, grouped by location.` : "Every bill we have, for each account and location."}
       />
       {snapshot && all.length === 0 && (
@@ -109,11 +111,11 @@ export function Bills() {
           <FilterGroup label="Provider" options={providers} value={provider} onChange={setProvider} name={(p) => PROVIDERS[p] ?? p} />
           {sites.length > 1 && (
             <label className="flex items-center gap-2">
-              <span className="text-[13px] font-semibold text-faded">Store</span>
+              <span className="text-label text-faded">Store</span>
               <select
                 value={site ?? ""}
                 onChange={(event) => setSite(event.target.value || null)}
-                className="min-h-9 cursor-pointer rounded-full border border-line bg-sheet px-3 text-[15px] font-semibold"
+                className="min-h-9 cursor-pointer rounded-full border border-line bg-sheet px-3 text-body"
               >
                 <option value="">All stores</option>
                 {sites.map((s) => (
@@ -136,7 +138,7 @@ export function Bills() {
           {bySite(bills).map(([locationId, siteBills]) => (
             <tbody key={locationId} data-testid="bills-site" aria-labelledby={`site-${locationId}`}>
               <tr>
-                <th id={`site-${locationId}`} colSpan={5} scope="colgroup" className="border-t border-line bg-paper/60 px-4 py-2 text-left text-[15px] font-semibold">
+                <th id={`site-${locationId}`} colSpan={5} scope="colgroup" className="border-t border-line bg-paper/60 px-4 py-2 text-left text-body font-semibold">
                   {siteBills[0]!.site} <span className="font-normal text-faded">{siteBills[0]!.city}</span>
                 </th>
               </tr>
@@ -148,10 +150,10 @@ export function Bills() {
                     <td>
                       {first && (
                         <>
-                          <span className="font-semibold">
+                          <span>
                             {PROVIDERS[bill.provider]} {SERVICES[bill.serviceType]?.toLowerCase()}
                           </span>
-                          <span className="ml-2 text-[13px] text-faded tabular-nums">Account {bill.accountNumber}</span>
+                          <span className="ml-2 text-label text-faded tabular-nums">Account {bill.accountNumber}</span>
                         </>
                       )}
                     </td>

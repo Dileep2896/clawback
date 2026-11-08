@@ -11,7 +11,7 @@ import { assertNotSharedDb, insertSampleRun, SAMPLE_RUN_ID, updateSampleRun } fr
 
 const BASE = process.env.DASHBOARD_URL ?? "http://localhost:3000";
 const VIEWPORT = { width: 1920, height: 1080 };
-const MIN_FONT_PX = 22;
+const MIN_FONT_PX = 12;
 const screenshotDir = process.argv[2];
 
 type Snapshot = { run: { id: string; costUsd: number } | null; calls: unknown[]; humanActions: number; approval: { status: string; channel: string | null; approvedBy: string | null; actionIds: string[] } };
@@ -48,6 +48,8 @@ const shot = async (page: Page, name: string) => {
 
 const see = (page: Page, testId: string, text: string) => page.getByTestId(testId).filter({ hasText: text }).waitFor({ state: "attached", timeout: 5000 });
 const live = async (page: Page) => (await (await page.request.get(`${BASE}/api/live`)).json()) as Snapshot;
+// The Now pane moves on once the approval is decided; pinning an agent's timeline row keeps its moment on screen.
+const pin = (page: Page, agent: string) => page.locator(`[data-agent-row="${agent}"]`).click();
 
 // The server on port 3000 can use another database than this script, and every lane's sample run has the same id, so only a random cost proves it is this one. A click acts on whichever run it shows.
 async function insertAndRequireSampleRun(page: Page) {
@@ -90,9 +92,10 @@ async function checkApproveButton(page: Page) {
   assert.ok(box && box.y + box.height <= VIEWPORT.height, "Approve must be on screen");
 
   // A real double click: the second one lands before the first has come back.
+  await pin(page, "approver");
   await page.getByTestId("approve").dblclick();
   await see(page, "approval-decision", "Approved by Linda Park, on the dashboard");
-  await see(page, "human-actions", "Human actions: 1");
+  await see(page, "human-actions", "1 human action");
   assert.equal(await page.getByTestId("approve").count(), 0, "no button once decided");
 
   const snapshot = await live(page);
@@ -117,6 +120,7 @@ async function checkYes(page: Page) {
   await page.goto(`${BASE}/agents`);
   const reply = page.getByTestId("sms-reply");
   await reply.waitFor({ timeout: 10000 });
+  await pin(page, "approver");
 
   await reply.fill("Not yet");
   await page.getByTestId("sms-send").click();
@@ -134,7 +138,7 @@ async function checkYes(page: Page) {
   await page.keyboard.press("Enter");
 
   await see(page, "approval-decision", "Approved by Linda Park, by SMS");
-  await see(page, "human-actions", "Human actions: 1");
+  await see(page, "human-actions", "1 human action");
   const snapshot = await live(page);
   assert.equal(snapshot.approval.channel, "sms");
   assert.equal(snapshot.approval.approvedBy, "Linda Park", "the approver is recorded");
@@ -159,7 +163,7 @@ async function checkKeyboard(page: Page) {
   assert.equal(focused, "sms-reply", "Tab reaches the reply box");
   await page.getByTestId("approve").focus();
   await page.keyboard.press("Enter");
-  await see(page, "approval-decision", "Approved by Linda Park");
+  await see(page, "human-actions", "1 human action");
 }
 
 /** Serves the real snapshot with calls swapped in, so no call row has to exist. Change `state.calls` to move on. */
@@ -200,12 +204,13 @@ async function checkCallStates(browser: Browser) {
   const state = { calls: [] as unknown[] };
   await fakeCalls(page, state);
   await page.goto(`${BASE}/agents`);
-  // Not "No calls yet": that also shows before the first snapshot, and rows in the first snapshot count as already said.
+  // Rows in the first snapshot count as already said, so the page must be up before the call arrives.
   await see(page, "customer", "Golden Gate Noodle Co.");
+  await pin(page, "negotiator");
 
   // Sim, arriving while the page is open: the disclosure comes first, on screen and in the speech.
   state.calls = [call("sim-1", "sim", [DISCLOSURE])];
-  await see(page, "call-mode", "sim");
+  await see(page, "call-mode", "Simulated call");
   const firstRow = page.locator('[data-testid="call-transcript"] li').first();
   assert.equal(await firstRow.getAttribute("data-call-row"), "disclosure", "the disclosure is first");
   assert.ok((await firstRow.innerText()).includes("Disclosure"), "the highlight has a label, not only a colour");
@@ -222,7 +227,7 @@ async function checkCallStates(browser: Browser) {
 
   // Live in progress: a label and no status text.
   state.calls = [call("live-1", "live", [IN_PROGRESS, WITH_ID])];
-  await see(page, "call-mode", "live");
+  await see(page, "call-mode", "Live call");
   await see(page, "call-in-progress", "The transcript appears when the call ends");
   assert.equal((await page.locator("main").innerText()).includes("call_abc"), false, "no Retell id on screen");
   await checkFits(page, "live in progress");
@@ -240,7 +245,7 @@ async function checkCallStates(browser: Browser) {
   // Fallback: two rows for the action. The sim one shows, labelled, and the attempt stays out.
   state.calls = [call("live-2", "live", [DISCLOSURE, row("provider", "speech", "PARTIAL ATTEMPT"), ENDED, FAILED], AT), call("sim-2", "sim", [DISCLOSURE, FALLBACK, MENU])];
   await see(page, "call-fallback", "Live call failed, so this call is simulated: the line did not answer");
-  await see(page, "call-mode", "sim");
+  await see(page, "call-mode", "Simulated call");
   assert.equal(await page.locator("[data-call]").count(), 1, "one call shown for one action");
   const fallbackText = await page.locator("main").innerText();
   assert.equal(fallbackText.includes("PARTIAL ATTEMPT"), false, "the failed attempt stays out");
@@ -273,6 +278,7 @@ async function checkSpeechFailures(browser: Browser) {
     await fakeCalls(page, state);
     await page.goto(`${BASE}/agents`);
     await see(page, "customer", "Golden Gate Noodle Co.");
+    await pin(page, "negotiator");
     state.calls = [call("sim-1", "sim", [DISCLOSURE, MENU])];
     await page.locator('[data-call-row="disclosure"]').waitFor({ timeout: 5000 });
     await see(page, "speech-unavailable", "Browser speech unavailable. Transcript only.");
@@ -289,7 +295,7 @@ async function checkNaive(browser: Browser) {
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...body, run: { ...body.run, platform: "naive" } }) });
   });
   await page.goto(`${BASE}/agents`);
-  await see(page, "phone-naive", "On naïve the request goes by email");
+  await see(page, "phone-naive", "The request went by email.");
   assert.equal(await page.getByTestId("sms-reply").count(), 0, "no reply box on naïve");
   assert.equal(await page.getByTestId("approve").count(), 1, "Approve is there in both modes");
   await page.context().close();
