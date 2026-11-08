@@ -101,3 +101,12 @@ Checks: `pnpm test` (all pass), `pnpm lint`, `pnpm typecheck`; `agents-shots.ts`
 2. **Repeat audits skip the collecting moment (lib/now.ts:37)**: the run's own board cards and audit rows decide it. While intake or collector has begun and no agent from the auditor on has, the pane shows the bills even if an earlier audit's findings are there. Regression test covers a new run with existing findings, by card and by audit row, and the switch once the auditor or a later agent starts.
 
 Checks: `pnpm test` (1828 pass), `pnpm lint`, `pnpm typecheck`, dashboard `tsc --noEmit`. Browser suites not re-run. Non-blocking design.md note left alone (not a file this round edits).
+- Orchestrator decision (2026-11-07, review round 4): fix only now.tsx:51 (show both refund and yearly savings when nonzero, regression test); it changes what customers see. Known limits, not fixed in this lane: scripts/app-shots.ts onboarding shot uses a session without a user row (lands on /login), and the shell/panels checks enforce the 12px floor but not the 20px ceiling or the single hero exception. Both are test-script coverage, not product behaviour.
+
+## Fix round 4
+
+1. **Refund hides yearly savings (components/agents/now.tsx:51)**: fixed. `amountOf` moved to `lib/now.ts` and shows every nonzero amount ("$12,600.00 refund · $10,800.00 a year"), or "To check" when both are zero. Regression test in `lib/now.test.ts`.
+2. **app-shots onboarding shot lands on /login (scripts/app-shots.ts:47)**: not fixed, by the orchestrator decision above. It is a known limit of a test script and does not change product behaviour.
+3. **Shell/panels checks lack the 20px ceiling and hero exception (scripts/dashboard-shell-check.ts:16)**: not fixed, by the orchestrator decision above. It is a known limit of a test script and does not change product behaviour.
+
+Checks: `pnpm test` (1829 pass, 1 skipped), `pnpm lint`, `pnpm typecheck`, dashboard `tsc --noEmit`. Browser suites not re-run.
