@@ -37,7 +37,7 @@ Nine agents. A CEO hands out the work. Intake reads the bill. The Collector pull
 The owner does exactly one thing: approve the plan, once. Let me show you a real run.
 
 ## 5.0
-Linda owns three noodle restaurants in the Bay Area. She signs up, uploads one bill, and gives us her provider login. No spreadsheets, no phone trees, no reading tariffs. That's all she does; from here the agents take over.
+Linda signs up, uploads one bill, and from here the agents take over.
 
 ## 6.0
 The Collector logs in and downloads two years of bills and meter readings. The Auditor checks each line against the tariff. Here is the Fremont store: since the meter was swapped in September 2025, it has been billed for double the electricity it used.

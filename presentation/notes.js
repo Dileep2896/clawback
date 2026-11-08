@@ -10,7 +10,7 @@ window.NOTES = {
  "4.0": "So I built Clawback: a company of AI agents that gets that money back.",
  "4.1": "Nine agents. A CEO hands out the work. Intake reads the bill. The Collector pulls bills and meter data. The Auditor checks every line. The Filer drafts the claims, and the Approver asks the owner. The Negotiator calls the provider. Finance records the money, and the Monitor watches the next bill.",
  "4.2": "The owner does exactly one thing: approve the plan, once. Let me show you a real run.",
- "5.0": "Linda owns three noodle restaurants in the Bay Area. She signs up, uploads one bill, and gives us her provider login. No spreadsheets, no phone trees, no reading tariffs. That's all she does; from here the agents take over.",
+ "5.0": "Linda signs up, uploads one bill, and from here the agents take over.",
  "6.0": "The Collector logs in and downloads two years of bills and meter readings. The Auditor checks each line against the tariff. Here is the Fremont store: since the meter was swapped in September 2025, it has been billed for double the electricity it used.",
  "7.0": "Clawback bundles everything it found into one plan and asks Linda once. She can have us call the provider, or email them.",
  "7.1": "One tap. From here, no human touches anything.",

@@ -8,16 +8,25 @@ cd "$(dirname "$0")"
 RAW="${RAW:-$HOME/Desktop/clawback-video/raw-take-2026-11-08}"
 SRC="$RAW/footage-master.mp4"
 mkdir -p media
-V=(-vf "scale=1920:1080:flags=lanczos,format=yuv420p" -c:v libx264 -crf 20 -preset medium -movflags +faststart)
 
-silent() { # name from to
-  ffmpeg -v error -y -ss "$2" -to "$3" -i "$SRC" -an "${V[@]}" "media/$1.mp4"
+# Each clip is one or more stretches of the recording, joined (trim only). The deck holds a clip's last frame,
+# so dead waits are cut and the presenter talks over the still.
+cuts() { # name from to [from to ...]
+  local name=$1; shift
+  local args=() filter="" joins="" n=0
+  while [ $# -gt 0 ]; do
+    args+=(-ss "$1" -to "$2" -i "$SRC")
+    filter+="[$n:v]scale=1920:1080:flags=lanczos,format=yuv420p,setsar=1[v$n];"
+    joins+="[v$n]"; n=$((n + 1)); shift 2
+  done
+  ffmpeg -v error -y "${args[@]}" -filter_complex "${filter}${joins}concat=n=$n:v=1:a=0[v]" -map "[v]" \
+    -c:v libx264 -crf 20 -preset medium -movflags +faststart "media/$name.mp4"
 }
-silent 01-signup 15.4 35.3
-silent 02-agents 35.5 54.4
-silent 03-approval 54.3 61.45
-silent 05-findings 266.7 279.5
-silent 06-overview 279.5 292.4
+cuts 01-signup 15.2 16.4 25.0 27.8 30.4 35.0   # Get started; the filled form and Create account; the bill upload landing
+cuts 02-agents 35.8 46.5                       # Collector's bills, then the Auditor's kWh chart (static after this)
+cuts 03-approval 59.0 61.45                    # the approval card, then the tap (deck pauses at 2.0 s)
+cuts 05-findings 266.7 270.0
+cuts 06-overview 279.5 283.0
 
 # The call: two stretches of the real call, each with its own audio from call.wav (offset 61.5 s), joined.
 ffmpeg -v error -y \
