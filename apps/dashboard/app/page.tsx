@@ -106,9 +106,9 @@ export default function Landing() {
             Recovered for the noodle shop in one audit
             <span className="rounded-full border border-line px-2 py-0.5 tracking-[0.08em]">Demo data</span>
           </h2>
-          <dl className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-line bg-line lg:grid-cols-5">
+          <dl className="mt-5 grid gap-px overflow-hidden rounded-[12px] border border-line bg-line sm:grid-cols-2 lg:grid-cols-5">
             {COUNTS.map((count) => (
-              <div key={count.label} className="grid content-start gap-1 bg-sheet px-5 py-4 last:col-span-2 lg:last:col-span-1">
+              <div key={count.label} className="grid content-start gap-1 bg-sheet px-5 py-4 sm:last:col-span-2 lg:last:col-span-1">
                 <dd className={`order-first font-figure text-[1.75rem] leading-tight ${count.value.startsWith("$") ? "text-money" : ""}`}>{count.value}</dd>
                 <dt className="text-[15px] text-faded">{count.label}</dt>
               </div>

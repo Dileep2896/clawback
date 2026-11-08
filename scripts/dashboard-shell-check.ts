@@ -172,10 +172,24 @@ const CLIPPED_IN_HERO = `(() => {
   }
   return clipped;
 })()`;
+// Below the hero: every figure tile (the counter strip, the market figures) holds its whole value.
+const SPILLS_FROM_FIGURES = `[...document.querySelectorAll("main dl > div")].filter((cell) => {
+  const box = cell.getBoundingClientRect();
+  const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    if (!walker.currentNode.textContent.trim() || walker.currentNode.parentElement.closest(".sr-only")) continue;
+    const range = document.createRange();
+    range.selectNodeContents(walker.currentNode);
+    const r = range.getBoundingClientRect();
+    if (r.left < box.left - 0.5 || r.right > box.right + 0.5) return true;
+  }
+  return false;
+}).map((cell) => cell.textContent.trim())`;
 async function checkLandingNarrowest(page: Page) {
   await page.goto(BASE);
   await page.getByText("Linda Park replied YES", { exact: true }).waitFor();
   assert.deepEqual(await page.evaluate<string[]>(CLIPPED_IN_HERO), [], "landing 320: hero text clipped");
+  assert.deepEqual(await page.evaluate<string[]>(SPILLS_FROM_FIGURES), [], "landing 320: figure spills out of its tile");
   const { scrollWidth, innerWidth } = await page.evaluate<PageMeasure>(MEASURE_PAGE);
   assert.ok(scrollWidth <= innerWidth, `landing 320: page scrolls sideways, ${scrollWidth}px wide in ${innerWidth}px`);
   for (const id of ["log-in", "get-started"]) {
