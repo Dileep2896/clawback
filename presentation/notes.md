@@ -1,0 +1,85 @@
+# Clawback: the spoken script (about 4:00 at 140 words a minute)
+
+One heading per build step: `## <slide>.<step>`. Step 0 is what shows when the slide arrives; each Next adds one step.
+`make-clips.sh` turns this file into `notes.js` for the presenter view (S).
+
+## 1.0
+Hi, I'm Dileep, and this is Clawback.
+
+## 1.1
+I built it yesterday at the naïve x YC Autonomous Company Hackathon. Here is the problem I picked.
+
+## 2.0
+Every year, American businesses pay five hundred and seventy two billion dollars for electricity, gas and phone service.
+
+## 2.1
+Our estimate is that one to three percent of that is billed wrong, or sits on the wrong plan. That is five point seven to seventeen billion dollars a year, quietly left on the table. These are estimates; the sources are on the slide.
+
+## 3.0
+Why? Because nobody checks.
+
+## 3.1
+A small business has bills from a utility, a gas company and a phone carrier, each with its own portal and its own format, and nobody has time to compare them line by line.
+
+## 3.2
+And the errors are real: a meter multiplier that doubled, phone lines nobody uses, promotions that expired, a rate plan that no longer fits.
+
+## 3.3
+Finding them takes hours of reading tariffs, and the owner simply doesn't have those hours.
+
+## 4.0
+So I built Clawback: a company of AI agents that gets that money back.
+
+## 4.1
+Nine agents. A CEO hands out the work. Intake reads the bill. The Collector pulls bills and meter data. The Auditor checks every line. The Filer drafts the claims, and the Approver asks the owner. The Negotiator calls the provider. Finance records the money, and the Monitor watches the next bill.
+
+## 4.2
+The owner does exactly one thing: approve the plan, once. Let me show you a real run.
+
+## 5.0
+Linda owns three noodle restaurants in the Bay Area. She signs up, uploads one bill, and gives us her provider login. No spreadsheets, no phone trees, no reading tariffs. That's all she does; from here the agents take over.
+
+## 6.0
+The Collector logs in and downloads two years of bills and meter readings. The Auditor checks each line against the tariff. Here is the Fremont store: since the meter was swapped in September 2025, it has been billed for double the electricity it used.
+
+## 7.0
+Clawback bundles everything it found into one plan and asks Linda once. She can have us call the provider, or email them.
+
+## 7.1
+One tap. From here, no human touches anything.
+
+## 8.0
+This is the real call, recorded live, with the AI disclosure first. Listen.
+
+## 9.0
+Seven phone lines nobody uses: cancelled on that call. Three expired promotions: flagged. And the Filer files the overbilling claim under Electric Rule 17.1.
+
+## 10.0
+Here is where Linda lands.
+
+## 10.1
+Twelve thousand six hundred dollars of refunds claimed, and eighteen thousand three hundred dollars a year in savings. Claimed, not yet granted: the provider still has to pay it, and we show it that way until the money actually arrives.
+
+## 11.0
+The business model is simple. We keep thirty percent of what we recover.
+
+## 11.1
+Nothing up front, and nothing at all if nothing comes back.
+
+## 11.2
+At thirty percent, the ceiling is one point seven to five point one billion dollars a year. A ceiling, not a forecast.
+
+## 12.0
+Clawback runs on naïve.
+
+## 12.1
+The nine agents run as one naïve team, every action is gated and audited, and each run is capped at two dollars.
+
+## 12.2
+You can try it right now. It's live as a naïve App, and the link is on the screen.
+
+## 13.0
+One approval. Everything else ran on its own.
+
+## 13.1
+That's Clawback. Thank you.

@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clawback</title>
+<link rel="stylesheet" href="deck.css">
+</head>
+<body>
+<!-- Figures: market.ts (apps/dashboard/components/landing) and the recorded run of 2026-11-08. Nothing else. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M19 12a7 7 0 1 1-2.05-4.95"/><path d="M19 4v4h-4"/>
+  </symbol>
+</svg>
+
+<main class="stage" id="stage">
+
+  <!-- 1 Title -->
+  <section class="slide s-title" data-title="Title">
+    <div class="wordmark" data-step="0"><svg class="mark"><use href="#mark"/></svg>Clawback</div>
+    <p class="tagline" data-step="0">AI agents that get small businesses their money back.</p>
+    <div class="byline" data-step="1">
+      <p>Built at the naïve x YC Autonomous Company Hackathon, November 7, 2026</p>
+      <p class="name">Dileep Kumar Sharma</p>
+    </div>
+  </section>
+
+  <!-- 2 Market -->
+  <section class="slide s-market" data-title="Market">
+    <p class="eyebrow" data-step="0">The market <span class="tag">Estimate</span></p>
+    <div class="hero" data-step="0">
+      <span class="figure" data-count="572" data-prefix="$" data-suffix="B">$572B</span>
+      <p class="lead">what US businesses pay every year for electricity, gas and phone</p>
+    </div>
+    <div class="slice" data-step="1">
+      <div class="bar"><span class="bar-wrong"></span></div>
+      <p><span class="money" data-count="17.2" data-from="5.7" data-prefix="$5.7B to $" data-suffix="B" data-decimals="1">$5.7B to $17.2B</span> a year billed wrong or on the wrong plan (1 to 3%)</p>
+    </div>
+    <p class="source" data-step="1">Estimates. Electricity: US EIA, 2025 ($290B commercial and industrial). Phone and internet: Grand View Research, 2023 (the 42% business share of $468B). Gas: US EIA prices and volumes, 2025. We assume 1 to 3% is billed wrong.</p>
+  </section>
+
+  <!-- 3 Problem -->
+  <section class="slide s-problem" data-title="Problem">
+    <h1 data-step="0">Nobody checks.</h1>
+    <div class="providers" data-step="1">
+      <div class="provider"><span>Electricity</span><small>utility portal</small></div>
+      <div class="provider"><span>Gas</span><small>another portal</small></div>
+      <div class="provider"><span>Phone</span><small>a carrier's PDF</small></div>
+    </div>
+    <ul class="errors" data-step="2">
+      <li style="--i:0">Doubled meter multiplier</li>
+      <li style="--i:1">Unused phone lines</li>
+      <li style="--i:2">Expired promotions</li>
+      <li style="--i:3">Wrong rate plan</li>
+    </ul>
+    <p class="lead" data-step="3">Checking takes hours the owner doesn't have.</p>
+  </section>
+
+  <!-- 4 Clawback -->
+  <section class="slide s-agents" data-title="Clawback">
+    <h1 data-step="0">Clawback: nine AI agents that get the money back.</h1>
+    <ol class="team" data-step="1">
+      <li style="--i:0" class="ceo"><b>CEO</b><small>hands out the work</small></li>
+      <li style="--i:1"><b>Intake</b><small>reads the bill</small></li>
+      <li style="--i:2"><b>Collector</b><small>pulls bills and meter data</small></li>
+      <li style="--i:3"><b>Auditor</b><small>checks every line</small></li>
+      <li style="--i:4"><b>Filer</b><small>drafts the claims</small></li>
+      <li style="--i:5" class="approver"><b>Approver</b><small>asks the owner</small></li>
+      <li style="--i:6"><b>Negotiator</b><small>calls or emails the provider</small></li>
+      <li style="--i:7"><b>Finance</b><small>records the money</small></li>
+      <li style="--i:8"><b>Monitor</b><small>watches the next bill</small></li>
+    </ol>
+    <p class="once" data-step="2"><span class="dot"></span>One approval from the owner. That's the only human step.</p>
+  </section>
+
+  <!-- 5-10 Demo -->
+  <section class="slide demo" data-title="Demo: sign-up">
+    <header><p class="kicker">Demo</p><h2>Linda signs up and uploads one bill.</h2><span class="tag">Demo data · recorded run</span></header>
+    <video data-clip="media/01-signup.mp4" muted playsinline preload="auto"></video>
+  </section>
+
+  <section class="slide demo" data-title="Demo: Collector and Auditor">
+    <header><p class="kicker">Demo</p><h2>The Auditor finds Fremont's meter billed double.</h2><span class="tag">Demo data · recorded run</span></header>
+    <video data-clip="media/02-agents.mp4" muted playsinline preload="auto"></video>
+  </section>
+
+  <section class="slide demo" data-title="Demo: approval" data-pause="6.4">
+    <header><p class="kicker">Demo</p><h2>One plan. One approval: call or email.</h2><span class="tag">Demo data · recorded run</span></header>
+    <video data-clip="media/03-approval.mp4" muted playsinline preload="auto"></video>
+    <span data-step="1" class="cue">The tap</span>
+  </section>
+
+  <section class="slide demo" data-title="Demo: the call">
+    <header><p class="kicker">Demo</p><h2>The Negotiator calls BayTel.</h2><span class="tag">Real call, recorded live · excerpt of 2:28</span></header>
+    <video data-clip="media/04-call.mp4" data-audio playsinline preload="auto"></video>
+  </section>
+
+  <section class="slide demo" data-title="Demo: findings">
+    <header><p class="kicker">Demo</p><h2>7 lines cancelled · 3 expired promos flagged · Rule 17.1 claim filed</h2><span class="tag">Demo data · recorded run</span></header>
+    <video data-clip="media/05-findings.mp4" muted playsinline preload="auto"></video>
+  </section>
+
+  <section class="slide demo" data-title="Demo: Overview">
+    <header><p class="kicker">Demo</p><h2>Where Linda lands.</h2><span class="tag">Demo data · recorded run</span></header>
+    <video data-clip="media/06-overview.mp4" muted playsinline preload="auto"></video>
+    <div class="result" data-step="1">
+      <div><span class="figure money" data-count="12606.06" data-prefix="$" data-decimals="2">$12,606.06</span><p>refund claimed</p></div>
+      <div><span class="figure money" data-count="18319.32" data-prefix="$" data-decimals="2">$18,319.32</span><p>a year saved</p></div>
+      <p class="fine">Claimed, not yet granted: the provider still has to pay it.</p>
+    </div>
+  </section>
+
+  <!-- 11 Business model -->
+  <section class="slide s-model" data-title="Business model">
+    <p class="eyebrow" data-step="0">Business model</p>
+    <h1 data-step="0"><span class="money">30%</span> of what we recover.</h1>
+    <p class="lead" data-step="1">Nothing up front. Nothing if nothing comes back.</p>
+    <div class="ceiling" data-step="2">
+      <span class="figure" data-count="5.1" data-from="1.7" data-prefix="$1.7B to $" data-suffix="B" data-decimals="1">$1.7B to $5.1B</span>
+      <p>a year at 30%, if every dollar came back. <span class="tag">Estimate</span> A ceiling, not a forecast.</p>
+    </div>
+  </section>
+
+  <!-- 12 naïve -->
+  <section class="slide s-naive" data-title="Runs on naïve">
+    <p class="eyebrow" data-step="0">Platform</p>
+    <h1 data-step="0">Runs on naïve.</h1>
+    <ul class="facts" data-step="1">
+      <li style="--i:0">Nine agents as one naïve team</li>
+      <li style="--i:1">Every action gated and audited</li>
+      <li style="--i:2">A $2 cap on every run</li>
+    </ul>
+    <div class="try" data-step="2">
+      <p class="kicker">Try it, a naïve App</p>
+      <p class="url">clawback-sandbox-2e3cr9qffcxs.vercel.app</p>
+    </div>
+  </section>
+
+  <!-- 13 Close -->
+  <section class="slide s-close" data-title="Close">
+    <h1 data-step="0">One approval.<br><span class="muted">Everything else ran on its own.</span></h1>
+    <div class="sign" data-step="1">
+      <div class="wordmark small"><svg class="mark"><use href="#mark"/></svg>Clawback</div>
+      <div class="links">
+        <p>clawback-sandbox-2e3cr9qffcxs.vercel.app</p>
+        <p>github.com/Dileep2896/clawback</p>
+        <p class="name">Dileep Kumar Sharma</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="black" id="black"></div>
+
+<!-- Presenter view: this same file opened with #presenter (press S). -->
+<div class="presenter" id="presenter" hidden>
+  <div class="p-top"><span id="p-pos"></span><span id="p-timer">0:00</span></div>
+  <p class="p-label">Now</p>
+  <p class="p-now" id="p-now"></p>
+  <p class="p-label">Next</p>
+  <p class="p-next" id="p-next"></p>
+  <p class="p-keys">→ / PageDown next · ← / PageUp back · R reset timer · B black</p>
+</div>
+
+<script src="notes.js"></script>
+<script src="deck.js"></script>
+</body>
+</html>

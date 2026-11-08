@@ -29,3 +29,7 @@ data/samples/
 # Rejected or half-written captures, which can hold the secrets that got them rejected.
 data/replay/*.failed
 data/replay/*.tmp
+
+# Stage deck: clips made by presentation/make-clips.sh, screenshots by shots.cjs.
+presentation/media/
+presentation/steps/
