@@ -36,7 +36,7 @@
       "footage": { "from": "approve", "offsetSec": 2.13 },
       "highlights": [{ "say": "picks up the phone", "box": "call-head" }]
     },
-    { "id": "7-call", "title": "Real call audio, no voiceover", "sec": 21, "footage": { "from": "approve", "offsetSec": 7.28 }, "zoom": { "at": "call-head", "scale": 1.45, "offsetSec": -10 }, "callAudio": { "fromSec": 0 }, "label": "Real call, recorded live · call continues, 2:25 total", "emailCardAtSec": 17 },
+    { "id": "7-call", "title": "Real call audio, no voiceover", "sec": 21, "footage": { "from": "approve", "offsetSec": 7.28 }, "zoom": { "at": "call-head", "scale": 1.45, "offsetSec": -10 }, "callAudio": { "fromSec": 6.9 }, "label": "Real call, recorded live · call continues, 2:28 total", "emailCardAtSec": 17 },
     {
       "id": "8-findings", "title": "Findings: lines, promos, the claim", "vo": "V7.m4a", "voSec": 11.97,
       "footage": { "from": "findings" },

@@ -63,6 +63,20 @@ The one live run for the video, approved by the human ("yes, plan one live run f
 - The line's own check (`cli.ts readback`) listed three notes: "the first thing said was not the menu" (our disclosure plays first), and two lines its transcriber heard as "baseball business" and "you i have the account". The scripted line is "Thanks for calling BayTel Business"; Retell's transcript heard "Basal Business", corrected to BayTel in the video's captions only. The keypad press (2) was right.
 - Live mode was on only for this take: the webhook process ran with `VOICE_MODE=live` on its command line and was restarted in sim straight after. `.env` stays `VOICE_MODE=sim`.
 
+## Demo video re-take (2026-11-08)
+
+The one live run for the re-recorded video on the redesigned `/agents` page (after agents-redesign and email-negotiator), approved by the human in the terminal ("Go ahead with one live call."). Recorded by `video/record/record-demo.ts --live`, paced to the voiceover's word timings. Own database `clawback_video`, this worktree's dashboard, portal and webhooks on 3010, 3011 and 3012. The 2026-11-07 take's footage was lost with the old worktree; its render is kept as `~/Desktop/clawback-video/demo-final-v1.mp4`.
+
+- Not a replay: no REPLAY banner. Linda kept the default **Call** on the approval card's Call/Email choice and tapped Approve on `/agents`. On camera: landing, Mission Dumplings sign-up and sample-bill upload (committed parse, no model call), Linda on `/agents` (Collector, Auditor with the kWh chart, the amber card, Approve, the call), Findings, Overview, Money.
+- One call, to the allowlisted Vapi line only. Retell `call_cc82cbeda6ad01519ed15c63150`, Vapi `01a1bc18-6ee6-7001-b8eb-c32218fc7cdb`. 2:28 (147.7 s), `calls.mode` live, no fallback, 7 lines cancelled on the call.
+- Cost from read-back: Retell **$0.2384**, Vapi **$0.1727**, call $0.4111. Claude (the run's own cost) **$0.792779**. Take total about **$1.20**.
+- Before it, three sim dry takes on the new UI (no voice): $0.590, $0.408 and $0.608 Claude. The first failed at Approve on a recorder selector (fixed); the third proved the voiceover-paced recorder.
+- Credit left (estimated from the 2026-11-07 figures, assuming no other live calls since): Retell about **$7.78**, Vapi about **$3.91**, above the $3 / $2 floor.
+- Approve to Success 3:22. The whole take filmed 4:52.
+- Overview and the checks: refund $12,606.06, yearly savings $18,319.32, fee $9,277.61. Same as every run, so the voiceover's figures stand.
+- The line's own check listed two notes: "the caller did not open with the full disclosure" (our recorded disclosure plays first, as on 2026-11-07) and one off-script rep line ("what's the service address and who authorized these changes"), which the agent answered. Retell heard "Baytel"; corrected to BayTel in the video's captions only.
+- Live mode was on only for this take: the webhook process ran with `VOICE_MODE=live` on its command line and was restarted in sim straight after. `.env` stays `VOICE_MODE=sim`.
+
 ## Backup: the replay at 1.4×
 
 The recording did not need recapturing: it holds run-table rows only, and the new pages read the same rows. `scripts/replay-check.ts` passes on the new UI (312 samples, all labelled, call timer 1:39), and the REPLAY banner sits above the app on every page.
