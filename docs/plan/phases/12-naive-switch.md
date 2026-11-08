@@ -142,3 +142,23 @@ From partial docs reads on 2026-11-06. Research stopped early by instruction, an
 **depends on:** naive-public-endpoints, naive-io-adapters, naive-runtime-adapter
 
 **parallel with:** none
+
+### `naive-runtime-cost`
+
+**Goal:** Make a naïve run cheap and fast enough to show. Human, 2026-11-07: "go ahead with the naive runtime fix". Findings from `naive-rehearsal` (see `docs/plan/naive-rehearsal-notes.md` on branch `fleet/naive-rehearsal` and `docs/plan/naive-notes.md`):
+- Ungated MCP tools park once a session has read the bill text; the model then spends a turn re-issuing each one (68 parks, about $2 and 13 minutes a Sonnet run against 5 minutes local). Remove the cause: for example keep mail text out of agent context (pass the parsed bill facts, not the raw email), confirm parked ungated calls without a model turn, and move board mirroring out of model tool calls. Measure parks per run.
+- A board-digest session started even with the board off, and stop/cleanup cancels only the root session. Cancel every session recorded for the run on stop; track or turn off digests.
+- A sleep mid-run leaves sessions parked: cleanup must retry when the network returns.
+
+**Spend:** build and test against the fake naïve (free). Ask in `questions.md` before any live naïve session, with expected cost; the human's existing approval covers at most \$8 total across `naive-rehearsal` and this lane, \$1.98 already used.
+
+**Acceptance checks:**
+- Fake-naïve tests show parked ungated calls confirmed without a model turn, and every run session cancelled on stop.
+- If a live run is approved: parks, cost and duration recorded; target under \$0.75 and under 7 minutes on Sonnet.
+- `pnpm test`, lint, typecheck pass. Only `packages/platform/src/naive/` and its tests change, unless a test proves otherwise.
+
+**Estimate:** 1.5 hours
+
+**depends on:** naive-runtime-adapter
+
+**parallel with:** naive-rehearsal (paused until this ships)
