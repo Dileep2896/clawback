@@ -92,3 +92,12 @@ Page = slim sandbox bar (only on replays) → one-line run header → two column
 6. **Non-hero money at 20px**: ledger totals, the lead finding, the evidence drawer amount, Overview and Money statement rows, the invoice amount and `StatTile` moved to `text-body`. `app-shots.ts` now flags any `.font-figure` text outside `[data-hero-figure]` that is not 14px; it passes on every signed-in page at 1440 and 390.
 
 Checks: `pnpm test` (all pass), `pnpm lint`, `pnpm typecheck`; `agents-shots.ts` and `app-shots.ts` against this lane's own dashboard (port 3300) and database.
+
+## Known limits
+- Orchestrator decision (2026-11-07, review round 3): fix the stale openId (clear when the finding is gone) and the repeat-audit collecting moment (use current-run progress), each with a regression test. This is the last fix round; later non-regression findings go here as known limits.
+
+## Fix round (review round 3)
+1. **Stale evidence selection (now.tsx:141)**: `nowMoment` now takes the open finding's id and holds the findings only while that finding still exists; `NowPane` clears `openId` at render time when an audit removes it, so its drawer closes and approvals and calls come back. Regression test in `lib/now.test.ts`.
+2. **Repeat audits skip the collecting moment (lib/now.ts:37)**: the run's own board cards and audit rows decide it. While intake or collector has begun and no agent from the auditor on has, the pane shows the bills even if an earlier audit's findings are there. Regression test covers a new run with existing findings, by card and by audit row, and the switch once the auditor or a later agent starts.
+
+Checks: `pnpm test` (1828 pass), `pnpm lint`, `pnpm typecheck`, dashboard `tsc --noEmit`. Browser suites not re-run. Non-blocking design.md note left alone (not a file this round edits).
