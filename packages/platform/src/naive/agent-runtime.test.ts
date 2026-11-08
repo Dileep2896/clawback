@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import type { Approval, ApprovalGate, Audit, Budget, RunEvent, RunSpec, ToolDef } from "../types.ts";
-import { createAgentRuntime, MAX_RUN_USD, pickModel, toolsetFor } from "./agent-runtime.ts";
-import type { NaiveApi, NaiveRequest } from "./runtime-http.ts";
+// The real audit wrapper, so the test sees how a tool fails when only its audit row cannot be written.
+import { defineTool, wrapTool } from "@bill-fighter/agents/tool-wrapper";
+import type { Approval, ApprovalGate, Audit, Board, BoardCard, Budget, RunEvent, RunSpec, ToolDef } from "../types.ts";
+import { cancelAll, createAgentRuntime, MAX_RUN_USD, pickModel, toolsetFor } from "./agent-runtime.ts";
+import { type NaiveApi, NaiveError, type NaiveRequest } from "./runtime-http.ts";
 
 const tool = (name: string): ToolDef => ({
   name,
@@ -55,7 +57,8 @@ function fakeNaive(step: (sessions: Map<string, Ses>, tick: number) => void) {
         return ses;
       }
       if (m[1] === "ses_root") step(sessions, tick++);
-      return ses;
+      // A snapshot, as over HTTP: the runtime's copy goes stale when the fake moves the session on.
+      return structuredClone(ses);
     }
     return {};
   }) as NaiveApi;
@@ -108,8 +111,9 @@ async function collect(events: AsyncIterable<RunEvent>) {
 }
 
 const parked = (id: string, actionId?: string) => ({ kind: "tool", tool_call_id: id, name: "clawback.submit_claim", args: actionId ? { actionId } : {} });
-const runtime = (api: NaiveApi, gate: ApprovalGate, budget: Budget, audit: Audit) =>
-  createAgentRuntime(async () => ({ api, gate, budget, audit, publicUrl: "https://tunnel.test", port: 0, pollMs: 1, idleMs: 5000 }));
+const noCards: Board = { create: async () => ({}) as BoardCard, move: async () => ({}) as BoardCard, list: async () => [] };
+const runtime = (api: NaiveApi, gate: ApprovalGate, budget: Budget, audit: Audit, board = noCards) =>
+  createAgentRuntime(async () => ({ api, gate, budget, audit, board, publicUrl: "https://tunnel.test", port: 0, pollMs: 1, idleMs: 5000 }));
 
 describe("naïve runtime", () => {
   it("releases every gated call of the run from one approval, on member sessions, and logs the approver", async () => {
@@ -167,8 +171,8 @@ describe("naïve runtime", () => {
     const filer = calls.find((c) => c.method === "PATCH")!.body as { tools: unknown; budget: { max_task_micro_usd: number } };
     expect(filer.tools).toEqual({ default_config: { permission: "deny" }, configs: { "clawback.submit_claim": { enabled: true, permission: "ask" } } });
     expect(filer.budget.max_task_micro_usd).toBe(MAX_RUN_USD * 1_000_000);
-    // The run's vault credentials are removed at the end.
-    expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(2);
+    // The run's vault credential is removed at the end; the CEO, whose only tool here is the board, has none.
+    expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
   });
 
   it("denies a gated call with no actionId or outside the bundle and any foreign tool, allows an ungated one, and never touches a session it does not own", async () => {
@@ -365,6 +369,261 @@ describe("naïve runtime", () => {
       port: 0,
     }));
     expect((await collect(run.run(SPEC))).at(-1)).toMatchObject({ status: "error", reason: expect.stringContaining("NAIVE_MCP_PUBLIC_URL") });
+  });
+});
+
+describe("naïve runtime cost", () => {
+  it("keeps the board itself, one card per delegated task, and never offers board_update to the coordinator", async () => {
+    const cards: { input: Record<string, unknown>; agent: string }[] = [];
+    let next = 0;
+    const board: ToolDef = {
+      ...tool("board_update"),
+      handler: async (input, ctx) => {
+        cards.push({ input: input as Record<string, unknown>, agent: ctx.agent });
+        return (input as { cardId?: string }).cardId ? input : { cardId: `card${++next}` };
+      },
+    };
+    const { gate } = fakeGate({ status: "pending", actionIds: [] });
+    const { api, calls } = fakeNaive((sessions, tick) => {
+      const root = sessions.get("ses_root")!;
+      const member = (id: string) => ({ id, status: "running", stop_reason: null, pending_actions: [], consumed_micro_usd: 0, events: [] });
+      if (tick === 0)
+        Object.assign(root, {
+          status: "idle",
+          stop_reason: "awaiting_approval",
+          pending_actions: [
+            { kind: "tool", tool_call_id: "d1", name: "send_to_agent", args: { agent: "clawback-filer", message: "\nDraft the letters for F-1.\nIds: F-1", wait: true } },
+            { kind: "tool", tool_call_id: "d2", name: "send_to_agent", args: { agent: "agt_filer", message: "File them", wait: true } },
+          ],
+        });
+      if (tick === 1) {
+        root.events.push({ seq: 1, type: "thread.created", data: { thread_id: "ses_a", member: "clawback-filer" } });
+        root.events.push({ seq: 2, type: "thread.created", data: { thread_id: "ses_b", member: "clawback-filer" } });
+        Object.assign(root, { stop_reason: "awaiting_delegation", pending_actions: [] });
+        sessions.set("ses_a", member("ses_a"));
+        sessions.set("ses_b", member("ses_b"));
+      }
+      if (tick === 3) {
+        Object.assign(sessions.get("ses_a")!, { status: "idle", stop_reason: "end_turn" });
+        root.events.push({ seq: 3, type: "thread.idle", data: { thread_id: "ses_a" } });
+        root.events.push({ seq: 4, type: "thread.terminated", data: { thread_id: "ses_b" } });
+      }
+      if (tick === 5) root.stop_reason = "end_turn";
+    });
+    await collect(runtime(api, gate, fakeBudget(), fakeAudit().audit).run({ ...SPEC, tools: [board, tool("submit_claim")] }));
+    expect(cards).toEqual([
+      { input: { agent: "filer", title: "Draft the letters for F-1.", status: "doing" }, agent: "ceo" },
+      { input: { agent: "filer", title: "File them", status: "doing" }, agent: "ceo" },
+      { input: { cardId: "card1", status: "done" }, agent: "ceo" },
+      { input: { cardId: "card2", status: "blocked" }, agent: "ceo" },
+    ]);
+    const ceo = calls.find((c) => c.method === "POST" && c.path === "/agents")!.body as { tools: { configs: Record<string, unknown> }; system: string; mcp_servers: unknown[] };
+    expect(Object.keys(ceo.tools.configs)).not.toContain("clawback.board_update");
+    expect(ceo.system).toContain("Do not call board_update");
+    expect(ceo.mcp_servers).toEqual([]);
+    // Nothing is written to naïve's board, so no digest session can start.
+    expect(calls.some((c) => c.path.startsWith("/boards"))).toBe(false);
+  });
+
+  /** One delegated task; at tick 3 the member ends as `memberEnd` and the root reports thread.idle in the same round. */
+  const oneCard = async (memberEnd: Partial<Ses>, move: (attempt: number) => void, create: (attempt: number) => void = () => {}, memberStart: Partial<Ses> = {}) => {
+    const moves: unknown[] = [];
+    let attempt = 0;
+    let creates = 0;
+    const board: ToolDef = {
+      ...tool("board_update"),
+      handler: async (input) => {
+        const { cardId } = input as { cardId?: string };
+        if (!cardId) {
+          create(++creates);
+          return { cardId: "card1" };
+        }
+        move(++attempt);
+        moves.push(input);
+        return input;
+      },
+    };
+    const { api } = fakeNaive((sessions, tick) => {
+      const root = sessions.get("ses_root")!;
+      if (tick === 0)
+        Object.assign(root, {
+          status: "idle",
+          stop_reason: "awaiting_approval",
+          pending_actions: [{ kind: "tool", tool_call_id: "d1", name: "send_to_agent", args: { agent: "clawback-filer", message: "File F-1", wait: true } }],
+        });
+      if (tick === 1) {
+        root.events.push({ seq: 1, type: "thread.created", data: { thread_id: "ses_a", member: "clawback-filer" } });
+        Object.assign(root, { stop_reason: "awaiting_delegation", pending_actions: [] });
+        sessions.set("ses_a", { id: "ses_a", status: "running", stop_reason: null, pending_actions: [], consumed_micro_usd: 0, events: [], ...memberStart });
+      }
+      // The root is read before the member in a round, so the loop's copy of ses_a is still "running" here.
+      if (tick === 3) {
+        Object.assign(sessions.get("ses_a")!, memberEnd);
+        root.events.push({ seq: 2, type: "thread.idle", data: { thread_id: "ses_a" } });
+      }
+      if (tick === 5) root.stop_reason = "end_turn";
+    });
+    const events = await collect(runtime(api, fakeGate({ status: "pending", actionIds: [] }).gate, fakeBudget(), fakeAudit().audit).run({ ...SPEC, tools: [board, tool("submit_claim")] }));
+    return { moves, events, result: events.find((e) => e.type === "result") };
+  };
+
+  it("retries a card creation that failed to write, and fails the run if the card is never created", async () => {
+    const done = { status: "idle", stop_reason: "end_turn" };
+    const retried = await oneCard(done, () => {}, (attempt) => {
+      if (attempt === 1) throw new Error("db down");
+    });
+    expect(retried.moves).toEqual([{ cardId: "card1", status: "done" }]);
+    expect(retried.result).toMatchObject({ status: "success" });
+    const never = await oneCard(done, () => {}, () => {
+      throw new Error("db down");
+    });
+    expect(never.moves).toEqual([]);
+    expect(never.result).toMatchObject({ status: "error", reason: expect.stringContaining('"File F-1" (not created)') });
+  });
+
+  it("takes the card a failed creation already wrote instead of making a second one", async () => {
+    // A board_update whose card is inserted but whose audit row fails once, through the real wrapper.
+    const cards: BoardCard[] = [];
+    const store: Board = {
+      create: async (card) => (cards.push({ ...card, id: `card${cards.length + 1}`, status: card.status ?? "todo" } as BoardCard), cards.at(-1)!),
+      move: async (id, status) => Object.assign(cards.find((c) => c.id === id)!, { status }),
+      list: async (runId) => cards.filter((c) => c.runId === runId),
+    };
+    let audits = 0;
+    const rows: Parameters<Audit["record"]>[0][] = [];
+    const audit: Audit = {
+      record: async (row) => {
+        if (++audits === 1) throw new Error("audit down");
+        rows.push(row);
+      },
+      list: async () => [],
+    };
+    const board = wrapTool(
+      defineTool({
+        ...tool("board_update"),
+        targets: () => [],
+        handler: async (input: unknown) => {
+          const { cardId, agent, title, status } = input as { cardId?: string; agent: string; title: string; status: BoardCard["status"] };
+          if (!cardId) return { cardId: (await store.create({ runId: "run-1", agent, title, status })).id };
+          return store.move(cardId, status);
+        },
+      }),
+      { audit, allowlist: { callNumbers: [], emailDomains: [], portalOrigins: [] } },
+    );
+    const { api } = fakeNaive((sessions, tick) => {
+      const root = sessions.get("ses_root")!;
+      if (tick === 0)
+        Object.assign(root, {
+          status: "idle",
+          stop_reason: "awaiting_approval",
+          pending_actions: [{ kind: "tool", tool_call_id: "d1", name: "send_to_agent", args: { agent: "clawback-filer", message: "File F-1", wait: true } }],
+        });
+      if (tick === 1) {
+        root.events.push({ seq: 1, type: "thread.created", data: { thread_id: "ses_a", member: "clawback-filer" } });
+        Object.assign(root, { stop_reason: "awaiting_delegation", pending_actions: [] });
+        sessions.set("ses_a", { id: "ses_a", status: "running", stop_reason: null, pending_actions: [], consumed_micro_usd: 0, events: [] });
+      }
+      if (tick === 3) {
+        Object.assign(sessions.get("ses_a")!, { status: "idle", stop_reason: "end_turn" });
+        root.events.push({ seq: 2, type: "thread.idle", data: { thread_id: "ses_a" } });
+      }
+      if (tick === 5) root.stop_reason = "end_turn";
+    });
+    const events = await collect(
+      runtime(api, fakeGate({ status: "pending", actionIds: [] }).gate, fakeBudget(), audit, store).run({ ...SPEC, tools: [board, tool("submit_claim")] }),
+    );
+    expect(audits).toBeGreaterThan(1);
+    expect(cards).toMatchObject([{ id: "card1", agent: "filer", title: "File F-1", status: "done" }]);
+    // The creation's audit row, lost in the failed attempt, is written on recovery, and the move's row too.
+    expect(rows.filter((r) => r.tool === "board_update")).toMatchObject([
+      { input: { agent: "filer", title: "File F-1", status: "doing" }, output: { cardId: "card1" } },
+      { input: { cardId: "card1", status: "done" } },
+    ]);
+    expect(events.find((e) => e.type === "result")).toMatchObject({ status: "success" });
+  });
+
+  it("still reads a member's last events and spend when its result folds back as it ends", async () => {
+    const { moves, events } = await oneCard(
+      { status: "completed", stop_reason: "end_turn", consumed_micro_usd: 250_000, events: [{ seq: 1, type: "message.completed", data: { role: "assistant", content: "Filed F-1" } }] },
+      () => {},
+    );
+    expect(moves).toEqual([{ cardId: "card1", status: "done" }]);
+    expect(events).toContainEqual({ type: "text", agent: "filer", text: "Filed F-1" });
+    expect(events.find((e) => e.type === "result")).toMatchObject({ costUsd: 0.25 });
+  });
+
+  it("reads a member's own state when its result folds back, so a failed member's card is blocked", async () => {
+    const { moves, result } = await oneCard({ status: "failed", stop_reason: null }, () => {});
+    expect(moves).toEqual([{ cardId: "card1", status: "blocked" }]);
+    expect(result).toMatchObject({ status: "success" });
+  });
+
+  it("blocks the card of a member that was cancelled, or denied a gated call before it ended its turn", async () => {
+    const cancelled = await oneCard({ status: "cancelled", stop_reason: null }, () => {});
+    expect(cancelled.moves).toEqual([{ cardId: "card1", status: "blocked" }]);
+    // The pending bundle does not hold A-9, so the gated call is denied; the member then ends its turn normally.
+    const denied = await oneCard({ status: "idle", stop_reason: "end_turn" }, () => {}, () => {}, { status: "idle", stop_reason: "awaiting_approval", pending_actions: [parked("c1", "A-9")] });
+    expect(denied.events).toContainEqual(expect.objectContaining({ type: "denied", agent: "filer", tool: "submit_claim" }));
+    expect(denied.moves).toEqual([{ cardId: "card1", status: "blocked" }]);
+  });
+
+  it("retries a card move that failed to write, and fails the run if it never lands", async () => {
+    const done = { status: "idle", stop_reason: "end_turn" };
+    const retried = await oneCard(done, (attempt) => {
+      if (attempt === 1) throw new Error("db down");
+    });
+    expect(retried.moves).toEqual([{ cardId: "card1", status: "done" }]);
+    expect(retried.result).toMatchObject({ status: "success" });
+    const never = await oneCard(done, () => {
+      throw new Error("db down");
+    });
+    expect(never.moves).toEqual([]);
+    expect(never.result).toMatchObject({ status: "error", reason: expect.stringContaining("board cards not updated: card1") });
+  });
+
+  it("confirms a parked ungated call itself, counts parks, and cancels every session of the run on stop", async () => {
+    const { rows, audit } = fakeAudit();
+    const { gate } = fakeGate({ status: "pending", actionIds: [] });
+    const { api, calls } = fakeNaive((sessions, tick) => {
+      const root = sessions.get("ses_root")!;
+      if (tick === 0) {
+        root.events.push({ seq: 1, type: "thread.created", data: { thread_id: "ses_m", member: "clawback-filer" } });
+        Object.assign(root, { status: "idle", stop_reason: "awaiting_delegation" });
+        sessions.set("ses_m", {
+          id: "ses_m",
+          status: "idle",
+          stop_reason: "awaiting_approval",
+          pending_actions: [{ kind: "tool", tool_call_id: "u1", name: "clawback.draft_letter", args: {} }],
+          consumed_micro_usd: 0,
+          events: [],
+        });
+      }
+      // The root stops on an error while its member is still open.
+      if (tick === 2) root.stop_reason = "error";
+    });
+    const spec: RunSpec = { ...SPEC, members: [{ ...SPEC.members[0]!, tools: ["draft_letter"] }], tools: [...SPEC.tools, tool("draft_letter")] };
+    const events = await collect(runtime(api, gate, fakeBudget(), audit).run(spec));
+    // The allow is ours alone: no owner decision and no model turn stand between the park and the call.
+    expect(calls.filter((c) => c.path.endsWith("/tool_confirmations")).map((c) => c.body)).toEqual([{ tool_call_id: "u1", decision: "allow" }]);
+    expect(calls.filter((c) => c.path.endsWith("/cancel")).map((c) => c.path)).toEqual(["/sessions/ses_root/cancel", "/sessions/ses_m/cancel"]);
+    expect(events).toContainEqual(expect.objectContaining({ type: "text", text: expect.stringContaining("1 parks (1 ungated), 2 sessions") }));
+    expect(rows).toContainEqual(expect.objectContaining({ tool: "naive_run_stats", output: expect.objectContaining({ parks: 1, ungatedParks: 1, sessions: 2 }) }));
+  });
+
+  it("retries a cancel while naïve is unreachable, counts an ended session as cancelled, and reports what is left", async () => {
+    const tries = new Map<string, number>();
+    const api = (async (path: string) => {
+      const id = path.split("/")[2]!;
+      const n = (tries.get(id) ?? 0) + 1;
+      tries.set(id, n);
+      if (id === "ses_net" && n < 3) throw new Error("getaddrinfo ENOTFOUND api.vetta.sh");
+      if (id === "ses_done") throw new NaiveError(409, "session_terminal", "ended");
+      if (id === "ses_down") throw new Error("still offline");
+      return {};
+    }) as NaiveApi;
+    expect(await cancelAll(api, ["ses_ok", "ses_net", "ses_done"], 1, 1000)).toEqual([]);
+    expect(Object.fromEntries(tries)).toEqual({ ses_ok: 1, ses_net: 3, ses_done: 1 });
+    expect(await cancelAll(api, ["ses_down"], 1, 20)).toEqual(["ses_down"]);
   });
 });
 

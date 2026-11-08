@@ -2,10 +2,9 @@ import { randomBytes } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isGatedTool } from "@bill-fighter/shared/gated-tools";
 import { getPlatform } from "../factory.ts";
-import type { AgentDef, AgentRuntime, ApprovalGate, Audit, Budget, RunEvent, RunSpec } from "../types.ts";
-import { listAll, microUsd, type NaiveApi, naiveApi, usdFromMicro } from "./runtime-http.ts";
+import type { AgentDef, AgentRuntime, ApprovalGate, Audit, Board, Budget, RunEvent, RunSpec } from "../types.ts";
+import { listAll, microUsd, type NaiveApi, naiveApi, NaiveError, usdFromMicro } from "./runtime-http.ts";
 import { releasedInRun, startToolServer, toolPath } from "./mcp-server.ts";
-import { setBoardOwner } from "./mirror.ts";
 
 /** The human's limit: no naïve run may spend more than this. */
 export const MAX_RUN_USD = 2;
@@ -19,6 +18,12 @@ const COORDINATOR_TOOLS = ["wait_for_agents", "list_agents"];
 // Asks so the loop sees its args: only wait: true (a thread on this run's budget) may run, never an independent handoff.
 const DELEGATE = "send_to_agent";
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
+// The runtime keeps the coordinator's board itself: an MCP result flags a naïve chat, after which each MCP call is
+// refused once and re-issued by the model (seen live, flag-probe.ts), and board_update was most of the CEO's calls.
+// Members still park on every call, their first included (Sonnet measurement run, naive-rehearsal-notes.md).
+const BOARD_TOOL = "board_update";
+const CANCEL_RETRY_MS = 5000;
+const CANCEL_GIVE_UP_MS = 5 * 60_000;
 // Root stop reasons that end the run; awaiting_approval and awaiting_delegation keep it going.
 const FINISHED = new Set(["end_turn", "awaiting_input"]);
 const STOPPED = new Set(["max_iterations", "context_exhausted", "error", "interrupted", "awaiting_answer"]);
@@ -31,11 +36,16 @@ export type Deps = {
   gate: ApprovalGate;
   budget: Budget;
   audit: Audit;
+  /** Read only, to find a card whose creation reported failure after it was written. Without it the coordinator keeps its own board. */
+  board?: Board;
   api?: NaiveApi;
   publicUrl?: string;
   port?: number;
   pollMs?: number;
   idleMs?: number;
+  /** Waits between cleanup cancel retries; tests shorten them. */
+  cancelRetryMs?: number;
+  cancelGiveUpMs?: number;
 };
 
 type PendingAction = { kind?: string; tool_call_id: string; name: string; args?: Record<string, unknown>; parked_seq?: number };
@@ -73,6 +83,9 @@ export function toolsetFor(def: AgentDef, coordinator: boolean) {
   return { default_config: { permission: "deny" }, configs };
 }
 
+const BOARD_NOTE =
+  "\n\n## The board on this platform\nThe board is kept for you: a card is made for each member task you delegate and moved when the member reports. Do not call board_update; it is not available here.";
+
 const delegationNote = (members: AgentDef[]) =>
   `\n\n## On this platform\nDelegate to a member with send_to_agent (wait: true), then wait_for_agents for the answer. Members by name: ${members
     .map((m) => `${m.name} is "${naiveName(m.name)}"`)
@@ -107,6 +120,63 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
   // shortcut: the sessions this run owns live in memory for the life of run(), so the loop below only ever answers
   // calls on them. That holds one run at a time (the demo rule); upgrade to a table if runs ever overlap.
   const owned = new Map<string, Owned>();
+  const startedAt = Date.now();
+  const stats = { parks: 0, ungatedParks: 0 };
+  // Board cards the runtime keeps: tasks queued per member at delegation, bound to a thread when naïve starts it.
+  const queuedTasks = new Map<string, string[]>();
+  const cardOfThread = new Map<string, string>();
+  let boardTool: RunSpec["tools"][number] | undefined;
+  // A card's creation and move are kept until written: a failed write is retried each round, and the run fails if one
+  // never lands. The first outcome wins (thread.idle then thread.terminated stays done).
+  const creating = new Map<string, { agent: string; title: string }>();
+  const closing = new Map<string, "done" | "blocked">();
+  const triedCreating = new Set<string>();
+  const ourCards = new Set<string>();
+  // Threads whose gated call was denied: their task did not happen, so their card closes blocked even on end_turn.
+  const deniedThreads = new Set<string>();
+  const flushCards = async () => {
+    for (const [threadId, card] of creating) {
+      try {
+        // A failed creation may still have written the card (wrapTool throws when only its audit row fails), so a retry
+        // first takes that card instead of making a second one.
+        const made = triedCreating.has(threadId)
+          ? (await deps!.board!.list(spec.runId)).find((c) => c.agent === card.agent && c.title === card.title && !ourCards.has(c.id))
+          : undefined;
+        triedCreating.add(threadId);
+        const input = { ...card, status: "doing" };
+        // That card's audit row is the write that failed, so it is written here; if this fails too, the next round retries it.
+        if (made)
+          await deps!.audit.record({
+            runId: spec.runId,
+            agent: main,
+            tool: BOARD_TOOL,
+            input,
+            output: { cardId: made.id, agent: made.agent, title: made.title, status: made.status },
+          });
+        const cardId = made?.id ?? ((await boardTool!.handler(input, { runId: spec.runId, agent: main })) as { cardId: string }).cardId;
+        ourCards.add(cardId);
+        cardOfThread.set(threadId, cardId);
+        creating.delete(threadId);
+      } catch (error) {
+        console.warn(`naïve board card "${card.title}": ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    for (const [threadId, status] of closing) {
+      if (!cardOfThread.has(threadId)) continue; // its card is not created yet
+      try {
+        await boardTool!.handler({ cardId: cardOfThread.get(threadId), status }, { runId: spec.runId, agent: main });
+        closing.delete(threadId);
+        cardOfThread.delete(threadId);
+      } catch (error) {
+        console.warn(`naïve board card ${cardOfThread.get(threadId)}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  };
+  const closeCard = async (threadId: string, status: "done" | "blocked") => {
+    if ((!cardOfThread.has(threadId) && !creating.has(threadId)) || closing.has(threadId)) return;
+    closing.set(threadId, status);
+    await flushCards();
+  };
   /** Reports a session's new cumulative spend, and adds whatever Budget has not recorded yet; a failed write is retried next time. */
   const account = async (entry: Owned, consumed: number) => {
     if (consumed > entry.consumed) {
@@ -138,7 +208,12 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
 
     // Our tools, served for naïve behind a per-run bearer that only naïve's vault holds.
     const token = randomBytes(32).toString("base64url");
-    const defs = [spec.main, ...spec.members];
+    // No members, nobody to make cards for: the coordinator then keeps its own board as before.
+    boardTool = deps.board && spec.members.length > 0 && spec.main.tools.includes(BOARD_TOOL) ? spec.tools.find((t) => t.name === BOARD_TOOL) : undefined;
+    const mainDef: AgentDef = boardTool
+      ? { ...spec.main, tools: spec.main.tools.filter((t) => t !== BOARD_TOOL), prompt: spec.main.prompt + BOARD_NOTE }
+      : spec.main;
+    const defs = [mainDef, ...spec.members];
     const server = await startToolServer(
       {
         runId: spec.runId,
@@ -196,12 +271,10 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     const memberIds = new Map<string, string>();
     for (const def of spec.members) memberIds.set(def.name, await upsertAgent(api, existing, agentBody(def, false)));
     const mainId = await upsertAgent(api, existing, {
-      ...agentBody(spec.main, true),
-      // board stays off: our board_cards are the record, mirrored by naive/board.ts, and no digest sessions start.
+      ...agentBody(mainDef, true),
+      // board stays off and nothing is written to naïve's board, so no digest sessions start: our board_cards are the record.
       multiagent: delegates ? { type: "coordinator", agents: [...memberIds.values()].map((id) => ({ type: "agent", id })), board: false } : null,
     });
-    setBoardOwner(mainId);
-    cleanup.push(async () => setBoardOwner(null));
 
     const root = await api<Session>("/sessions", {
       method: "POST",
@@ -238,7 +311,23 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
           } else if (event.type === "tool.completed") {
             pending.push({ type: "tool_result", agent: entry.agent, tool, output: data.output });
           } else if (event.type === "thread.created" && typeof data.thread_id === "string" && !owned.has(data.thread_id)) {
-            owned.set(data.thread_id, { agent: memberOf(data.member ?? data.agent_name), afterSeq: 0, consumed: 0, persisted: 0 });
+            const member = memberOf(data.member ?? data.agent_name);
+            owned.set(data.thread_id, { agent: member, afterSeq: 0, consumed: 0, persisted: 0 });
+            if (boardTool) {
+              const title = queuedTasks.get(member)?.shift() ?? `Work for ${member}`;
+              creating.set(data.thread_id, { agent: member, title });
+              await flushCards();
+            }
+          } else if (event.type === "thread.idle" && typeof data.thread_id === "string") {
+            // The member's result folded back; one that stopped on an error, was cancelled or was denied a gated call
+            // did not finish its step.
+            // Read the thread now: the loop may not have polled it since it ended, or ever. Not stored on its entry,
+            // so the loop still polls it once more and reads its last events and spend.
+            const thread = owned.has(data.thread_id) ? await api<Session>(`/sessions/${data.thread_id}`) : undefined;
+            const failed = thread && (thread.status === "failed" || thread.status === "cancelled" || STOPPED.has(thread.stop_reason ?? ""));
+            await closeCard(data.thread_id, failed || deniedThreads.has(data.thread_id) ? "blocked" : "done");
+          } else if (event.type === "thread.terminated" && typeof data.thread_id === "string") {
+            await closeCard(data.thread_id, "blocked");
           } else if (event.type === "tool.confirm.resolved") {
             const approval = await gate.get(spec.runId);
             await audit.record({
@@ -270,14 +359,21 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
         } else if (!spec.members.some((m) => naiveName(m.name) === target || memberIds.get(m.name) === target)) {
           decision = "deny";
           reason = `${target || "That agent"} is not a member of this run; delegate only to its members.`;
-        } else decision = "allow";
+        } else {
+          decision = "allow";
+          const member = spec.members.find((m) => naiveName(m.name) === target || memberIds.get(m.name) === target)!.name;
+          const task = String(action.args?.message ?? "").split("\n").find((line) => line.trim())?.trim().slice(0, 120);
+          if (task) queuedTasks.set(member, [...(queuedTasks.get(member) ?? []), task]);
+        }
       } else if (!ours.has(bare)) {
         decision = "deny";
         reason = `${action.name} is not a tool of this run`;
       } else if (!isGatedTool(bare)) {
         // naïve asks even on an allowed MCP tool once the chat has read mail text (seen live on parse_inbound_email).
         // An ungated tool needs no approval, as in local mode; our tool server still enforces the gate on gated ones.
+        // The allow runs the call with no model turn (seen live); the turn naïve's refusal cost is already spent.
         decision = "allow";
+        stats.ungatedParks++;
       } else if (typeof actionId !== "string" || !actionId) {
         decision = "deny";
         reason = `${action.name} needs an actionId to be approved`;
@@ -290,6 +386,8 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
         reason = `Action ${actionId} did not run and nothing was changed: the owner denied its approval request, or it was never in one. It is not pending.`;
       }
       await api(`/sessions/${sessionId}/tool_confirmations`, { method: "POST", body: { tool_call_id: action.tool_call_id, decision, ...(reason ? { reason } : {}) } });
+      stats.parks++;
+      if (decision === "deny" && isGatedTool(bare)) deniedThreads.add(sessionId);
       if (decision === "deny") pending.push({ type: "denied", agent: owned.get(sessionId)!.agent, tool: action.name.replace(`${SERVER}.`, ""), reason: reason! });
       return true;
     };
@@ -297,6 +395,7 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     for (;;) {
       let waitingOnOwner = false;
       const parkedRows: { sessionId: string; action: PendingAction }[] = [];
+      await flushCards();
       // Live iteration: a thread found in this round's events is polled in the same round.
       for (const [sessionId, entry] of owned) {
         if (entry.session && TERMINAL.has(entry.session.status)) continue;
@@ -355,9 +454,22 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
     if (!(error instanceof OverBudget)) outcome = { status: "error", reason: error instanceof Error ? error.message : String(error) };
   } finally {
     ended = true;
-    // A run that stops early must not leave naïve working or parked: cancel the root, which stops its threads.
-    if (rootId && !rootDone) await api(`/sessions/${rootId}/cancel`, { method: "POST" }).catch(() => {});
+    // A run that stops early must not leave naïve working or parked: cancel every session it owns, not only the root.
+    const left = await cancelAll(
+      api,
+      [...owned].filter(([id, entry]) => !(id === rootId && rootDone) && !TERMINAL.has(entry.session?.status ?? "")).map(([id]) => id),
+      deps?.cancelRetryMs ?? CANCEL_RETRY_MS,
+      deps?.cancelGiveUpMs ?? CANCEL_GIVE_UP_MS,
+    );
+    if (left.length > 0) console.warn(`naïve sessions still open, cancel them by hand (POST /v1/sessions/{id}/cancel): ${left.join(", ")}`);
     await Promise.all(inFlight);
+    // A step that never reported did not finish.
+    for (const threadId of [...cardOfThread.keys(), ...creating.keys()]) if (!closing.has(threadId)) closing.set(threadId, "blocked");
+    await flushCards();
+    if (closing.size > 0 && outcome.status === "success") {
+      const unwritten = [...closing.keys()].map((id) => cardOfThread.get(id) ?? `"${creating.get(id)!.title}" (not created)`);
+      outcome = { status: "error", reason: `board cards not updated: ${unwritten.join(", ")}` };
+    }
     // Reconcile: a cancelled in-flight call is still billed, so read every owned session's final cumulative spend.
     for (const [sessionId, entry] of owned) {
       const warn = (error: unknown) => console.warn(`naïve final usage for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`);
@@ -376,11 +488,44 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
   yield* pending.splice(0);
   if (over) yield { type: "text", agent: main, text: `Stopped: cost reached the run cap (at most $${MAX_RUN_USD} on naïve).` };
   else if (outcome.status === "error") yield { type: "text", agent: main, text: `Run failed: ${outcome.reason}` };
-  yield { type: "text", agent: main, text: `naïve cost: $${costUsd.toFixed(4)} (consumed_micro_usd, billed to naïve credit).` };
+  const seconds = Math.round((Date.now() - startedAt) / 1000);
+  yield {
+    type: "text",
+    agent: main,
+    text: `naïve cost: $${costUsd.toFixed(4)} (consumed_micro_usd, billed to naïve credit), ${seconds} s, ${stats.parks} parks (${stats.ungatedParks} ungated), ${owned.size} sessions.`,
+  };
+  if (deps)
+    await deps.audit
+      .record({ runId: spec.runId, agent: main, tool: "naive_run_stats", input: {}, output: { ...stats, sessions: owned.size, seconds, costUsd } })
+      .catch((error: unknown) => console.warn(`naïve run stats: ${error instanceof Error ? error.message : String(error)}`));
   yield { type: "result", status: over ? "over_budget" : outcome.status, costUsd, ...(outcome.status === "error" && !over ? { reason: outcome.reason } : {}) };
+}
+
+const isTerminalRefusal = (error: unknown) => error instanceof NaiveError && error.status === 409 && error.code === "session_terminal";
+
+/**
+ * Cancels each session, retrying while naïve cannot be reached (a sleep or network loss mid-run). An ended session's
+ * 409 counts as done. Returns the ids still open when it gives up.
+ */
+export async function cancelAll(api: NaiveApi, ids: string[], retryMs: number, giveUpMs: number): Promise<string[]> {
+  let open = ids;
+  const until = Date.now() + giveUpMs;
+  for (;;) {
+    const results = await Promise.all(
+      open.map((id) =>
+        api(`/sessions/${id}/cancel`, { method: "POST" }).then(
+          () => true,
+          (error: unknown) => isTerminalRefusal(error),
+        ),
+      ),
+    );
+    open = open.filter((_, i) => !results[i]);
+    if (open.length === 0 || Date.now() + retryMs > until) return open;
+    await sleep(retryMs);
+  }
 }
 
 export default createAgentRuntime(async () => {
   const platform = getPlatform();
-  return { gate: await platform.approvalGate(), budget: await platform.budget(), audit: await platform.audit() };
+  return { gate: await platform.approvalGate(), budget: await platform.budget(), audit: await platform.audit(), board: await platform.board() };
 });
