@@ -3,6 +3,7 @@ import "@fontsource/atkinson-hyperlegible-next/700.css";
 import "@fontsource/source-serif-4/600.css";
 import type { ReactNode } from "react";
 import { AbsoluteFill, Easing, interpolate, random, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { REVENUE_BILLIONS, SPEND_TOTAL, WRONG_BILLIONS } from "../../apps/dashboard/components/landing/market.ts";
 import type { Box } from "./timeline.ts";
 
 // The dashboard's dark theme (apps/dashboard/app/globals.css).
@@ -14,10 +15,8 @@ const MAX_ZOOM = 1.6;
 /** One camera move: to `box` from `frame` on, so it fills about half the frame (1x to MAX_ZOOM), unless `scale` is given. */
 export type Shot = { frame: number; box: Box; scale?: number };
 
-/** Springs from one named element to the next, in footage coordinates. Clamped so the footage never shows an edge. */
-export function Camera({ shots, children }: { shots: Shot[]; children: ReactNode }) {
-  const frame = useCurrentFrame();
-  const { fps, width, height } = useVideoConfig();
+/** The camera at a frame: scale and translate (CSS order: scale then translate, about the centre). Pure, so captions can use it. */
+export function cameraAt(frame: number, shots: Shot[], fps: number, width: number, height: number) {
   let cur = { cx: width / 2, cy: height / 2, s: 1 };
   for (const shot of shots) {
     if (frame < shot.frame) break;
@@ -28,9 +27,22 @@ export function Camera({ shots, children }: { shots: Shot[]; children: ReactNode
   }
   const limX = (width * (cur.s - 1)) / (2 * cur.s);
   const limY = (height * (cur.s - 1)) / (2 * cur.s);
-  const tx = Math.max(-limX, Math.min(limX, width / 2 - cur.cx));
-  const ty = Math.max(-limY, Math.min(limY, height / 2 - cur.cy));
-  return <AbsoluteFill style={{ transform: `scale(${cur.s}) translate(${tx}px, ${ty}px)`, transformOrigin: "50% 50%" }}>{children}</AbsoluteFill>;
+  return { s: cur.s, tx: Math.max(-limX, Math.min(limX, width / 2 - cur.cx)), ty: Math.max(-limY, Math.min(limY, height / 2 - cur.cy)) };
+}
+
+/** Where a footage box lands on screen under the camera. */
+export function onScreen(b: Box, cam: { s: number; tx: number; ty: number }, width: number, height: number): Box {
+  const x = width / 2 + cam.s * (b.x + cam.tx - width / 2);
+  const y = height / 2 + cam.s * (b.y + cam.ty - height / 2);
+  return { x, y, w: b.w * cam.s, h: b.h * cam.s };
+}
+
+/** Springs from one named element to the next, in footage coordinates. Clamped so the footage never shows an edge. */
+export function Camera({ shots, children }: { shots: Shot[]; children: ReactNode }) {
+  const frame = useCurrentFrame();
+  const { fps, width, height } = useVideoConfig();
+  const { s, tx, ty } = cameraAt(frame, shots, fps, width, height);
+  return <AbsoluteFill style={{ transform: `scale(${s}) translate(${tx}px, ${ty}px)`, transformOrigin: "50% 50%" }}>{children}</AbsoluteFill>;
 }
 
 /** A box on each thing the voice names, faded in over the lead before its word (6 frames) and out after its phrase. */
@@ -110,6 +122,17 @@ export function Chip({ children, at = "top-right" }: { children: ReactNode; at?:
 
 export type Utterance = { role: string; words: { word: string; start: number; end: number }[] };
 
+// Captions, voice and call alike: one band, bottom centre, unless it would cover a box (then `place` moves it).
+export const CAPTION = { bottom: 110, fontSize: 44, lineHeight: 1.3, padX: 22, padY: 10 };
+export type CaptionPlace = { bottom: number } | { top: number };
+function CaptionBand({ place = { bottom: CAPTION.bottom }, children }: { place?: CaptionPlace; children: ReactNode }) {
+  return (
+    <div style={{ position: "absolute", left: 160, right: 160, ...place, textAlign: "center", fontFamily: SANS, fontSize: CAPTION.fontSize, lineHeight: CAPTION.lineHeight, color: C.ink }}>
+      <span style={{ padding: `${CAPTION.padY}px ${CAPTION.padX}px`, background: "rgb(11 15 20 / 0.88)", borderRadius: 14, boxDecorationBreak: "clone", WebkitBoxDecorationBreak: "clone" }}>{children}</span>
+    </div>
+  );
+}
+
 /** The call's own words, timed by Retell, while its recording plays (a live call's panel shows no transcript until it ends). */
 export function CallCaptions({ transcript, fromSec }: { transcript: Utterance[]; fromSec: number }) {
   const frame = useCurrentFrame();
@@ -118,12 +141,27 @@ export function CallCaptions({ transcript, fromSec }: { transcript: Utterance[];
   const u = transcript.find((x) => x.words.length && x.words[0].start <= t && t <= x.words[x.words.length - 1].end + 0.8);
   if (!u) return null;
   return (
-    <div style={{ position: "absolute", left: 160, right: 160, bottom: 110, textAlign: "center", fontFamily: SANS, fontSize: 44, lineHeight: 1.3, color: C.ink }}>
-      <span style={{ padding: "10px 22px", background: "rgb(11 15 20 / 0.88)", borderRadius: 14, boxDecorationBreak: "clone", WebkitBoxDecorationBreak: "clone" }}>
-        <b style={{ color: u.role === "agent" ? C.agent : C.warn }}>{u.role === "agent" ? "Clawback" : "Provider"}: </b>
-        {u.words.filter((w) => w.start <= t).map((w) => w.word).join("")}
-      </span>
-    </div>
+    <CaptionBand>
+      <b style={{ color: u.role === "agent" ? C.agent : C.warn }}>{u.role === "agent" ? "Clawback" : "Provider"}: </b>
+      {u.words.filter((w) => w.start <= t).map((w) => w.word).join("")}
+    </CaptionBand>
+  );
+}
+
+/** The voiceover's words, one sentence chunk at a time (two lines at most), each in its own place. */
+export function VoCaptions({ cues }: { cues: { from: number; to: number; lines: string[]; place: CaptionPlace }[] }) {
+  const frame = useCurrentFrame();
+  const cue = cues.find((c) => frame >= c.from && frame < c.to);
+  if (!cue) return null;
+  return (
+    <CaptionBand place={cue.place}>
+      {cue.lines.map((line, i) => (
+        <span key={i}>
+          {i > 0 && <br />}
+          {line}
+        </span>
+      ))}
+    </CaptionBand>
   );
 }
 
@@ -187,3 +225,94 @@ export function EmailCard({ start, holdSec = 3 }: { start: number; holdSec?: num
     </div>
   );
 }
+
+// The market figures, straight from the landing's own source (apps/dashboard/components/landing/market.ts): never typed here.
+const billions = (n: number) => `$${n.toFixed(1)}B`;
+const MARKET = {
+  spend: SPEND_TOTAL,
+  wrong: `${billions(WRONG_BILLIONS[0])} to ${billions(WRONG_BILLIONS[1])}`,
+  revenue: `${billions(REVENUE_BILLIONS[0])} to ${billions(REVENUE_BILLIONS[1])}`,
+};
+/** Where each card sits, in screen pixels, so captions can keep clear of it. */
+export const CARD_RECT = { market: { x: 410, y: 150, w: 1100, h: 500 }, model: { x: 330, y: 90, w: 1260, h: 250 }, naive: { x: 310, y: 740, w: 1300, h: 250 } } as const;
+
+/** In with an ease-out over 0.4 s, out over 0.4 s before `end` (scene frames). */
+function useCardIn(start: number, end: number) {
+  const { fps } = useVideoConfig();
+  const frame = useCurrentFrame();
+  const f = frame - start;
+  const inF = Math.round(0.4 * fps);
+  const ease = { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) } as const;
+  const show = f < 0 ? 0 : Math.min(interpolate(f, [0, inF], [0, 1], ease), interpolate(frame, [end - inF, end], [1, 0], ease));
+  return { f, show };
+}
+const cardStyle = (rect: { x: number; y: number; w: number; h: number }, show: number) =>
+  ({
+    position: "absolute",
+    left: rect.x,
+    top: rect.y,
+    width: rect.w,
+    height: rect.h,
+    boxSizing: "border-box",
+    opacity: show,
+    transform: `translateY(${(1 - show) * 24}px)`,
+    borderRadius: 18,
+    background: "rgb(20 26 33 / 0.94)",
+    border: `1px solid ${C.line}`,
+    boxShadow: "0 18px 50px rgb(0 0 0 / 0.45)",
+    fontFamily: SANS,
+    color: C.ink,
+  }) as const;
+
+/** The market, as the voice says "billions a year": what US businesses spend, then what is billed wrong. */
+export function MarketCard({ start, step, end }: { start: number; step: number; end: number }) {
+  const frame = useCurrentFrame();
+  const { show, f } = useCardIn(start, end);
+  if (show <= 0) return null;
+  const clamp = { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) } as const;
+  const second = interpolate(frame - step, [0, 12], [0, 1], clamp);
+  const spend = Math.round(interpolate(f, [0, 30], [0, MARKET.spend], clamp));
+  return (
+    <div style={{ ...cardStyle(CARD_RECT.market, show), padding: "40px 56px", display: "grid", alignContent: "center", gap: 26, textAlign: "center" }}>
+      <div>
+        <div style={{ fontFamily: SERIF, fontWeight: 600, fontSize: 120, lineHeight: 1.05, color: C.money, fontVariantNumeric: "lining-nums tabular-nums" }}>${spend}B</div>
+        <div style={{ fontSize: 36, marginTop: 6 }}>US businesses pay a year for electricity, gas and phone</div>
+      </div>
+      <div style={{ opacity: second, transform: `translateY(${(1 - second) * 16}px)` }}>
+        <div style={{ fontFamily: SERIF, fontWeight: 600, fontSize: 80, lineHeight: 1.05, color: C.money }}>{MARKET.wrong}</div>
+        <div style={{ fontSize: 34, marginTop: 6 }}>billed wrong or on the wrong plan (1 to 3%)</div>
+      </div>
+      <div style={{ fontSize: 22, color: C.faded }}>Estimates. US EIA 2025, Grand View Research 2023.</div>
+    </div>
+  );
+}
+
+/** The business model, after "only of money that actually comes back". */
+export function ModelCard({ start, end }: { start: number; end: number }) {
+  const { show } = useCardIn(start, end);
+  if (show <= 0) return null;
+  return (
+    <div style={{ ...cardStyle(CARD_RECT.model, show), padding: "30px 48px", display: "grid", alignContent: "center", gap: 18, textAlign: "center" }}>
+      <div style={{ fontSize: 40, fontWeight: 700 }}>
+        <span style={{ color: C.money }}>30%</span> of what we recover. Nothing up front, nothing if nothing comes back.
+      </div>
+      <div style={{ fontSize: 34 }}>
+        Up to <span style={{ color: C.money, fontWeight: 700 }}>{MARKET.revenue}</span> a year at 30% <span style={{ fontSize: 24, color: C.faded }}>ceiling, not a forecast</span>
+      </div>
+    </div>
+  );
+}
+
+/** In the close, under the Clawback card: what the product runs on. Says nothing about the call in this video. */
+export function NaiveCard({ start, end }: { start: number; end: number }) {
+  const { show } = useCardIn(start, end);
+  if (show <= 0) return null;
+  return (
+    <div style={{ ...cardStyle(CARD_RECT.naive, show), borderColor: C.agent, padding: "28px 48px", display: "grid", alignContent: "center", gap: 14, textAlign: "center" }}>
+      <div style={{ fontSize: 52, fontWeight: 700, color: C.agent }}>Runs on naïve</div>
+      <div style={{ fontSize: 34 }}>Nine agents as one naïve team. Every action gated and audited, <span style={{ color: C.money }}>$2</span> cap a run.</div>
+      <div style={{ fontSize: 26, color: C.faded }}>Try it: the judge sandbox is a naïve App.</div>
+    </div>
+  );
+}
+

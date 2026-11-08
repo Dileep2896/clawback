@@ -2,62 +2,62 @@
  "V1.m4a": [
   {
    "text": "Small",
-   "start": 0.46,
-   "end": 1.61
+   "start": 1.68,
+   "end": 1.88
   },
   {
    "text": "businesses",
-   "start": 1.61,
+   "start": 1.88,
    "end": 2.77
   },
   {
    "text": "overpay",
    "start": 2.77,
-   "end": 3.42
+   "end": 3.19
   },
   {
    "text": "on",
-   "start": 3.42,
-   "end": 3.48
+   "start": 3.19,
+   "end": 3.42
   },
   {
    "text": "their",
-   "start": 3.48,
+   "start": 3.42,
    "end": 3.72
   },
   {
    "text": "utility",
    "start": 3.72,
-   "end": 4.32
+   "end": 4.31
   },
   {
    "text": "and",
-   "start": 4.32,
+   "start": 4.31,
    "end": 4.53
   },
   {
    "text": "phone",
    "start": 4.53,
-   "end": 4.76
+   "end": 4.78
   },
   {
    "text": "bills",
-   "start": 4.76,
+   "start": 4.78,
    "end": 5.21
   },
   {
    "text": "and",
    "start": 5.21,
-   "end": 5.36
+   "end": 5.34
   },
   {
    "text": "nobody",
-   "start": 5.36,
-   "end": 5.78
+   "start": 5.34,
+   "end": 5.66
   },
   {
    "text": "checks.",
-   "start": 5.78,
+   "start": 5.66,
    "end": 6.34
   },
   {
@@ -154,18 +154,18 @@
  "V2.m4a": [
   {
    "text": "This",
-   "start": 0.03,
-   "end": 0.5
+   "start": 1.35,
+   "end": 1.58
   },
   {
    "text": "is",
-   "start": 0.5,
-   "end": 0.75
+   "start": 1.58,
+   "end": 1.71
   },
   {
    "text": "Clawback,",
-   "start": 0.75,
-   "end": 2
+   "start": 1.71,
+   "end": 2.62
   },
   {
    "text": "a",
@@ -241,28 +241,28 @@
  "V3.m4a": [
   {
    "text": "Signing",
-   "start": 0.1,
-   "end": 0.97
+   "start": 1.8,
+   "end": 2.13
   },
   {
    "text": "up",
-   "start": 0.97,
-   "end": 1.75
+   "start": 2.13,
+   "end": 2.44
   },
   {
    "text": "takes",
-   "start": 1.75,
-   "end": 1.94
+   "start": 2.44,
+   "end": 2.68
   },
   {
    "text": "a",
-   "start": 1.94,
-   "end": 2.08
+   "start": 2.68,
+   "end": 2.69
   },
   {
    "text": "minute.",
-   "start": 2.08,
-   "end": 3.36
+   "start": 2.69,
+   "end": 3.33
   },
   {
    "text": "You",
@@ -363,53 +363,53 @@
  "V4.m4a": [
   {
    "text": "The",
-   "start": 0.27,
-   "end": 0.68
+   "start": 1.25,
+   "end": 1.37
   },
   {
-   "text": "collector",
-   "start": 0.68,
-   "end": 1.52
+   "text": "Collector",
+   "start": 1.37,
+   "end": 2.18
   },
   {
    "text": "pulls",
-   "start": 1.52,
-   "end": 2.13
-  },
-  {
-   "text": "two",
-   "start": 2.13,
+   "start": 2.18,
    "end": 2.78
   },
   {
-   "text": "years",
+   "text": "two",
    "start": 2.78,
-   "end": 3
+   "end": 2.9
   },
   {
-   "text": "of",
-   "start": 3,
+   "text": "years",
+   "start": 2.9,
    "end": 3.27
   },
   {
-   "text": "bills",
+   "text": "of",
    "start": 3.27,
+   "end": 3.45
+  },
+  {
+   "text": "bills",
+   "start": 3.45,
    "end": 3.98
   },
   {
    "text": "and",
    "start": 3.98,
-   "end": 4.19
+   "end": 4.2
   },
   {
    "text": "meter",
-   "start": 4.19,
-   "end": 4.65
+   "start": 4.2,
+   "end": 4.67
   },
   {
    "text": "data.",
-   "start": 4.65,
-   "end": 5.44
+   "start": 4.67,
+   "end": 5.42
   },
   {
    "text": "The",
@@ -417,7 +417,7 @@
    "end": 5.69
   },
   {
-   "text": "auditor",
+   "text": "Auditor",
    "start": 5.69,
    "end": 6.24
   },
@@ -575,7 +575,7 @@
  "V5.m4a": [
   {
    "text": "Before",
-   "start": 0.14,
+   "start": 0.15,
    "end": 0.65
   },
   {
@@ -604,7 +604,7 @@
    "end": 3.36
   },
   {
-   "text": "approver",
+   "text": "Approver",
    "start": 3.36,
    "end": 3.99
   },
@@ -642,8 +642,8 @@
  "V6.m4a": [
   {
    "text": "Then,",
-   "start": 0.03,
-   "end": 0.86
+   "start": 0.87,
+   "end": 1.05
   },
   {
    "text": "the",
@@ -651,7 +651,7 @@
    "end": 0.87
   },
   {
-   "text": "negotiator",
+   "text": "Negotiator",
    "start": 0.87,
    "end": 1.84
   },
@@ -679,33 +679,33 @@
  "V7.m4a": [
   {
    "text": "It",
-   "start": 0.03,
-   "end": 0.24
-  },
-  {
-   "text": "cancels",
-   "start": 0.24,
+   "start": 1.28,
    "end": 1.29
   },
   {
-   "text": "7",
+   "text": "cancels",
    "start": 1.29,
-   "end": 1.49
-  },
-  {
-   "text": "lines",
-   "start": 1.49,
    "end": 2.1
   },
   {
-   "text": "nobody",
+   "text": "7",
    "start": 2.1,
+   "end": 2.34
+  },
+  {
+   "text": "lines",
+   "start": 2.34,
    "end": 2.8
   },
   {
-   "text": "uses,",
+   "text": "nobody",
    "start": 2.8,
-   "end": 3.52
+   "end": 3.32
+  },
+  {
+   "text": "uses,",
+   "start": 3.32,
+   "end": 4.12
   },
   {
    "text": "flags",
@@ -738,7 +738,7 @@
    "end": 6.85
   },
   {
-   "text": "filer",
+   "text": "Filer",
    "start": 6.85,
    "end": 7.27
   },
@@ -791,42 +791,42 @@
  "V8.m4a": [
   {
    "text": "$12,600",
-   "start": 1.14,
-   "end": 2.19
+   "start": 1.25,
+   "end": 3.1
   },
   {
    "text": "back",
-   "start": 2.19,
-   "end": 2.68
+   "start": 3.1,
+   "end": 4.07
   },
   {
    "text": "and",
-   "start": 2.68,
-   "end": 3.04
+   "start": 4.07,
+   "end": 4.2
   },
   {
    "text": "over",
-   "start": 3.04,
-   "end": 3.53
+   "start": 4.2,
+   "end": 4.62
   },
   {
    "text": "$18,000",
-   "start": 3.53,
-   "end": 5.72
+   "start": 4.62,
+   "end": 6.25
   },
   {
    "text": "a",
-   "start": 5.72,
-   "end": 5.87
+   "start": 6.25,
+   "end": 6.34
   },
   {
    "text": "year",
-   "start": 5.87,
-   "end": 6.33
+   "start": 6.34,
+   "end": 6.7
   },
   {
    "text": "saved,",
-   "start": 6.33,
+   "start": 6.7,
    "end": 7.32
   },
   {
@@ -883,13 +883,13 @@
  "V9.m4a": [
   {
    "text": "One",
-   "start": 0.77,
-   "end": 0.78
+   "start": 0.85,
+   "end": 1.42
   },
   {
    "text": "approval.",
-   "start": 0.78,
-   "end": 2.7
+   "start": 1.42,
+   "end": 2.85
   },
   {
    "text": "Everything",
@@ -922,7 +922,7 @@
    "end": 5.37
   },
   {
-   "text": "clawback.",
+   "text": "Clawback.",
    "start": 5.37,
    "end": 6
   }

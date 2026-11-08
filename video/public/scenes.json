@@ -1,6 +1,6 @@
 {
   "scenes": [
-    { "id": "1-problem", "title": "Landing hero", "vo": "V1.m4a", "voSec": 13.44, "footage": { "from": "landing", "offsetSec": -0.3 } },
+    { "id": "1-problem", "title": "Landing hero, market card", "vo": "V1.m4a", "voSec": 13.44, "footage": { "from": "landing", "offsetSec": -0.3 }, "cards": [{ "kind": "market", "from": "a wrong meter reading", "step": "billions" }] },
     { "id": "2-title", "title": "Clawback title card", "vo": "V2.m4a", "voSec": 7.32, "card": "title" },
     {
       "id": "3-signup", "title": "Sign-up and upload", "vo": "V3.m4a", "voSec": 9.66,
@@ -53,8 +53,10 @@
         { "say": "$12,600", "to": "back", "box": "overview-refund", "count": true },
         { "say": "$18,000 a year", "to": "saved", "box": "overview-savings" },
         { "say": "30%", "to": "comes back", "box": "overview-fee" }
-      ]
+      ],
+      "holdSec": 4.5,
+      "cards": [{ "kind": "model", "after": "actually comes back" }]
     },
-    { "id": "10-close", "title": "Close card", "vo": "V9.m4a", "voSec": 6.46, "card": "close" }
+    { "id": "10-close", "title": "Close card", "vo": "V9.m4a", "voSec": 6.46, "card": "close", "holdSec": 3.5, "cards": [{ "kind": "naive", "after": "Clawback" }] }
   ]
 }

@@ -24,13 +24,20 @@ export type Scene = {
   marker?: string;
   /** The "we also email" motion note, in at this second of the scene. */
   emailCardAtSec?: number;
+  /** Seconds the scene holds after its voice, the footage frozen on its last frame (for a card to be read). */
+  holdSec?: number;
+  cards?: CardCue[];
 };
+/** A motion card: in as the voice says `from` (or just after it says `after`); `step` brings in its second line. Out at the scene's end. */
+export type CardCue = { kind: "market" | "model" | "naive"; from?: string; after?: string; step?: string };
 
 export const FPS = 30;
-export const MAX_FRAMES = 3600; // the 2:00 hard cap
+export const MAX_FRAMES = 3900; // 2:10: the orchestrator let the edit pass 2:00 for the market and business-model cards (2026-11-08)
 export const BREATH_SEC = 0.5;
 
-export const sceneFrames = (s: Scene) => Math.round(((s.voSec ?? s.sec ?? 0) + (s.voSec ? BREATH_SEC : 0)) * FPS);
+/** The frames the voice (plus its breath) takes; the scene may hold on after it. */
+export const voiceFrames = (s: Scene) => Math.round(((s.voSec ?? s.sec ?? 0) + (s.voSec ? BREATH_SEC : 0)) * FPS);
+export const sceneFrames = (s: Scene) => voiceFrames(s) + Math.round((s.holdSec ?? 0) * FPS);
 
 export function eventAt(events: Ev[], kind: string): Ev {
   const ev = events.find((e) => e.kind === kind);
@@ -121,3 +128,101 @@ export const stamp = (frame: number) => {
   const tenths = Math.round((frame / FPS) * 10); // round first, so 59.97 s reads 1:00.0, not 0:60.0
   return `${Math.floor(tenths / 600)}:${((tenths % 600) / 10).toFixed(1).padStart(4, "0")}`;
 };
+
+export const CAPTION_LINE = 42; // characters a caption line holds
+export type Cue = { start: number; end: number; lines: string[] };
+
+// A cut just after a comma reads better, so it counts as this many characters shorter; one after a weak word ("the") worse.
+const COMMA_BONUS = 6;
+const WEAK = /\s(the|a|an|and|or|of|to|in|for|under|over|with)$/i;
+const WEAK_PENALTY = 12;
+
+/** Where to cut a run of words in two: the longer half as short as it can be, a comma preferred; `fits` limits the halves. */
+function bestCut(parts: string[], fits: (a: string, b: string) => boolean = () => true) {
+  let best = -1;
+  let bestCost = Infinity;
+  for (let k = 1; k < parts.length; k++) {
+    const [a, b] = [parts.slice(0, k).join(" "), parts.slice(k).join(" ")];
+    if (!fits(a, b)) continue;
+    const cost = Math.max(a.length, b.length) - (a.endsWith(",") ? COMMA_BONUS : 0) + (WEAK.test(a) ? WEAK_PENALTY : 0);
+    if (cost < bestCost) [best, bestCost] = [k, cost];
+  }
+  return best;
+}
+
+/** Two lines at most, each within CAPTION_LINE when it can be. */
+function wrap(text: string): string[] {
+  if (text.length <= CAPTION_LINE) return [text];
+  const words = text.split(" ");
+  const k = bestCut(words, (a, b) => a.length <= CAPTION_LINE && b.length <= CAPTION_LINE);
+  const at = k > 0 ? k : bestCut(words);
+  return [words.slice(0, at).join(" "), words.slice(at).join(" ")];
+}
+
+/**
+ * The voiceover as captions: one cue per sentence, a sentence longer than two 42-character lines cut where the halves are
+ * most even (a comma preferred). Each cue shows from its first word to the next cue (or 0.6 s after its last word, whichever
+ * is first). `say` rewrites a spoken word as the screen shows it (a figure).
+ */
+export function captionCues(words: Word[], say: Record<string, string> = {}): Cue[] {
+  const texts = words.map((w) => {
+    const core = w.text.replace(/[.,]$/, "");
+    return say[core] ? say[core] + w.text.slice(core.length) : w.text;
+  });
+  const sentences: number[][] = [[]];
+  texts.forEach((text, i) => {
+    sentences.at(-1)!.push(i);
+    if (/[.!?]$/.test(text) && i < texts.length - 1) sentences.push([]);
+  });
+  const split = (idx: number[]): number[][] => {
+    if (idx.map((i) => texts[i]).join(" ").length <= CAPTION_LINE * 2) return [idx];
+    // A comma that leaves both halves within two lines wins; else the most even cut.
+    const parts = idx.map((i) => texts[i]!);
+    const atComma = bestCut(parts, (x, y) => x.endsWith(",") && x.length <= CAPTION_LINE * 2 && y.length <= CAPTION_LINE * 2);
+    const k = atComma > 0 ? atComma : bestCut(parts);
+    return [...split(idx.slice(0, k)), ...split(idx.slice(k))];
+  };
+  const chunks = sentences.filter((s) => s.length).flatMap(split);
+  return chunks.map((idx, k) => {
+    const next = chunks[k + 1];
+    const last = words[idx.at(-1)!]!;
+    return {
+      start: words[idx[0]!]!.start,
+      end: next ? Math.min(last.end + 0.6, words[next[0]!]!.start) : last.end + 0.6,
+      lines: wrap(idx.map((i) => texts[i]!).join(" ")),
+    };
+  });
+}
+
+/** A scene's cards in scene seconds: when each comes in and when its second line does. */
+export function cardTimes(s: Scene, words: Word[]) {
+  return (s.cards ?? []).map((c) => ({
+    kind: c.kind,
+    start: c.from ? phraseAt(words, c.from).start : c.after ? phraseAt(words, c.after).end + 0.1 : 0,
+    step: c.step ? phraseAt(words, c.step).start - 0.3 : undefined,
+  }));
+}
+
+/** The background pad's gain per frame of the whole edit, in dB: base, 6 dB lower under the voice, 20 dB lower under the
+ *  live call (so it stays clear); in over the first 2 s, out over the last 3 s (the close card). It dips a quarter second
+ *  before the voice and comes back half a second after, slewing so it never jumps. */
+export const BED_DB = { base: -32, voice: -38, call: -52 }; // measured in the final mix: the pad alone sits about 20 dB under speech
+export function bedGainDb(scenes: Scene[], words: Record<string, Word[]>) {
+  const { starts, total } = layout(scenes);
+  const target = new Float32Array(total).fill(BED_DB.base);
+  scenes.forEach((s, i) => {
+    const at = (sec: number) => starts[i]! + Math.round(sec * FPS);
+    if (s.callAudio) target.fill(BED_DB.call, starts[i]!, starts[i]! + sceneFrames(s));
+    for (const w of words[s.vo ?? ""] ?? []) for (let f = Math.max(0, at(w.start - 0.25)); f < Math.min(total, at(w.end + 0.5)); f++) target[f] = Math.min(target[f]!, BED_DB.voice);
+  });
+  const db = new Float32Array(total);
+  let cur = target[0]!;
+  for (let f = 0; f < total; f++) {
+    const t = target[f]!;
+    cur = t < cur ? Math.max(t, cur - 1) : Math.min(t, cur + 0.3); // down 30 dB/s, back up 9 dB/s
+    // Fades: linear in amplitude, applied as dB.
+    const fade = Math.min(1, f / (2 * FPS), (total - 1 - f) / (3 * FPS));
+    db[f] = cur + (fade > 0 ? 20 * Math.log10(fade) : -120);
+  }
+  return db;
+}
