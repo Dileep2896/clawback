@@ -423,14 +423,18 @@ describe("naïve runtime cost", () => {
   });
 
   /** One delegated task; at tick 3 the member ends as `memberEnd` and the root reports thread.idle in the same round. */
-  const oneCard = async (memberEnd: Partial<Ses>, move: (attempt: number) => void) => {
+  const oneCard = async (memberEnd: Partial<Ses>, move: (attempt: number) => void, create: (attempt: number) => void = () => {}) => {
     const moves: unknown[] = [];
     let attempt = 0;
+    let creates = 0;
     const board: ToolDef = {
       ...tool("board_update"),
       handler: async (input) => {
         const { cardId } = input as { cardId?: string };
-        if (!cardId) return { cardId: "card1" };
+        if (!cardId) {
+          create(++creates);
+          return { cardId: "card1" };
+        }
         move(++attempt);
         moves.push(input);
         return input;
@@ -457,8 +461,32 @@ describe("naïve runtime cost", () => {
       if (tick === 5) root.stop_reason = "end_turn";
     });
     const events = await collect(runtime(api, fakeGate({ status: "pending", actionIds: [] }).gate, fakeBudget(), fakeAudit().audit).run({ ...SPEC, tools: [board, tool("submit_claim")] }));
-    return { moves, result: events.find((e) => e.type === "result") };
+    return { moves, events, result: events.find((e) => e.type === "result") };
   };
+
+  it("retries a card creation that failed to write, and fails the run if the card is never created", async () => {
+    const done = { status: "idle", stop_reason: "end_turn" };
+    const retried = await oneCard(done, () => {}, (attempt) => {
+      if (attempt === 1) throw new Error("db down");
+    });
+    expect(retried.moves).toEqual([{ cardId: "card1", status: "done" }]);
+    expect(retried.result).toMatchObject({ status: "success" });
+    const never = await oneCard(done, () => {}, () => {
+      throw new Error("db down");
+    });
+    expect(never.moves).toEqual([]);
+    expect(never.result).toMatchObject({ status: "error", reason: expect.stringContaining('"File F-1" (not created)') });
+  });
+
+  it("still reads a member's last events and spend when its result folds back as it ends", async () => {
+    const { moves, events } = await oneCard(
+      { status: "completed", stop_reason: "end_turn", consumed_micro_usd: 250_000, events: [{ seq: 1, type: "message.completed", data: { role: "assistant", content: "Filed F-1" } }] },
+      () => {},
+    );
+    expect(moves).toEqual([{ cardId: "card1", status: "done" }]);
+    expect(events).toContainEqual({ type: "text", agent: "filer", text: "Filed F-1" });
+    expect(events.find((e) => e.type === "result")).toMatchObject({ costUsd: 0.25 });
+  });
 
   it("reads a member's own state when its result folds back, so a failed member's card is blocked", async () => {
     const { moves, result } = await oneCard({ status: "failed", stop_reason: null }, () => {});
