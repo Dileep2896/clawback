@@ -9,7 +9,7 @@ import { loadSeed } from "@bill-fighter/db/seed/load";
 import { withTestDb } from "@bill-fighter/db/test-db";
 
 const MIGRATIONS = fileURLToPath(new URL("../packages/db/migrations", import.meta.url));
-// Parents first. Not usage_intervals: no page reads them, and the sandbox never runs an audit.
+// Parents first. Not usage_intervals (432k rows): the dashboard shows data/replay/usage.json for a judge, and the sandbox never runs an audit.
 const TABLES = ["customers", "authorizations", "locations", "accounts", "bills", "bill_lines", "phone_lines"];
 // Rows per statement, well inside one request's time and size.
 const CHUNK = 500;

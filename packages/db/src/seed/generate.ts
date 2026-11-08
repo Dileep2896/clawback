@@ -325,6 +325,16 @@ export function generateSeed(): Seed {
   return seed;
 }
 
+/** Per meter: how many readings and over what dates. Committed as data/replay/usage.json for the judge sandbox, whose database holds no intervals (scripts/sandbox-seed-sql.ts). */
+export const usageSummary = ({ accounts, intervals }: Pick<Seed, "accounts" | "intervals">) =>
+  accounts
+    .filter((a) => intervals[a.id]?.length)
+    .map((a) => {
+      const ts = intervals[a.id]!.map((r) => r.ts).sort();
+      return { accountId: a.id, meterNumber: a.meterNumber ?? null, intervals: ts.length, from: ts[0]!, to: ts.at(-1)! };
+    })
+    .sort((a, b) => (a.accountId < b.accountId ? -1 : 1));
+
 export function writeSeed(seed: Seed, dir: URL = SEED_DIR) {
   // A removed account must not leave an old intervals file behind.
   rmSync(new URL("intervals/", dir), { recursive: true, force: true });

@@ -9,7 +9,7 @@ export function EvidenceTable({ caption, head, rows }: { caption: string; head: 
         <thead>
           <tr className="border-b-2 border-ink">
             {head.map((label, i) => (
-              <th key={label} scope="col" className={`px-2 py-1 font-semibold ${i === 0 ? "text-left" : "text-right"}`}>
+              <th key={label} scope="col" className={`px-2 py-1 ${i === 0 ? "text-left" : "text-right"}`}>
                 {label}
               </th>
             ))}
@@ -38,7 +38,7 @@ export function Facts({ facts }: { facts: [string, string][] }) {
       {facts.map(([label, value]) => (
         <div key={label} className="contents">
           <dt className="text-faded">{label}</dt>
-          <dd className="font-semibold tabular-nums">{value}</dd>
+          <dd className="tabular-nums">{value}</dd>
         </div>
       ))}
     </dl>

@@ -9,7 +9,7 @@ import { assertNotSharedDb, insertSampleRun, moveSampleCard } from "../apps/dash
 
 const BASE = process.env.DASHBOARD_URL ?? "http://localhost:3000";
 const VIEWPORT = { width: 1920, height: 1080 };
-const MIN_FONT_PX = 22;
+const MIN_FONT_PX = 12;
 const METER = "sample-finding-meter";
 const RATE = "sample-finding-rate";
 const CARD = "sample-card-filer";
@@ -60,28 +60,31 @@ async function checkFits(page: Page, where: string) {
   assert.deepEqual(tooSmall, [], `${where}: text under ${MIN_FONT_PX}px`);
 }
 
-const seeCardIn = (page: Page, row: string) =>
-  page.locator(`[data-board-row="${row}"] [data-card="${CARD}"]`).waitFor({ timeout: 5000 });
+// The filer's timeline row follows its card: todo is up next, doing is working, blocked is stopped, done is done.
+const seeFilerAs = (page: Page, state: string) => page.locator(`[data-agent-row="filer"][data-state="${state}"]`).waitFor({ state: "attached", timeout: 5000 });
+// The sample waits on its approval; pinning the auditor's row puts its audit, findings included, in the Now pane.
+const showFindings = async (page: Page) => {
+  await page.locator('[data-agent-row="auditor"]').click();
+  await page.locator('[data-moment="auditor"] [data-finding]').first().waitFor({ timeout: 5000 });
+};
 
-async function checkBoardMovesLive(page: Page) {
+async function checkTimelineMovesLive(page: Page) {
   await page.goto(`${BASE}/agents`);
-  await seeCardIn(page, "todo");
+  await seeFilerAs(page, "next");
   await page.evaluate("window.notReloaded = true");
-  await shot(page, "board-start");
+  await shot(page, "timeline-start");
 
   await moveSampleCard(db, CARD, "doing");
-  await seeCardIn(page, "doing");
-  assert.equal(await page.locator(`[data-board-row="todo"] [data-card="${CARD}"]`).count(), 0, "a moved card must leave its old row");
+  await seeFilerAs(page, "working");
 
   await moveSampleCard(db, CARD, "blocked");
-  await page.locator(`[data-board-row="doing"] [data-card="${CARD}"] [data-testid="blocked-stamp"]`).waitFor({ timeout: 5000 });
-  await shot(page, "board-blocked");
+  await seeFilerAs(page, "failed");
+  await shot(page, "timeline-blocked");
 
   await moveSampleCard(db, CARD, "done");
-  await seeCardIn(page, "done");
-  assert.equal(await page.getByTestId("blocked-stamp").count(), 0, "a done card is no longer blocked");
+  await seeFilerAs(page, "done");
 
-  assert.equal(await page.evaluate("window.notReloaded"), true, "cards must move with no page refresh");
+  assert.equal(await page.evaluate("window.notReloaded"), true, "the timeline must move with no page refresh");
 }
 
 async function liveFindings(page: Page) {
@@ -106,12 +109,12 @@ async function checkDrawerNumbersTrace(page: Page) {
 }
 
 const barHeight = (month: string, series: string) =>
-  `document.querySelector('[data-chart-month="${month}"] [data-series="${series}"]').getBoundingClientRect().height`;
+  `document.querySelector('dialog [data-chart-month="${month}"] [data-series="${series}"]').getBoundingClientRect().height`;
 
 async function checkFremontChart(page: Page) {
   await page.locator(`[data-finding="${METER}"]`).click();
   await page.locator(`${DRAWER} [data-chart-month="2025-09"] [data-testid="swap-marker"]`).waitFor({ timeout: 5000 });
-  assert.equal(await page.getByTestId("swap-marker").count(), 1, "one swap marker");
+  assert.equal(await page.locator(DRAWER).getByTestId("swap-marker").count(), 1, "one swap marker");
 
   const heights = async (month: string) => ({
     billed: await page.evaluate<number>(barHeight(month, "billed")),
@@ -148,6 +151,7 @@ const FOCUS_IN_PAGE = "!!document.activeElement?.closest('main, header') && !doc
 
 async function checkKeyboard(page: Page) {
   await page.goto(`${BASE}/agents`);
+  await showFindings(page);
   await page.locator(`[data-finding="${METER}"]`).waitFor();
   let focused: string | null = null;
   for (let i = 0; i < 40 && !focused; i++) {
@@ -177,10 +181,12 @@ async function checkKeyboard(page: Page) {
 }
 
 async function checkDrawerStaysOpenOnLiveData(page: Page) {
+  await page.goto(`${BASE}/agents`);
+  await showFindings(page);
   await page.locator(`[data-finding="${METER}"]`).click();
   await page.locator(DRAWER).waitFor({ timeout: 5000 });
   await moveSampleCard(db, CARD, "doing");
-  await page.locator(`[data-board-row="doing"] [data-card="${CARD}"]`).waitFor({ state: "attached", timeout: 5000 });
+  await seeFilerAs(page, "working");
   assert.equal(await page.locator(DRAWER).count(), 1, "a live update must not close the drawer");
   await page.keyboard.press("Escape");
   await page.locator(DRAWER).waitFor({ state: "detached" });
@@ -191,6 +197,7 @@ async function checkUnreadableEvidence(page: Page) {
   for (const finding of live.findings) finding.evidenceJson.detail = {};
   await page.route("**/api/live", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(live) }));
   await page.goto(`${BASE}/agents`);
+  await showFindings(page);
   await page.locator(`[data-finding="${METER}"]`).click();
   await page.getByTestId("evidence-unreadable").waitFor({ timeout: 5000 });
   assert.equal((await page.locator(DRAWER).innerText()).includes("NaN"), false, "never show NaN");
@@ -206,8 +213,8 @@ async function checkEmpty(page: Page) {
     }),
   );
   await page.goto(`${BASE}/agents`);
-  await page.getByText("No cards yet").waitFor({ timeout: 5000 });
-  await page.getByText("No findings yet").waitFor({ timeout: 5000 });
+  await page.getByTestId("no-run").waitFor({ timeout: 5000 });
+  assert.equal(await page.getByText(/\bNo [a-z ]+ yet\b/).count(), 0, "no empty panels, only the one waiting line");
   await checkFits(page, "no run");
 }
 
@@ -216,8 +223,9 @@ await insertSampleRun(db);
 const browser = await chromium.launch();
 try {
   const page = await (await signedInContext(browser, BASE, { viewport: VIEWPORT })).newPage();
-  await checkBoardMovesLive(page);
+  await checkTimelineMovesLive(page);
   await checkFits(page, "closed");
+  await showFindings(page);
   await checkDrawerNumbersTrace(page);
   await checkFremontChart(page);
   await checkRateTable(page);

@@ -9,7 +9,7 @@ import { priceUsage, roundCents } from "@bill-fighter/core/tariff/price-usage";
 import { AccountFixture, BillFixture, GAS_SUPPLIER, PhoneLineFixture } from "@bill-fighter/shared/fixtures";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { FIRST_MONTH, LAST_MONTH, METER_SWAP, STORES } from "./customer.ts";
-import { calendarMonth, generateSeed, monthsBetween, writeSeed, type Seed } from "./generate.ts";
+import { calendarMonth, generateSeed, monthsBetween, usageSummary, writeSeed, type Seed } from "./generate.ts";
 
 const SLOW = 180_000;
 const YEAR = monthsBetween(FIRST_MONTH, LAST_MONTH);
@@ -109,6 +109,12 @@ describe("generateSeed", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("keeps the committed usage summary in step with the seed, as the judge sandbox shows it", () => {
+    const summary = usageSummary(seed);
+    expect(summary).toHaveLength(12);
+    expect(JSON.parse(readFileSync(new URL("../../../../data/replay/usage.json", import.meta.url), "utf8"))).toEqual(summary);
   });
 
   it("holds annual spend within 10% of $300,000 over the last 12 months", () => {

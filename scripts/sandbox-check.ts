@@ -30,14 +30,17 @@ async function steps(page: Page, name: string, began: number) {
   await shot(page, `${name}-onboarding`);
   await page.getByTestId("start-audit").click();
   await page.waitForURL(/\/agents$/, { timeout: 30_000 });
-  await page.getByTestId("replay-banner").filter({ hasText: "Sandbox: a recorded audit replayed for you" }).waitFor();
+  await page.getByTestId("replay-banner").filter({ hasText: "Sandbox replay" }).first().waitFor();
 
   // The run waits at the approval for this judge's tap.
   const approve = page.getByTestId("approve");
   await approve.waitFor({ timeout: BUDGET_MS });
   await shot(page, `${name}-approval`);
   await approve.click();
-  await page.getByTestId("watch-again").waitFor({ timeout: BUDGET_MS });
+  // "Watch it again" lives in the sandbox pill's popover once the run has finished.
+  await page.getByText("Finished").first().waitFor({ timeout: BUDGET_MS });
+  await page.getByTestId("replay-banner").first().click();
+  await page.getByTestId("watch-again").waitFor({ timeout: 10_000 });
   await shot(page, `${name}-agents-done`);
 
   const live = (await (await page.request.get(`${base}/api/live`)).json()) as { run: { id: string; status: string }; ledger: { kind: string; amountCents: number }[] };

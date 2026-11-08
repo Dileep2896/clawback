@@ -23,11 +23,6 @@
   --alert-text: #0b0f14;
   --warn: #ffb547;
   --warn-text: #0b0f14;
-  /* Light drums: dark ones disappear into the dark page, and this is the one thing the room must see. */
-  --register: #e8edf2;
-  --register-text: #0b0f14;
-  /* The shadow at the top and bottom of a drum's window. Not a text colour. */
-  --drum-shade: rgb(0 0 0 / 0.35);
 }
 
 @theme inline {
@@ -35,6 +30,20 @@
   --font-figure: "Source Serif 4", ui-serif, Georgia, serif;
   --radius-card: 10px;
   --radius-control: 8px;
+  /* The signed-in app's type scale (human, 2026-11-07): text-caption, text-label, text-body, text-title, text-page, and one
+     text-hero money figure per page. Weight 600 for titles and the active item only. */
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-label: 13px;
+  --text-label--line-height: 18px;
+  --text-body: 14px;
+  --text-body--line-height: 20px;
+  --text-title: 15px;
+  --text-title--line-height: 20px;
+  --text-page: 20px;
+  --text-page--line-height: 28px;
+  --text-hero: 36px;
+  --text-hero--line-height: 40px;
   --color-paper: var(--paper);
   --color-sheet: var(--sheet);
   --color-ink: var(--ink);
@@ -69,54 +78,24 @@ body {
   outline-offset: 2px;
 }
 
-/* The meter register: each drum is a strip of ten digits that rolls behind a window. */
-.drum {
-  display: block;
-  width: 3rem;
-  height: 4rem;
-  overflow: hidden;
-  border-radius: var(--radius-control);
-  background: var(--register);
-  color: var(--register-text);
-  font-family: var(--font-figure);
-  font-size: 3rem;
-  font-weight: 600;
-  line-height: 4rem;
-  text-align: center;
-  /* The shadow lines at the top and bottom of a real drum's window. */
-  box-shadow: inset 0 5px 0 var(--drum-shade), inset 0 -5px 0 var(--drum-shade);
+/* /agents motion (200 to 600 ms, ease-out): the Now pane fades in on a new moment, call lines and ledger rows arrive,
+   and the call's waveform moves while the call is open. Reduced motion shows every finished state. */
+@media (prefers-reduced-motion: no-preference) {
+  .now-enter,
+  .call-line,
+  .ledger-row {
+    animation: arrive 300ms ease-out both;
+  }
+
+  [data-live] > .call-bar {
+    animation: wave 420ms ease-in-out infinite alternate;
+  }
 }
 
-.drum-strip {
-  display: block;
-  transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.drum-strip > span {
-  display: block;
-  height: 4rem;
-}
-
-/* A card arriving in a row starts in the agent colours, so the room's eye catches the move. */
-@keyframes card-arrive {
+@keyframes arrive {
   from {
-    background: var(--agent);
-    color: var(--agent-text);
-  }
-}
-
-.board-card {
-  border-radius: 6px;
-  animation: card-arrive 1200ms ease-out;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .drum-strip {
-    transition: none;
-  }
-
-  .board-card {
-    animation: none;
+    opacity: 0;
+    transform: translateY(4px);
   }
 }
 

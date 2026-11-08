@@ -1,5 +1,5 @@
 import { decideApproval } from "@bill-fighter/db/approvals";
-import { accounts, actions, approvals, auditLog, bills, boardCards, findings, locations, runs, scheduledChecks } from "@bill-fighter/db/schema";
+import { accounts, actions, approvals, auditLog, bills, boardCards, findings, locations, runs, scheduledChecks, usageIntervals } from "@bill-fighter/db/schema";
 import { seedRun, withTestDb } from "@bill-fighter/db/test-db";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -50,6 +50,20 @@ describe("liveSnapshot", () => {
       expect(snapshot.customer?.id).toBe("customer-new");
       expect(snapshot.boardCards).toEqual([]);
       expect(snapshot.auditTotal).toBe(0);
+    });
+  });
+
+  it("counts the audit done only for a run_audit row that worked (review: failed audits looked passed)", async () => {
+    await withTestDb("dash_audit_done", async (db) => {
+      await seedRun(db, "r1");
+      await db.insert(auditLog).values([
+        { runId: "r1", agent: "auditor", tool: "run_audit", outputJson: { error: "run_audit saved nothing: no parsed bills" } },
+        { runId: "r1", agent: "auditor", tool: "run_audit", outputJson: { denied: true } },
+      ]);
+      expect((await liveSnapshot(db)).auditDone).toBe(false);
+
+      await db.insert(auditLog).values({ runId: "r1", agent: "auditor", tool: "run_audit", outputJson: { refundCents: 0, annualSavingsCents: 0 } });
+      expect((await liveSnapshot(db)).auditDone).toBe(true);
     });
   });
 
@@ -181,6 +195,47 @@ describe("liveSnapshot", () => {
       const snapshot = await liveSnapshot(db);
       expect(snapshot.bills.map((b) => [b.id, b.locationId, b.site, b.totalCents])).toEqual([["mine-jan", "mine", "Fremont #1", 12345]]);
       expect(JSON.stringify(snapshot)).not.toContain("not-sent-to-browser");
+    });
+  });
+
+  it("picks the email's sender and subject and the drafted wording from this run's tool rows, and nothing else", async () => {
+    await withTestDb("dash_picks", async (db) => {
+      await seedRun(db, "picks");
+      const runId = "picks";
+      const email = { from: "billing@baycurrent.example", subject: "Your bill for account BE-7001", text: "raw-body-not-sent" };
+      await db.insert(auditLog).values([
+        { id: "a1", runId, agent: "intake", tool: "parse_inbound_email", inputJson: email, outputJson: { from: email.from, subject: email.subject } },
+        { id: "a2", runId, agent: "collector", tool: "portal_login", inputJson: { providers: ["baycurrent"] }, outputJson: { vault: "vault-name-not-sent" } },
+        // A failed draft wrote nothing, so its wording must not show.
+        { id: "a3", runId, agent: "filer", tool: "draft_letter", inputJson: { letters: [{ findingId: "f1", wording: "refused draft" }] }, outputJson: { error: "no" } },
+        { id: "a4", runId, agent: "filer", tool: "draft_letter", inputJson: { letters: [{ findingId: "f1", wording: "We ask for a refund." }] }, outputJson: [{ findingId: "f1" }] },
+      ]);
+      const snapshot = await liveSnapshot(db);
+      expect(snapshot.email).toEqual({ from: email.from, subject: email.subject });
+      expect(snapshot.letterWording).toEqual({ f1: "We ask for a refund." });
+      const wire = JSON.stringify(snapshot);
+      expect(wire).not.toContain("raw-body-not-sent");
+      expect(wire).not.toContain("vault-name-not-sent");
+    });
+  });
+
+  it("counts the usage on file per meter, for this customer only", async () => {
+    await withTestDb("dash_usage", async (db) => {
+      await seedRun(db, "old");
+      await db.update(runs).set({ startedAt: LONG_AGO }).where(eq(runs.id, "old"));
+      const { customerId } = await seedRun(db, "new");
+      await db.insert(locations).values([
+        { id: "mine", customerId, name: "Fremont #1", address: "1 Main St", city: "Fremont" },
+        { id: "theirs", customerId: "customer-old", name: "Elsewhere", address: "2 Main St", city: "Oakland" },
+      ]);
+      await db.insert(accounts).values([
+        { id: "mine-electric", locationId: "mine", provider: "baycurrent", accountNumber: "1", serviceType: "electric", meterNumber: "BEM-1" },
+        { id: "theirs-electric", locationId: "theirs", provider: "baycurrent", accountNumber: "2", serviceType: "electric" },
+      ]);
+      const at = (accountId: string, ts: string) => ({ accountId, ts: new Date(ts), kwh: 1 });
+      await db.insert(usageIntervals).values([at("mine-electric", "2026-01-01T00:00:00Z"), at("mine-electric", "2026-01-31T23:45:00Z"), at("theirs-electric", "2026-01-01T00:00:00Z")]);
+      const { usage } = await liveSnapshot(db);
+      expect(usage).toEqual([{ accountId: "mine-electric", meterNumber: "BEM-1", intervals: 2, from: new Date("2026-01-01T00:00:00Z"), to: new Date("2026-01-31T23:45:00Z") }]);
     });
   });
 });

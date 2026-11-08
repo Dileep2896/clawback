@@ -57,6 +57,7 @@ export function bundle(out: string) {
   }
   mkdirSync(join(tree, "data", "replay"), { recursive: true });
   cpSync(join(ROOT, "data/replay/run.jsonl"), join(tree, "data/replay/run.jsonl"));
+  cpSync(join(ROOT, "data/replay/usage.json"), join(tree, "data/replay/usage.json"));
   cpSync(join(ROOT, "tsconfig.base.json"), join(tree, "tsconfig.base.json"));
 
   const app = readJson("apps/dashboard/package.json");

@@ -20,18 +20,18 @@ export default async function OnboardingPage() {
     <Card title="1. Your business">
       <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-3 lg:grid-cols-1">
         <div>
-          <dt className="text-base text-faded">Company</dt>
-          <dd className="font-semibold" data-testid="onboarding-company">
+          <dt className="text-body text-faded">Company</dt>
+          <dd data-testid="onboarding-company">
             {user.company}
           </dd>
         </div>
         <div>
-          <dt className="text-base text-faded">Account owner</dt>
-          <dd className="font-semibold">{user.name}</dd>
+          <dt className="text-body text-faded">Account owner</dt>
+          <dd>{user.name}</dd>
         </div>
         <div>
-          <dt className="text-base text-faded">Locations on file</dt>
-          <dd className="font-semibold" data-testid="onboarding-sites">
+          <dt className="text-body text-faded">Locations on file</dt>
+          <dd data-testid="onboarding-sites">
             {sites > 0 ? sites : "Added from your bills"}
           </dd>
         </div>
