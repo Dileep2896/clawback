@@ -44,3 +44,27 @@ Run 2 says nothing about Haiku. The machine slept, and the run failed on network
 ## Open
 
 - Runs 3 and 4 (the limit) and the flip back to `PLATFORM=local` have not been done.
+
+## naive-runtime-cost (2026-11-07)
+
+### Flag probe (live, Haiku, $0.0010)
+
+`packages/platform/src/naive/flag-probe.ts`: one agent, one ungated MCP tool (`allow`), asked to call it twice. The human approved it, with a session cap of $0.10. Both sessions were cancelled afterwards, and `GET /v1/sessions` showed none still open. Balance went from $248.7933 to $248.7923.
+
+| Session | First message | Calls | Parks | Cost | Time |
+|---|---|---|---|---|---|
+| A `ses_grqbfmymbb60r9n1y3xemk7jpg` | bill email as JSON + task | both in one model step | **0** | $0.0004 | 16 s |
+| B `ses_8kbvfjvakcadp6vkd4avmnapp2` | task only, no email | one, then the next after its result | **1** | $0.0006 | 25 s |
+
+What the events show:
+- **The email in the first message does not flag the chat.** A read the email and parked nothing.
+- **An MCP tool result flags it.** In B, the call made after the first result came back `tool.completed` with `is_error: true` (refused). The model was called again (2 model requests), re-issued the call, and that one parked as `tool.confirm`.
+- **Our allow costs no model turn.** After `tool.confirm.resolved` the tool ran straight away (`tool.started`, `tool.completed`), and only then did the model continue. The extra cost of a park is naïve's refusal plus the model's re-issue, which happen before the park.
+- So the parsed-facts root message (`runPrompt`) is **not needed**, and was not changed. The lever is fewer MCP calls in each chat once it has seen a result, and a coordinator that never sees one, because a flag is passed on to every chat it delegates to.
+
+### What changed
+
+- The CEO is not offered `board_update` on naïve. The runtime makes one card per delegated member task (through the run's own `board_update` handler, so it is audited and `board_cards` stay the dashboard's record), and moves it to `done` when the member's result comes back (`thread.idle`), or to `blocked` if the member failed or never reported. The CEO's first MCP result is now its summary `send_email`, so it stays unflagged while it delegates and its members start unflagged.
+- The copy of our cards to naïve's board is gone. Cards that reached `done` or `blocked` there started the board-digest sessions.
+- When a run stops, every session it owns is cancelled (root and threads), not only the root. A cancel retries every 5 s for up to 5 min while naïve cannot be reached. `409 session_terminal` counts as done, and any session still open is printed by id.
+- Every run reports its parks (and how many of them were ungated), its sessions and its duration in the final cost line, and in an `audit_log` row (`naive_run_stats`).
