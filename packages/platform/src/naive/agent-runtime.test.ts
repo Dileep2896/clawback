@@ -426,7 +426,7 @@ describe("naïve runtime cost", () => {
   });
 
   /** One delegated task; at tick 3 the member ends as `memberEnd` and the root reports thread.idle in the same round. */
-  const oneCard = async (memberEnd: Partial<Ses>, move: (attempt: number) => void, create: (attempt: number) => void = () => {}) => {
+  const oneCard = async (memberEnd: Partial<Ses>, move: (attempt: number) => void, create: (attempt: number) => void = () => {}, memberStart: Partial<Ses> = {}) => {
     const moves: unknown[] = [];
     let attempt = 0;
     let creates = 0;
@@ -454,7 +454,7 @@ describe("naïve runtime cost", () => {
       if (tick === 1) {
         root.events.push({ seq: 1, type: "thread.created", data: { thread_id: "ses_a", member: "clawback-filer" } });
         Object.assign(root, { stop_reason: "awaiting_delegation", pending_actions: [] });
-        sessions.set("ses_a", { id: "ses_a", status: "running", stop_reason: null, pending_actions: [], consumed_micro_usd: 0, events: [] });
+        sessions.set("ses_a", { id: "ses_a", status: "running", stop_reason: null, pending_actions: [], consumed_micro_usd: 0, events: [], ...memberStart });
       }
       // The root is read before the member in a round, so the loop's copy of ses_a is still "running" here.
       if (tick === 3) {
@@ -556,6 +556,15 @@ describe("naïve runtime cost", () => {
     const { moves, result } = await oneCard({ status: "failed", stop_reason: null }, () => {});
     expect(moves).toEqual([{ cardId: "card1", status: "blocked" }]);
     expect(result).toMatchObject({ status: "success" });
+  });
+
+  it("blocks the card of a member that was cancelled, or denied a gated call before it ended its turn", async () => {
+    const cancelled = await oneCard({ status: "cancelled", stop_reason: null }, () => {});
+    expect(cancelled.moves).toEqual([{ cardId: "card1", status: "blocked" }]);
+    // The pending bundle does not hold A-9, so the gated call is denied; the member then ends its turn normally.
+    const denied = await oneCard({ status: "idle", stop_reason: "end_turn" }, () => {}, () => {}, { status: "idle", stop_reason: "awaiting_approval", pending_actions: [parked("c1", "A-9")] });
+    expect(denied.events).toContainEqual(expect.objectContaining({ type: "denied", agent: "filer", tool: "submit_claim" }));
+    expect(denied.moves).toEqual([{ cardId: "card1", status: "blocked" }]);
   });
 
   it("retries a card move that failed to write, and fails the run if it never lands", async () => {

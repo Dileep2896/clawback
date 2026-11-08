@@ -132,6 +132,8 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
   const closing = new Map<string, "done" | "blocked">();
   const triedCreating = new Set<string>();
   const ourCards = new Set<string>();
+  // Threads whose gated call was denied: their task did not happen, so their card closes blocked even on end_turn.
+  const deniedThreads = new Set<string>();
   const flushCards = async () => {
     for (const [threadId, card] of creating) {
       try {
@@ -317,11 +319,13 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
               await flushCards();
             }
           } else if (event.type === "thread.idle" && typeof data.thread_id === "string") {
-            // The member's result folded back; one that stopped on an error did not finish its step.
+            // The member's result folded back; one that stopped on an error, was cancelled or was denied a gated call
+            // did not finish its step.
             // Read the thread now: the loop may not have polled it since it ended, or ever. Not stored on its entry,
             // so the loop still polls it once more and reads its last events and spend.
             const thread = owned.has(data.thread_id) ? await api<Session>(`/sessions/${data.thread_id}`) : undefined;
-            await closeCard(data.thread_id, thread && (thread.status === "failed" || STOPPED.has(thread.stop_reason ?? "")) ? "blocked" : "done");
+            const failed = thread && (thread.status === "failed" || thread.status === "cancelled" || STOPPED.has(thread.stop_reason ?? ""));
+            await closeCard(data.thread_id, failed || deniedThreads.has(data.thread_id) ? "blocked" : "done");
           } else if (event.type === "thread.terminated" && typeof data.thread_id === "string") {
             await closeCard(data.thread_id, "blocked");
           } else if (event.type === "tool.confirm.resolved") {
@@ -383,6 +387,7 @@ async function* run(spec: RunSpec, getDeps: () => Promise<Deps>): AsyncGenerator
       }
       await api(`/sessions/${sessionId}/tool_confirmations`, { method: "POST", body: { tool_call_id: action.tool_call_id, decision, ...(reason ? { reason } : {}) } });
       stats.parks++;
+      if (decision === "deny" && isGatedTool(bare)) deniedThreads.add(sessionId);
       if (decision === "deny") pending.push({ type: "denied", agent: owned.get(sessionId)!.agent, tool: action.name.replace(`${SERVER}.`, ""), reason: reason! });
       return true;
     };
