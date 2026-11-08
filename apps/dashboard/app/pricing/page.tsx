@@ -13,12 +13,22 @@ const SHARE = 30;
 const REFUND_FEE = feeCents({ refundCents: REFUND_CENTS, annualSavingsCents: 0, sharePct: SHARE });
 const SAVINGS_FEE = FEE_CENTS - REFUND_FEE;
 
-// The first year's savings by finding, from the recorded run's ledger (the landing's Fig 5).
-const SAVINGS = [
-  { label: "Fremont meter fixed", amount: "$10,710.37" },
-  { label: "2 rate changes", amount: "$2,568.95" },
-  { label: "7 unused lines cancelled", amount: "$5,040.00" },
-];
+// The fee by finding, from the recorded run's ledger (the landing's Fig 5): each line is 30% of its own money, and the last
+// line takes the rounding cent, so the lines add up to the recorded fee and their savings to the first year's total.
+const FINDINGS = [
+  { label: "Fremont meter refund", part: "Refund", cents: REFUND_CENTS },
+  { label: "Fremont meter fixed, first year", part: "Savings", cents: 1_071_037 },
+  { label: "7 unused lines cancelled, first year", part: "Savings", cents: 504_000 },
+  { label: "2 rate changes, first year", part: "Savings", cents: 256_895 },
+].map((row, i, rows) => ({
+  ...row,
+  fee:
+    i < rows.length - 1
+      ? feeCents({ refundCents: row.cents, annualSavingsCents: 0, sharePct: SHARE })
+      : FEE_CENTS - rows.slice(0, -1).reduce((sum, r) => sum + feeCents({ refundCents: r.cents, annualSavingsCents: 0, sharePct: SHARE }), 0),
+}));
+if (FINDINGS.filter((row) => row.part === "Savings").reduce((sum, row) => sum + row.cents, 0) !== YEARLY_CENTS)
+  throw new Error("Pricing: the savings by finding no longer add up to the first year's savings");
 
 const DUE = [
   {
@@ -126,15 +136,42 @@ export default function PricingPage() {
               </li>
             ))}
           </ol>
-          <dl className="mt-8 max-w-[640px] text-[15px]">
-            <dt className="text-faded">The first year’s savings, by finding</dt>
-            {SAVINGS.map((row) => (
-              <dd key={row.label} className="flex items-baseline justify-between gap-4 border-b border-line py-2">
-                <span>{row.label}</span>
-                <span className="font-figure tabular-nums">{row.amount}</span>
-              </dd>
-            ))}
-          </dl>
+          <table className="mt-8 w-full max-w-[760px] text-[15px]">
+            <caption className="pb-2 text-left text-faded">The fee, by finding</caption>
+            <thead className="text-faded">
+              <tr className="border-b border-line">
+                <th scope="col" className="py-2 pr-4 text-left font-normal">
+                  Finding
+                </th>
+                <th scope="col" className="py-2 pr-4 text-right font-normal">
+                  Money back
+                </th>
+                <th scope="col" className="py-2 text-right font-normal">
+                  Fee, {SHARE}%
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {FINDINGS.map((row) => (
+                <tr key={row.label} className="border-b border-line">
+                  <th scope="row" className="py-2 pr-4 text-left font-normal">
+                    {row.label}
+                  </th>
+                  <td className="py-2 pr-4 text-right font-figure tabular-nums">{dollars(row.cents)}</td>
+                  <td className="py-2 text-right font-figure tabular-nums">{dollars(row.fee)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-ink">
+                <th scope="row" className="py-3 pr-4 text-left font-semibold">
+                  Total
+                </th>
+                <td className="py-3 pr-4 text-right font-figure tabular-nums">{dollars(REFUND_CENTS + YEARLY_CENTS)}</td>
+                <td className="py-3 text-right font-figure tabular-nums">{dollars(FEE_CENTS)}</td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </section>
 
