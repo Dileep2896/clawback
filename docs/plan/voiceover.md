@@ -18,4 +18,4 @@ About 270 words at a calm pace (about 140 words a minute), plus a 15-second gap 
 Notes for reading:
 - Read the figures as words, as written above. The screen shows the exact numbers.
 - Leave a breath at each table row; the editor re-times the scenes to your recording.
-- Record in a quiet room, phone or laptop mic is fine; save as `video/in/voiceover.wav`.
+- Record in a quiet room, phone or laptop mic is fine; save as `~/Desktop/clawback-voiceover/voiceover.wav` (outside the repo; the lane copies it into its worktree).
