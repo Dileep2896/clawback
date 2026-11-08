@@ -39,7 +39,7 @@ it("lists every agent in run order, those still to come as next, with no row for
 
 it("puts an agent outside the roster after it, and says what its newest tool did when it has no card", () => {
   const rows = agentRows({ boardCards: [], auditLog: [call("x", "scout", "portal_login", "2026-11-08T01:29:11Z")] } as unknown as Input);
-  expect(rows.at(-1)).toMatchObject({ agent: "scout", state: "done", action: "Logged in to the provider's portal", elapsedSeconds: 0 });
+  expect(rows.at(-1)).toMatchObject({ agent: "scout", state: "done", action: "Log in to the provider's portal", elapsedSeconds: 0 });
 });
 
 it("shows the approver waiting on the owner while the approval is pending", () => {
@@ -55,7 +55,7 @@ it("marks blocked agents, and agents left working by a stopped run, as failed", 
 });
 
 it("gives the CEO its own row from its own calls", () => {
-  expect(ceoRow(input)).toMatchObject({ agent: "ceo", state: "done", action: "Updated the plan" });
+  expect(ceoRow(input)).toMatchObject({ agent: "ceo", state: "done", action: "Update the plan" });
 });
 
 it("formats elapsed seconds as m:ss", () => {

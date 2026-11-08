@@ -145,7 +145,7 @@ async function checkAuditColumns(page: Page) {
   const cells = await free.locator("td").allInnerTexts();
   assert.match(cells[0]!, /\d:\d\d:\d\d/, "shows the time");
   assert.match(cells[1]!, /Collector/, "shows the agent");
-  assert.match(cells[2]!, /Logged in to the provider's portal/, "says what the tool did in plain words");
+  assert.match(cells[2]!, /Log in to the provider's portal/, "says what the tool did in plain words");
   assert.match(cells[2]!.replaceAll("\u200b", ""), /portal_login/, "and names the tool");
   assert.match(cells[3]!, /—/, "a cost of 0 shows a dash");
   assert.doesNotMatch(cells[3]!, /\$/, "a cost of 0 shows no amount");

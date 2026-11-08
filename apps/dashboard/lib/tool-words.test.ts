@@ -17,6 +17,14 @@ it("has plain words for every tool an agent defines or the demo run called", () 
 });
 
 it("turns an unknown tool into a sentence rather than showing its raw name", () => {
-  expect(toolWords("portal_login")).toBe("Logged in to the provider's portal");
+  expect(toolWords("portal_login")).toBe("Log in to the provider's portal");
   expect(toolWords("refund_dance")).toBe("Refund dance");
+});
+
+it("names the step without claiming it worked, since denied and failed attempts are logged too", () => {
+  // A denied card_pay or a refused cancel_service row must not read "Charged" or "Cancelled".
+  const claims = Object.entries(TOOL_WORDS).filter(([, words]) => /^\w+ed\b|^(Sent|Paid)\b/.test(words));
+  expect(claims).toEqual([]);
+  expect(toolWords("card_pay")).toBe("Charge the card on file");
+  expect(toolWords("create_invoice")).toBe("Create Clawback's invoice");
 });
